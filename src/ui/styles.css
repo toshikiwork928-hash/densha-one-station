@@ -168,3 +168,24 @@ table.keys td:first-child { white-space: nowrap; width: 1%; padding-right: 12px;
   /* 狭い画面ではバナーを上部パネルの間に挟まず、視界中央寄りに全幅で出す */
   #banner { position: fixed; left: 8px; right: 8px; top: 34%; padding: 0; font-size: 18px; }
 }
+/* 横向きスマホ（高さが低い画面）: 左の情報パネルを詰め、計器はタッチボタンの左に右寄せ */
+@media (max-height: 500px) {
+  #hud { padding: 10px 10px 8px; }
+  #clock { font-size: 18px; }
+  #sidePanel { top: 74px; width: 180px; gap: 4px; font-size: 11px; }
+  #sidePanel .panel { padding: 4px 8px; }
+  #sidePanel .sp-tt { display: none; }
+  #dash { justify-content: end; grid-template-areas: "dist dist" "meter notch"; }
+  #distPanel { justify-self: end; min-width: 0; }
+  #dist { font-size: 20px; }
+  #meter { width: 120px; height: 120px; }
+  #notches { gap: 0; }
+  #notches div { padding: 0 6px; font-size: 9px; line-height: 1.15; }
+  .limitSign { width: 42px; height: 42px; font-size: 17px; border-width: 4px; }
+}
+@media (max-height: 500px) and (pointer: coarse) {
+  #dash { padding-right: 92px; }
+  #touch { gap: 5px; right: 8px; bottom: 8px; }
+  #touch button { width: 72px; height: 52px; font-size: 18px; }
+  #touch button[data-k="eb"] { height: 36px; }
+}
