@@ -1,10 +1,9 @@
-// 線路（バラスト・レール・枕木）、地面、架線柱・架線
+// 線路（バラスト・レール・枕木）
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import type { Track } from '../route/track';
 import { loopShape, loopZones, type LoopZone } from '../route/service';
 import { cullByDistance } from './cull';
-import { getTerrain } from './terrain';
 
 const GAUGE = 0.535; // 軌間の半分 [m]
 
@@ -96,47 +95,7 @@ export function buildTrackMesh(ctx: GameContext): void {
   }
   buildLoopTracks(ctx, matBallast, matRail);
   // 地面は terrain.ts
-  // 架線柱・架線
-  {
-    const poleGeo = new THREE.CylinderGeometry(.13, .16, 7.2, 8); poleGeo.translate(0, 3.6, 0);
-    const armGeo = new THREE.BoxGeometry(7.6, .14, .14);
-    const mat = new THREE.MeshLambertMaterial({ color: 0x9aa0a6 });
-    const T = getTerrain(ctx);
-    const list: number[] = []; for (let s = TS0; s < TS1; s += 50) if (T.structureAt(s, 3)?.kind !== 'tunnel') list.push(s);
-    const poles = new THREE.InstancedMesh(poleGeo, mat, list.length), arms = new THREE.InstancedMesh(armGeo, mat, list.length);
-    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), one = new THREE.Vector3(1, 1, 1);
-    list.forEach((s, i) => {
-      const t = trackAt(s); q.setFromEuler(e.set(0, -t.phi, 0));
-      poles.setMatrixAt(i, m4.compose(at(s, 6.7, 0), q, one));
-      arms.setMatrixAt(i, m4.compose(at(s, 3.0, 6.6), q, one));
-    });
-    scene.add(poles, arms);
-    const wm = new THREE.LineBasicMaterial({ color: 0x2b2b2b });
-    for (const c of route.tracks) {
-      const pts: THREE.Vector3[] = []; for (let s = TS0; s <= TS1; s += 10) pts.push(at(s, c, 5.7));
-      scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), wm));
-    }
-    // 待避線の架線と門型の架線柱（駅舎の前は片持ち）
-    for (const o of loopTracks(ctx)) {
-      const pts: THREE.Vector3[] = []; for (let s = o.z.inFrom; s <= o.z.outTo; s += 5) pts.push(at(s, o.lat(s), 5.7));
-      scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), wm));
-    }
-    const beamGeo = new THREE.BoxGeometry(1, .2, .2);
-    for (const z of loopZones(route)) {
-      const sta = route.stations[z.index], sc = (sta.platform.from + sta.platform.to) / 2;
-      const left = Math.min(...route.tracks) + z.lat - 7.4, right = Math.max(...route.tracks) - z.lat + 7.4;
-      for (let s = Math.ceil(z.inFrom / 50) * 50; s <= z.outTo; s += 50) {
-        const t = trackAt(s); q.setFromEuler(e.set(0, -t.phi, 0));
-        const g = new THREE.Group();
-        const pr = new THREE.Mesh(poleGeo, mat); pr.position.copy(at(s, right, 0)); pr.quaternion.copy(q); g.add(pr);
-        const nearBldg = Math.abs(s - sc) < 16; // 駅舎の前は柱を立てない
-        const lft = nearBldg ? z.lat - 1.2 : left;
-        if (!nearBldg) { const pl = new THREE.Mesh(poleGeo, mat); pl.position.copy(at(s, left, 0)); pl.quaternion.copy(q); g.add(pl); }
-        const bm = new THREE.Mesh(beamGeo, mat); bm.position.copy(at(s, (lft + right) / 2, 7.05)); bm.quaternion.copy(q); bm.scale.x = right - lft; g.add(bm);
-        scene.add(g); cullByDistance(ctx, g, 1200);
-      }
-    }
-  }
+  // 架線柱・架線は catenary.ts
 }
 
 /** 待避線のバラスト・レールと分岐器（転てつ機・クロッシング・ガードレール） */

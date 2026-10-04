@@ -9,6 +9,7 @@ import { buildStations } from './stations';
 import { buildTrackMesh } from './track-mesh';
 import { buildTerrain } from './terrain';
 import { buildStructures } from './structures';
+import { buildCatenary } from './catenary';
 import { buildCrossings } from './crossings';
 import { buildTown } from './town-jp';
 import { createCab } from './cab';
@@ -27,6 +28,7 @@ export function buildWorld(ctx: GameContext): World {
   buildTerrain(ctx);
   buildTrackMesh(ctx);
   buildStructures(ctx);
+  buildCatenary(ctx); // rng 不使用
   buildBackdrop(ctx);
   buildSigns(ctx);
   buildStations(ctx);
