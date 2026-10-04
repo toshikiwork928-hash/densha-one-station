@@ -94,6 +94,13 @@ export class GeoBatch {
     }
   }
 
+  /** 頂点ごとの法線・色（0..1）付きの三角形（ワールド座標、親行列は適用しない） */
+  addColored(key: string, positions: ArrayLike<number>, normals: ArrayLike<number>, colors: ArrayLike<number>): void {
+    const b = this.buf(key), wantUv = this.uvKeys.has(key);
+    for (let i = 0; i < positions.length; i++) { b.pos.push(positions[i]); b.nrm.push(normals[i]); b.col.push(Math.round(colors[i] * 255)); }
+    if (wantUv) for (let i = 0; i < positions.length / 3; i++) b.uv.push(0, 0);
+  }
+
   isEmpty(): boolean { return this.bufs.size === 0; }
 
   geometry(key: string): THREE.BufferGeometry | null {
