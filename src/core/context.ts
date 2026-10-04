@@ -34,7 +34,7 @@ export interface GameActions {
   /** タイトルで運行種別選択（普通・急行・特急） */
   selectService(delta: number): void;
   /** タイトルで選択中の種別の車種・両数を変更 */
-  selectVehicle(v: { kind?: import('../route/types').TrainKind; cars?: number }): void;
+  selectVehicle(v: { kind?: import('../route/types').TrainKind; units?: number[] }): void;
 }
 
 export interface GameContext {

@@ -7,7 +7,7 @@ import { ROUTE_DIRS } from '../route';
 import type { GameResult } from '../game/scoring';
 import { safetyDeductions } from '../game/scoring';
 import { MODE_LABEL, findStage, stagesOf, type GameMode } from '../game/state';
-import { serviceOf } from '../route/service';
+import { serviceOf, unitsLabel } from '../route/service';
 import type { ServiceSpec, TrainKind } from '../route/types';
 
 /** 種別の説明（停車駅・編成） */
@@ -16,10 +16,12 @@ const svcDesc = (route: GameContext['route'], v: ServiceSpec) =>
 
 /** 車種の説明（選択画面用） */
 const KIND_INFO: Record<TrainKind, { name: string; desc: string }> = {
-  'commuter-new': { name: '新型通勤車', desc: 'ステンレス・すそ絞り車体・VVVF。加速 3.0km/h/s' },
-  'commuter-old': { name: '旧型通勤車', desc: '鋼製・直線車体・抵抗制御。加速 2.5km/h/s、高速域は弱め' },
-  limited: { name: '特急車', desc: '流線形の先頭・定出力域が広く高速が得意' },
+  'commuter-new': { name: '8300系（新型通勤車）', desc: 'ステンレス・すそ絞り車体・VVVF。加速 3.0km/h/s' },
+  'commuter-old': { name: '7100系（旧型通勤車）', desc: '鋼製・直線車体・抵抗制御。加速 2.5km/h/s、高速域は弱め' },
+  limited: { name: '50000系（特急車）', desc: '流線形の先頭・定出力域が広く高速が得意' },
 };
+
+const carsOfUnits = (u: number[]) => u.reduce((a, n) => a + n, 0);
 
 const MODE_DESC: Record<GameMode, string> = {
   normal: '停止位置・定時・安全で採点',
@@ -61,7 +63,7 @@ export function attachOverlay(ctx: GameContext): void {
     const svc = serviceOf(route, st.sel.service);
     const svcs = (route.services ?? []).map(v => `<button data-service="${v.id}" class="svc-${v.id} ${v.id === svc?.id ? 'on' : ''}">${v.name}<small>${svcDesc(route, v)}</small></button>`).join('');
     const wait = svc?.waits?.filter(w => w.station > stage.from && w.station < stage.to)
-      .map(w => `<b>${route.stations[w.station].name}で${serviceOf(route, w.passedBy)?.name ?? ''}の通過待ち</b>（出発信号が進行になってから発車）`).join('、') ?? '';
+      .map(w => { const p = serviceOf(route, w.passedBy); return `<b>${route.stations[w.station].name}で${p?.name ?? ''}の${p?.stops.includes(w.station) ? '待ち合わせ' : '通過待ち'}</b>（出発信号が進行になってから発車）`; }).join('、') ?? '';
     const stages = stagesOf(route).map(s => `<button data-stage="${s.id}" class="${s.id === stage.id ? 'on' : ''}">${s.id === 'all' ? '全線通し' : s.label}${s.id === 'all' ? `<small>${route.stations[s.from].name} → ${route.stations[s.to].name}</small>` : ''}</button>`).join('');
     const modes = (Object.keys(MODE_LABEL) as GameMode[]).map(m => `<button data-mode="${m}" class="${m === st.sel.mode ? 'on' : ''}">${MODE_LABEL[m]}<small>${MODE_DESC[m]}</small></button>`).join('');
     overlay.classList.remove('hidden');
@@ -115,7 +117,7 @@ export function attachOverlay(ctx: GameContext): void {
       location.reload();
     });
     card.querySelectorAll<HTMLButtonElement>('[data-kind]').forEach(b => b.onclick = () => ctx.actions.selectVehicle({ kind: b.dataset.kind as TrainKind }));
-    card.querySelectorAll<HTMLButtonElement>('[data-cars]').forEach(b => b.onclick = () => ctx.actions.selectVehicle({ cars: Number(b.dataset.cars) }));
+    card.querySelectorAll<HTMLButtonElement>('[data-units]').forEach(b => b.onclick = () => ctx.actions.selectVehicle({ units: b.dataset.units!.split('+').map(Number) }));
     const rb = card.querySelector<HTMLButtonElement>('#resetRec');
     if (rb) rb.onclick = () => { if (confirm('自己ベストとプレイ履歴をすべて消します。よろしいですか？')) { resetRecords(); showTitle(); } };
     card.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(b => b.onclick = () => {
@@ -135,13 +137,14 @@ export function attachOverlay(ctx: GameContext): void {
   /** 車両タブ: 選択中の種別の車種・両数 */
   function vehiclePane(svc: ServiceSpec | undefined): string {
     if (!svc) return '<p class="sub">この路線は車両を選べません。</p>';
-    const kinds = svc.kindOptions ?? [svc.kind], carsOpt = svc.carsOptions ?? [svc.cars];
+    const kinds = svc.kindOptions ?? [svc.kind], forms = svc.formationOptions ?? [svc.units];
     const kb = kinds.map(k => `<button data-kind="${k}" class="${k === svc.kind ? 'on' : ''}" ${kinds.length < 2 ? 'disabled' : ''}>${KIND_INFO[k].name}<small>${KIND_INFO[k].desc}</small></button>`).join('');
-    const cb = carsOpt.map(n => `<button data-cars="${n}" class="${n === svc.cars ? 'on' : ''}" ${carsOpt.length < 2 ? 'disabled' : ''}>${n}両</button>`).join('');
+    const formLabel = (u: number[]) => `${carsOfUnits(u)}両${u.length > 1 ? `<small>${unitsLabel(u)}（${u.length}編成を連結）</small>` : ''}`;
+    const cb = forms.map(u => `<button data-units="${u.join('+')}" class="${u.join('+') === svc.units.join('+') ? 'on' : ''}" ${forms.length < 2 ? 'disabled' : ''}>${formLabel(u)}</button>`).join('');
     return `<div class="selLbl"><span class="svcBadge svc-${svc.id}">${svc.name}</span> の車両${kinds.length < 2 ? '（固定）' : ''}</div>
       <div class="sel col" id="selKind">${kb}</div>
-      <div class="selLbl">両数${carsOpt.length < 2 ? '（固定）' : ''}</div><div class="sel" id="selCars">${cb}</div>
-      <p class="sub">${svc.cars}両編成。駅では「${svc.cars}両」の停止位置目標に止める。</p>`;
+      <div class="selLbl">編成${forms.length < 2 ? '（固定）' : ''}</div><div class="sel" id="selCars">${cb}</div>
+      <p class="sub">${svc.cars}両編成${svc.units.length > 1 ? `（${svc.units.map(n => n + '両').join(' + ')}を連結）` : ''}。駅では「${svc.cars >= 8 ? '6・8' : svc.cars}両」の停止位置目標に先頭を合わせる。</p>`;
   }
 
   /** 記録タブ: 自己ベスト（種別×区間）と最近のプレイ */

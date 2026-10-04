@@ -91,7 +91,9 @@ export function createCabCamera(ctx: GameContext): CabCamera {
         const shake = Math.min(1, v / 22);
         camPos.copy(at(s, lat, 3.0));
         camPos.y += Math.sin(time * 11.3) * .006 * shake + Math.sin(time * 3.1) * .012 * shake;
-        camLook.copy(at(s + 60, lat * .3, 2.4));
+        // 向きは車体（台車の並び = 先頭の約10m後ろ）の向き。待避線の分岐器では注視点を先の線路に合わせず、現在の横ずれの傾きで延長する
+        const pl = ctx.track.pathLat(s), slope = (ctx.track.pathLat(s - 3) - ctx.track.pathLat(s - 17)) / 14;
+        camLook.copy(ctx.track.at(s + 60, pl + slope * 60 + lat * .3, 2.4));
         camLook.x += Math.sin(time * 2.3) * .06 * shake;
         ctx.camera.position.copy(camPos);
         ctx.camera.lookAt(camLook);

@@ -36,7 +36,8 @@ function buildSign(ctx: GameContext, sg: Sign, lat0: number, parent?: THREE.Obje
       addSign(ctx, textBoard([{ t: sg.meters, size: 120 }], '#fff', '#111'), sg.s, lat0 + (sg.lat ?? -2.0), .7, .7, sg.meters >= 200 ? 2.2 : 2.9, 0, parent);
       break;
     case 'stopMarker':
-      addSign(ctx, textBoard([{ t: String(sg.cars), size: 150 }, { t: '停止位置', size: 34 }], '#1b4fd1', '#fff', 256, 300), sg.s, lat0 + (sg.lat ?? -2.0), .9, 1.05, 3.0, 0, parent);
+      // 6両と8両は先頭が同じ位置に止まる（ホームは 200m）
+      addSign(ctx, textBoard([{ t: sg.cars === 6 ? '6・8' : String(sg.cars), size: sg.cars === 6 ? 100 : 150 }, { t: '停止位置', size: 34 }], '#1b4fd1', '#fff', 256, 300), sg.s, lat0 + (sg.lat ?? -2.0), .9, 1.05, 3.0, 0, parent);
       break;
   }
 }

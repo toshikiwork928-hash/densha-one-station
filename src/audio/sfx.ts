@@ -4,7 +4,6 @@
 import { JOINT_INTERVAL } from '../core/config';
 import type { GameContext } from '../core/context';
 import type { EventBus } from '../core/events';
-import type { Station } from '../route/types';
 import { createCore, type AudioCore } from './engine';
 import { createVvvf, type Vvvf } from './vvvf';
 import { createResistance } from './resistance';
@@ -14,6 +13,7 @@ import { createStation, type StationSfx } from './station';
 import { createAlarms, type Alarms } from './alarms';
 import { createAmbience, type Ambience } from './ambience';
 import { createAnnouncer } from './announce';
+import { approachText, arriveText, departText, spoken } from './announce-text';
 import { createSettings, renderSettingsUi, type SettingsStore } from './settings';
 
 interface Parts {
@@ -30,13 +30,6 @@ export interface Sfx {
 
 const MELODY_LEAD = 6; // 発車メロディ終了から発車までの余裕 [s]
 
-/** 次の停車駅（通過駅を飛ばす） */
-function nextStop(stations: Station[], index: number): Station | null {
-  for (let i = index + 1; i < stations.length; i++) if (!stations[i].pass) return stations[i];
-  return null;
-}
-const spoken = (s: Station) => s.kana ?? s.name;
-
 export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
   const settings = createSettings();
   const announcer = createAnnouncer();
@@ -47,6 +40,7 @@ export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
   function applySettings() {
     const s = settings.value;
     announcer.setVolume(s.muted ? 0 : s.master * s.voice);
+    announcer.setGender(s.gender);
     if (!p) return;
     const now = p.core.now();
     p.core.master.gain.setTargetAtTime(s.muted ? 0 : s.master, now, .03);
@@ -107,20 +101,21 @@ export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
   events.on('alarm', () => p?.alarms.beep());
 
   events.on('depart', e => {
-    const next = nextStop(ctx.route.stations, e.index);
     let delay = 2;
     // 始発（停車時間なしで発車する場合）はここで発車メロディ。途中駅は停車中に鳴らし済み
     if (p && !fromDwell) delay = p.station.melody() + .5;
-    if (next) announce(`次は、${spoken(next)}に停まります。`, delay);
+    // 待避から発車するときは「お待たせしました」から（優等列車の通過・待ち合わせを待った駅）
+    const ot = ctx.state.overtake;
+    const text = departText(ctx.route, e.index, !!ot && ot.station === e.index && ot.localStopped);
+    if (text) announce(text, delay);
   });
   events.on('stationApproach', e => {
     if (e.stage !== 'announce') return;
-    const side = e.station.platform.side === 'L' ? '左' : '右';
-    announce(`まもなく、${spoken(e.station)}です。お出口は${side}側です。`);
+    announce(approachText(ctx.route, e.index));
   });
   events.on('arrive', e => {
     if (e.judgement.kind === 'overrun') return;
-    announcer.say(`${spoken(e.station)}、${spoken(e.station)}です。${e.final ? 'ご乗車、ありがとうございました。' : ''}`, 1.2);
+    announcer.say(arriveText(ctx.route, ctx.service, e.index), 1.2);
   });
   events.on('stateChange', e => {
     fromDwell = e.from === 'dwell' && e.to === 'run';
@@ -155,7 +150,10 @@ export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
     // 車外視点: 車体越しのこもりを外す
     p.core.runTone.frequency.setTargetAtTime(e.mode === 'cab' ? 9000 : 18000, p.core.now(), .1);
   });
-  events.on('titleRender', e => renderSettingsUi(e.container, settings));
+  events.on('titleRender', e => renderSettingsUi(e.container, settings, {
+    describe: () => announcer.describe(),
+    preview: () => announcer.preview(`ご乗車ありがとうございます。この電車は、${spoken(ctx.route.stations[ctx.route.stations.length - 1])}行きです。`),
+  }));
 
   events.on('frame', e => {
     if (!p) return;

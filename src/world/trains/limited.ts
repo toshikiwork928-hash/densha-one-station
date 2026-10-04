@@ -23,7 +23,8 @@ const noseTop = (u: number) => TIP_Y + (YTOP_L - TIP_Y) * Math.pow(Math.max(0, 1
 const noseBot = (u: number) => TIP_Y - (TIP_Y - Y0) * Math.pow(Math.max(0, 1 - u ** 3), .5);
 const noseW = (u: number) => Math.pow(Math.max(0, 1 - u ** 2.6), .55);
 
-export function paintLimitedSide(Lb: number, head: boolean): SheetMaps {
+/** open = 乗降口を開けた状態 */
+export function paintLimitedSide(Lb: number, head: boolean, open = false): SheetMaps {
   const s = sideSheet(Lb, YTOP_L), hz = Lb / 2;
   const grd = s.c.createLinearGradient(0, 0, 0, s.H);
   grd.addColorStop(0, '#2c3494'); grd.addColorStop(.55, BLUE_CSS); grd.addColorStop(1, '#1d2368');
@@ -31,6 +32,7 @@ export function paintLimitedSide(Lb: number, head: boolean): SheetMaps {
   s.rect(-hz - 1, hz + 1, Y0, 1.16, '#151a4a', .35, .4); // 裾
   const door = (zc: number) => {
     s.rect(zc - .42, zc + .42, 1.2, 3.1, '#151a46', .3, .5, .08);
+    if (open) { s.glass(zc - .39, zc + .39, 1.23, 3.07, '', .02, ['#4a463e', '#23262b']); return; }
     s.rect(zc - .39, zc + .39, 1.23, 3.07, BLUE_CSS, .2, .55, .07);
     s.oval(zc, 2.55, .09, .38, '#151a3e');
   };

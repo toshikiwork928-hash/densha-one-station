@@ -2,12 +2,17 @@
 // 1両 = 材質別に結合したメッシュ数個。ジオメトリ・材質・テクスチャは種別ごとに共有し、行先 LED のみ編成ごと
 import * as THREE from 'three';
 import type { TrainKind } from '../route/types';
-import { envMap, glowTexture, ledTexture, type CarKind, type CarParts, type SheetMaps } from './trains/common';
+import { envMap, glowTexture, ledDestTexture, ledTexture, ledTypeTexture, type CarKind, type CarParts, type SheetMaps } from './trains/common';
 import { buildCommuterCar, paintCommuterFace, paintCommuterSide, HW, YTOP } from './trains/commuter';
 import { buildLimitedCar, paintLimitedSide, HW_L } from './trains/limited';
 
 /** 1両分の生成結果。原点 = 車体中心・レール面高さ、前 = -Z */
-export interface TrainCar { object: THREE.Object3D; length: number }
+export interface TrainCar {
+  object: THREE.Object3D;
+  length: number;
+  /** 客用ドアの開閉（停車中の見た目。何度呼んでもよい） */
+  setDoors(open: boolean): void;
+}
 
 /** 行先表示などの任意指定 */
 export interface TrainSetOptions {
@@ -15,6 +20,8 @@ export interface TrainSetOptions {
   dest?: string;
   /** 種別表示（既定は車種から 普通/急行/特急） */
   label?: string;
+  /** 連結するユニット（両数）。例 [4, 2]。未指定は 4両ずつ + 端数（特急形は1ユニット） */
+  units?: number[];
 }
 
 /** 編成を生成（先頭車 index 0、最後尾は逆向きの先頭車） */
@@ -29,14 +36,26 @@ export const TRAIN_KINDS: Record<TrainKind, { label: string; service: string }> 
 export const CAR_LEN = 20;
 const LB = CAR_LEN - .5; // 車体長（連結面間隔 0.5m）
 
-/** n 両編成の車種並び（両端 = 先頭車、所々にパンタ付き） */
+/** n 両ユニットの車種並び（両端 = 運転台付きの先頭車、所々にパンタ付き） */
 export function formation(n: number): CarKind[] {
   return Array.from({ length: n }, (_, i): CarKind => i === 0 || i === n - 1 ? 'head' : i % 3 === 2 ? 'pan' : 'mid');
+}
+
+/** 既定のユニット分け（通勤形は 4両 + 端数、特急形は1ユニット） */
+export function defaultUnits(kind: TrainKind, n: number): number[] {
+  if (kind === 'limited' || n <= 4) return [Math.max(1, n)];
+  const out: number[] = []; let r = n;
+  while (r > 4) { out.push(4); r -= 4; }
+  out.push(r);
+  return out;
 }
 
 interface KindKit {
   geo(k: CarKind): CarParts;
   side: { head: THREE.MeshStandardMaterial; mid: THREE.MeshStandardMaterial };
+  /** ドアを開けた側面（初めて開けるときに作る） */
+  open(head: boolean): THREE.MeshStandardMaterial;
+  openMats: THREE.MeshStandardMaterial[];
   face?: THREE.MeshStandardMaterial;
   paint: THREE.MeshStandardMaterial;
   glass: THREE.MeshStandardMaterial;
@@ -73,6 +92,7 @@ function kindKit(kind: TrainKind, renderer: THREE.WebGLRenderer): KindKit {
       geo: c => geos.get(c) ?? (geos.set(c, buildLimitedCar(c, LB)), geos.get(c)!),
       side: { head: sheetMat(paintLimitedSide(LB, true), env, true, 1.2), mid: sheetMat(paintLimitedSide(LB, false), env, true, 1.2) },
       paint, glass, base: { env: 1.2, paintEnv: 1.2 },
+      openMats: [], open: h => openMat(k!, h, () => sheetMat(paintLimitedSide(LB, h, true), env, true, 1.2)),
     };
   } else {
     const v = kind === 'commuter-new' ? 'new' : 'old', envI = v === 'new' ? .9 : .6;
@@ -82,11 +102,28 @@ function kindKit(kind: TrainKind, renderer: THREE.WebGLRenderer): KindKit {
       side: { head: sheetMat(paintCommuterSide(v, LB, true), env, false, envI), mid: sheetMat(paintCommuterSide(v, LB, false), env, false, envI) },
       face: sheetMat(paintCommuterFace(v), env, false, envI),
       paint, glass, base: { env: envI, paintEnv: .6 },
+      openMats: [], open: h => openMat(k!, h, () => sheetMat(paintCommuterSide(v, LB, h, true), env, false, envI)),
     };
   }
   kindKits.set(kind, k);
   applyNight(k);
   return k;
+}
+
+const openCache = new Map<KindKit, Partial<Record<'head' | 'mid', THREE.MeshStandardMaterial>>>();
+function openMat(k: KindKit, head: boolean, make: () => THREE.MeshStandardMaterial): THREE.MeshStandardMaterial {
+  let c = openCache.get(k);
+  if (!c) { c = {}; openCache.set(k, c); }
+  const key = head ? 'head' : 'mid';
+  if (!c[key]) { c[key] = make(); k.openMats.push(c[key]!); applyNight(k); }
+  return c[key]!;
+}
+
+function ledMatPart(part: 'type' | 'dest', label: string, dest: string): THREE.MeshBasicMaterial {
+  const key = `${part}:${label}|${dest}`;
+  let m = ledMats.get(key);
+  if (!m) { m = new THREE.MeshBasicMaterial({ map: part === 'type' ? ledTypeTexture(label) : ledDestTexture(dest), toneMapped: false }); ledMats.set(key, m); }
+  return m;
 }
 
 function ledMat(label: string, dest: string): THREE.MeshBasicMaterial {
@@ -96,13 +133,20 @@ function ledMat(label: string, dest: string): THREE.MeshBasicMaterial {
   return m;
 }
 
-function makeCar(kit: KindKit, kind: CarKind, role: 'front' | 'rear' | 'mid', led: THREE.Material): THREE.Group {
+/** front / rear = 編成の先頭・最後尾、mid = 中間車、jointFront / jointRear = ユニット連結部の運転台付き車（灯火・行先は消灯） */
+type Role = 'front' | 'rear' | 'mid' | 'jointFront' | 'jointRear';
+const blankLed = new THREE.MeshBasicMaterial({ color: 0x060606 });
+
+function makeCar(kit: KindKit, kind: CarKind, role: Role, led: THREE.Material, led2?: THREE.Material): { car: THREE.Group; setDoors(open: boolean): void } {
   const g = kit.geo(kind), car = new THREE.Group(), body = new THREE.Group();
-  body.add(new THREE.Mesh(g.shell, kind === 'head' ? kit.side.head : kit.side.mid));
+  const shell = new THREE.Mesh(g.shell, kind === 'head' ? kit.side.head : kit.side.mid);
+  body.add(shell);
   body.add(new THREE.Mesh(g.paint, kit.paint));
   if (g.face && kit.face) body.add(new THREE.Mesh(g.face, kit.face));
   if (g.glass) body.add(new THREE.Mesh(g.glass, kit.glass));
-  if (g.led) body.add(new THREE.Mesh(g.led, led));
+  const lit = role === 'front' || role === 'rear';
+  if (g.led) body.add(new THREE.Mesh(g.led, lit ? led : blankLed));
+  if (g.led2) body.add(new THREE.Mesh(g.led2, lit && led2 ? led2 : blankLed));
   if (kind === 'head') {
     // 前: 前照灯点灯（尾灯は付けない）、後: 尾灯点灯・前照灯は消灯色
     if (role === 'front' && g.head) body.add(new THREE.Mesh(g.head, shared.headOn));
@@ -111,24 +155,41 @@ function makeCar(kit: KindKit, kind: CarKind, role: 'front' | 'rear' | 'mid', le
     if (role === 'front') for (const p of g.glows) {
       const s = new THREE.Sprite(shared.glow); s.position.copy(p); s.scale.setScalar(1.4); s.name = 'glow'; body.add(s);
     }
-    if (role === 'rear') body.rotation.y = Math.PI;
+    if (role === 'rear' || role === 'jointRear') body.rotation.y = Math.PI;
   }
   for (const o of body.children) { o.matrixAutoUpdate = false; o.updateMatrix(); }
   car.add(body);
-  return car;
+  let isOpen = false;
+  return {
+    car,
+    setDoors(open) {
+      if (open === isOpen) return;
+      isOpen = open;
+      shell.material = open ? kit.open(kind === 'head') : kind === 'head' ? kit.side.head : kit.side.mid;
+    },
+  };
 }
 
 export const createTrainSet: CreateTrainSet = (kind, cars, renderer, opts = {}) => {
-  const n = Math.max(1, cars), kit = kindKit(kind, renderer);
-  const led = ledMat(opts.label ?? TRAIN_KINDS[kind].service, opts.dest ?? '海浜公園');
-  return formation(n).map((k, i) => ({
-    object: makeCar(kit, n === 1 ? 'head' : k, i === 0 ? 'front' : i === n - 1 ? 'rear' : 'mid', led),
-    length: CAR_LEN,
-  }));
+  const kit = kindKit(kind, renderer), label = opts.label ?? TRAIN_KINDS[kind].service, dest = opts.dest ?? '海浜公園';
+  // 前面の表示器: 8300系（commuter-new）は左に種別・右に行先の2面、それ以外は1面に種別と行先
+  const led = kind === 'commuter-new' ? ledMatPart('type', label, dest) : ledMat(label, dest), led2 = kind === 'commuter-new' ? ledMatPart('dest', label, dest) : undefined;
+  const units = opts.units?.length ? opts.units : defaultUnits(kind, Math.max(1, cars));
+  const out: TrainCar[] = [];
+  units.forEach((m, u) => {
+    const first = u === 0, last = u === units.length - 1;
+    formation(m).forEach((k, i) => {
+      const lastCar = i === m - 1;
+      const role: Role = i === 0 ? (first ? 'front' : 'jointFront') : lastCar ? (last ? 'rear' : 'jointRear') : 'mid';
+      const c = makeCar(kit, m === 1 ? 'head' : k, role, led, led2);
+      out.push({ object: c.car, length: CAR_LEN, setDoors: c.setDoors });
+    });
+  });
+  return out;
 };
 
 function applyNight(k: KindKit) {
-  for (const m of [k.side.head, k.side.mid, k.face]) if (m) { m.emissiveIntensity = night * 1.1; m.envMapIntensity = k.base.env * (1 - night * .75); }
+  for (const m of [k.side.head, k.side.mid, k.face, ...k.openMats]) if (m) { m.emissiveIntensity = night * 1.1; m.envMapIntensity = k.base.env * (1 - night * .75); }
   k.paint.envMapIntensity = k.base.paintEnv * (1 - night * .75);
   k.glass.envMapIntensity = 1.2 - night * .9; k.glass.emissiveIntensity = night * .5;
 }

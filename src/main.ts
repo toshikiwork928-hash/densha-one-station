@@ -85,4 +85,5 @@ if (import.meta.env.DEV) {
       simT += dt; game.update(dt); ctx.events.emit('frame', { dt, time: simT, state: ctx.state.state });
     }
   };
+  void import('./debug/autodrive').then(m => m.attachAutodrive(ctx, (window as any).__advance));
 }

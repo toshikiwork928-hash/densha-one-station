@@ -46,7 +46,10 @@ export interface ServiceSpec {
   id: ServiceId;
   /** 表示名（普通 / 急行 / 特急） */
   name: string;
+  /** 総両数（units の合計。種別適用で route/service.ts が更新） */
   cars: number;
+  /** 編成を組むユニット（両数）。4両・2両のユニットを連結する（例: 6両 = [4, 2]、8両 = [4, 4] または [4, 2, 2]） */
+  units: number[];
   kind: TrainKind;
   /** 停車駅（stations の index）。それ以外は通過 */
   stops: number[];
@@ -58,8 +61,8 @@ export interface ServiceSpec {
   useLoop?: boolean;
   /** プレイヤーが選べる車種（先頭が既定）。未指定なら kind 固定 */
   kindOptions?: TrainKind[];
-  /** 選べる両数（未指定なら cars 固定） */
-  carsOptions?: number[];
+  /** 選べる編成（units の候補。未指定なら units 固定。先頭が既定） */
+  formationOptions?: number[][];
   /** 待避（この駅で後続の通過列車を待つ）: 駅 index と、通過していく列車の種別 */
   waits?: { station: number; passedBy: ServiceId }[];
 }

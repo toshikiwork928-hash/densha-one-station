@@ -62,15 +62,22 @@ const bases = new WeakMap<Route, Base>();
 export const serviceOf = (route: Route, id: ServiceId | undefined): ServiceSpec | undefined =>
   route.services?.find(s => s.id === id) ?? route.services?.[0];
 
-const defaults = new WeakMap<ServiceSpec, { kind: TrainKind; cars: number }>();
-/** 選択した車種・両数を route.services へ反映（選択肢にないものは既定値） */
-export function applyVehicles(route: Route, sel: Partial<Record<ServiceId, { kind: TrainKind; cars: number }>>): void {
+/** 編成の合計両数 */
+export const carsOf = (units: readonly number[]): number => units.reduce((a, n) => a + n, 0);
+/** 編成の表示（4+2 など。1ユニットは両数のみ） */
+export const unitsLabel = (units: readonly number[]): string => units.length > 1 ? `${units.join('+')}` : String(units[0]);
+const sameUnits = (a: readonly number[], b: readonly number[]) => a.length === b.length && a.every((n, i) => n === b[i]);
+
+const defaults = new WeakMap<ServiceSpec, { kind: TrainKind; units: number[] }>();
+/** 選択した車種・編成を route.services へ反映（選択肢にないものは既定値）。旧形式の保存（両数のみ）は同じ両数の最初の編成へ */
+export function applyVehicles(route: Route, sel: Partial<Record<ServiceId, { kind: TrainKind; units?: number[]; cars?: number }>>): void {
   for (const svc of route.services ?? []) {
     let d = defaults.get(svc);
-    if (!d) { d = { kind: svc.kind, cars: svc.cars }; defaults.set(svc, d); }
-    const v = sel[svc.id];
+    if (!d) { d = { kind: svc.kind, units: [...svc.units] }; defaults.set(svc, d); }
+    const v = sel[svc.id], opts = svc.formationOptions ?? [d.units];
     svc.kind = v && svc.kindOptions?.includes(v.kind) ? v.kind : d.kind;
-    svc.cars = v && svc.carsOptions?.includes(v.cars) ? v.cars : d.cars;
+    svc.units = [...(v && (opts.find(o => (v.units ? sameUnits(o, v.units) : carsOf(o) === v.cars)) ?? undefined) || d.units)];
+    svc.cars = carsOf(svc.units);
   }
 }
 

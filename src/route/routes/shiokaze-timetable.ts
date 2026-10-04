@@ -3,14 +3,14 @@ import type { ServiceId, ServiceSpec } from '../types';
 
 /** 下り（桜ヶ丘 → 岬口） */
 export const TT: Record<ServiceId, ServiceSpec['timetable']> = {
-  local: { 0: { arr: 0, dep: 0 }, 1: { arr: 145, dep: 170 }, 2: { arr: 315, dep: 390 }, 3: { arr: 550, dep: 575 }, 4: { arr: 730, dep: 830 }, 5: { arr: 975 } },
-  express: { 0: { arr: 0, dep: 0 }, 1: { arr: 130 }, 2: { arr: 230 }, 3: { arr: 365, dep: 390 }, 4: { arr: 545, dep: 570 }, 5: { arr: 715 } },
-  limited: { 0: { arr: 0, dep: 0 }, 1: { arr: 120 }, 2: { arr: 220 }, 3: { arr: 335 }, 4: { arr: 455, dep: 480 }, 5: { arr: 615 } },
+  local: { 0: { arr: 0, dep: 0 }, 1: { arr: 145, dep: 170 }, 2: { arr: 315, dep: 413 }, 3: { arr: 573, dep: 598 }, 4: { arr: 698, dep: 723 }, 5: { arr: 813, dep: 877 }, 6: { arr: 1022 } },
+  express: { 0: { arr: 0, dep: 0 }, 1: { arr: 130 }, 2: { arr: 250, dep: 275 }, 3: { arr: 415 }, 4: { arr: 470 }, 5: { arr: 530, dep: 555 }, 6: { arr: 700 } },
+  limited: { 0: { arr: 0, dep: 0 }, 1: { arr: 120 }, 2: { arr: 235, dep: 260 }, 3: { arr: 395 }, 4: { arr: 450 }, 5: { arr: 485 }, 6: { arr: 595 } },
 };
 
 /** 上り（岬口 → 桜ヶ丘） */
 export const TT_UP: Record<ServiceId, ServiceSpec['timetable']> = {
-  local: { 0: { arr: 0, dep: 0 }, 1: { arr: 140, dep: 240 }, 2: { arr: 395, dep: 420 }, 3: { arr: 575, dep: 650 }, 4: { arr: 800, dep: 825 }, 5: { arr: 970 } },
-  express: { 0: { arr: 0, dep: 0 }, 1: { arr: 140, dep: 165 }, 2: { arr: 320, dep: 345 }, 3: { arr: 490 }, 4: { arr: 590 }, 5: { arr: 715 } },
-  limited: { 0: { arr: 0, dep: 0 }, 1: { arr: 135, dep: 160 }, 2: { arr: 280 }, 3: { arr: 395 }, 4: { arr: 495 }, 5: { arr: 615 } },
+  local: { 0: { arr: 0, dep: 0 }, 1: { arr: 140, dep: 204 }, 2: { arr: 294, dep: 319 }, 3: { arr: 424, dep: 449 }, 4: { arr: 604, dep: 702 }, 5: { arr: 852, dep: 877 }, 6: { arr: 1022 } },
+  express: { 0: { arr: 0, dep: 0 }, 1: { arr: 140, dep: 165 }, 2: { arr: 230 }, 3: { arr: 285 }, 4: { arr: 420, dep: 445 }, 5: { arr: 580 }, 6: { arr: 705 } },
+  limited: { 0: { arr: 0, dep: 0 }, 1: { arr: 110 }, 2: { arr: 145 }, 3: { arr: 195 }, 4: { arr: 325, dep: 350 }, 5: { arr: 475 }, 6: { arr: 595 } },
 };

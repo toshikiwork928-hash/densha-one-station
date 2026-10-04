@@ -4,7 +4,7 @@ import type { GameContext } from '../core/context';
 import { $, fmtClock } from '../core/dom';
 import { ASPECT_LABEL, ASPECT_LIMIT } from '../game/preceding';
 import { departureTime } from '../game/state';
-import { serviceOf } from '../route/service';
+import { serviceOf, unitsLabel } from '../route/service';
 import { drawMeter } from './meter';
 
 const fmtHM = (sec: number) => fmtClock(sec);
@@ -44,7 +44,7 @@ export function attachHud(ctx: GameContext): void {
   function renderService() {
     const v = route.services ? serviceOf(route, st.sel.service) : undefined;
     sx.svc.hidden = !v;
-    if (v) sx.svc.innerHTML = `<span class="svcBadge svc-${v.id}">${v.name}</span> ${route.stations[route.stations.length - 1].name}行 <span class="sub">${v.cars}両</span>`;
+    if (v) sx.svc.innerHTML = `<span class="svcBadge svc-${v.id}">${v.name}</span> ${route.stations[route.stations.length - 1].name}行 <span class="sub">${v.cars}両${v.units.length > 1 ? `（${unitsLabel(v.units)}）` : ''}</span>`;
   }
 
   // 表示対象の駅（次の停車駅。終了後は最後に判定した駅）
@@ -108,7 +108,7 @@ export function attachHud(ctx: GameContext): void {
     sx.door.textContent = open ? 'ドア開' : closing ? '戸閉め中' : '戸閉';
     const ot = st.overtake, waiting = st.state === 'dwell' && !!ot && !ot.cleared && ot.station === st.target;
     sx.doorTxt.textContent = st.state === 'dwell' ? (open ? ` 戸閉めまで ${Math.ceil(st.dwellT)}秒` : closing ? ' 発車できません' : waiting ? ' 通過待ち' : ' 力行で発車') : '';
-    if (waiting && !open) sx.doorTxt.textContent = ` ${serviceOf(route, ot.passedBy)?.name ?? ''}の通過待ち`;
+    if (waiting && !open) { const p = serviceOf(route, ot.passedBy); sx.doorTxt.textContent = ` ${p?.name ?? ''}の${p?.stops.includes(ot.station) ? '待ち合わせ' : '通過待ち'}`; }
     sx.replay.classList.toggle('show', ctx.cameraMode === 'replay');
   }
 

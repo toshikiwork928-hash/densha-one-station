@@ -52,7 +52,7 @@ export function createGame(ctx: GameContext): Game {
   function syncService() {
     ctx.service = serviceOf(route, st.sel.service);
     ctx.trainEnv.perf = ctx.service ? TRAIN_PERF[ctx.service.kind] : DEFAULT_PERF;
-    const key = ctx.service ? `${ctx.service.id}:${ctx.service.kind}:${ctx.service.cars}` : '';
+    const key = ctx.service ? `${ctx.service.id}:${ctx.service.kind}:${ctx.service.units.join('+')}` : '';
     if (ctx.service && key !== appliedService) {
       appliedService = key;
       events.emit('serviceChange', { service: ctx.service });
@@ -306,8 +306,7 @@ export function createGame(ctx: GameContext): Game {
       if (st.state !== 'title') return;
       const svc = serviceOf(route, st.sel.service);
       if (!svc) return;
-      const cur = st.sel.vehicles[svc.id] ?? { kind: svc.kind, cars: svc.cars };
-      st.sel.vehicles = { ...st.sel.vehicles, [svc.id]: { kind: v.kind ?? cur.kind, cars: v.cars ?? cur.cars } };
+      st.sel.vehicles = { ...st.sel.vehicles, [svc.id]: { kind: v.kind ?? svc.kind, units: v.units ?? svc.units } };
       saveSelection(st.sel);
       reset();
     },

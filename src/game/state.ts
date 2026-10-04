@@ -16,7 +16,8 @@ export const MODE_LABEL: Record<GameMode, string> = { normal: '通常', recovery
 export interface Stage { id: string; from: number; to: number; label: string }
 
 /** 種別ごとに選んだ車種・両数 */
-export type VehicleSel = Partial<Record<ServiceId, { kind: TrainKind; cars: number }>>;
+/** units = 連結するユニット（両数）。cars は旧形式の保存データ（両数のみ）の読み込み用 */
+export type VehicleSel = Partial<Record<ServiceId, { kind: TrainKind; units?: number[]; cars?: number }>>;
 export interface Selection {
   stageId: string; mode: GameMode; /** 運行種別（route.services が無い路線では無視） */ service: ServiceId;
   vehicles: VehicleSel;
@@ -32,10 +33,8 @@ export interface OvertakeState {
   passedBy: ServiceId;
   /** 出発信号（route.signals の index）。通過列車が抜けるまで停止現示 */
   depSignal: number;
-  /** wait = 出現待ち, run = 走行中, done = 通過済み */
-  phase: 'wait' | 'run' | 'done';
-  /** 出現する時刻 [s]（st.t 基準） */
-  spawnT: number;
+  /** run = 走行中, done = 通過済み（見えなくなった） */
+  phase: 'run' | 'done';
   /** 通過列車がこの駅に停車する場合の停止位置 [m]（本線ホーム）。停車しないなら null */
   stopAt: number | null;
   /** 停車中の残り時間 [s]（停車前は未使用） */
@@ -46,8 +45,10 @@ export interface OvertakeState {
   head: number;
   v: number;
   len: number;
-  /** 出口分岐器を後部が抜けた（出発信号を開けてよい） */
+  /** 出口分岐器を後部が抜けて見えなくなった（出発信号を開けてよい） */
   cleared: boolean;
+  /** 普通がこの駅に停車した（出発信号の停止現示はそれから） */
+  localStopped: boolean;
 }
 
 export interface AtsState {

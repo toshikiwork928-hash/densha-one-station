@@ -195,6 +195,31 @@ export function ledTexture(label: string, dest: string): THREE.CanvasTexture {
   const t = new THREE.CanvasTexture(k); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 
+/** 種別だけを表示する表示器（8300系の前面左） */
+export function ledTypeTexture(label: string): THREE.CanvasTexture {
+  const [k, g] = cv(256, 64);
+  g.fillStyle = '#0b0b0b'; g.fillRect(0, 0, 256, 64);
+  const col: Record<string, string> = { 普通: '#e8e8e8', 急行: '#ff5a3a', 特急: '#ff4a6a', 準急: '#5ad06a', 快速: '#ff9a2a' };
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = col[label] ?? '#ffb347'; g.font = `800 46px ${FONT}`; g.fillText(label, 128, 34, 220);
+  g.fillStyle = 'rgba(0,0,0,.45)';
+  for (let x = 0; x < 256; x += 4) g.fillRect(x, 0, 1, 64);
+  for (let y = 0; y < 64; y += 4) g.fillRect(0, y, 256, 1);
+  const t = new THREE.CanvasTexture(k); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+
+/** 行先だけを表示する表示器（8300系の前面右） */
+export function ledDestTexture(dest: string): THREE.CanvasTexture {
+  const [k, g] = cv(256, 64);
+  g.fillStyle = '#0b0b0b'; g.fillRect(0, 0, 256, 64);
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = '#ffb347'; g.font = `700 46px ${FONT}`; g.fillText(dest, 128, 34, 220);
+  g.fillStyle = 'rgba(0,0,0,.45)';
+  for (let x = 0; x < 256; x += 4) g.fillRect(x, 0, 1, 64);
+  for (let y = 0; y < 64; y += 4) g.fillRect(0, y, 256, 1);
+  const t = new THREE.CanvasTexture(k); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+
 /** 発光グロー用の放射グラデーション */
 let glowTex: THREE.Texture | null = null;
 export function glowTexture(): THREE.Texture {
@@ -217,8 +242,10 @@ export interface CarParts {
   paint: THREE.BufferGeometry;
   /** ガラス（光沢） */
   glass?: THREE.BufferGeometry;
-  /** 行先 LED 面 */
+  /** 行先 LED 面（8300系は左 = 種別） */
   led?: THREE.BufferGeometry;
+  /** 行先 LED 面の右側（8300系: 行先） */
+  led2?: THREE.BufferGeometry;
   head?: THREE.BufferGeometry;
   tail?: THREE.BufferGeometry;
   /** 前照灯グローの位置 */

@@ -23,13 +23,13 @@ export function createPlayerTrain(ctx: GameContext): PlayerTrain {
   function build() {
     const svc = ctx.service;
     const n = svc?.cars ?? Math.max(2, Math.round(route.trainLength / CAR_LEN));
-    const kind = svc?.kind ?? 'commuter-new';
-    const key = `${kind}:${n}:${svc?.name ?? ''}`;
+    const kind = svc?.kind ?? 'commuter-new', units = svc?.units;
+    const key = `${kind}:${units?.join('+') ?? n}:${svc?.name ?? ''}`;
     if (key === built) return;
     built = key;
     for (const c of cars) group.remove(c.object);
     const last = route.stations[route.stations.length - 1]?.name ?? '';
-    cars = createTrainSet(kind, n, ctx.renderer, { dest: last, label: svc?.name });
+    cars = createTrainSet(kind, n, ctx.renderer, { dest: last, label: svc?.name, units });
     for (const c of cars) group.add(c.object);
   }
   build();
@@ -46,7 +46,9 @@ export function createPlayerTrain(ctx: GameContext): PlayerTrain {
     group.visible = ctx.cameraMode !== 'cab';
     if (!group.visible) return;
     let sc = s;
+    const open = ctx.state.doors === 'open';
     for (const c of cars) {
+      c.setDoors(open);
       sc -= c.length / 2;
       const a = sc + bogie, b = sc - bogie;
       p1.copy(track.pathAt(a, 0, .38)); p2.copy(track.pathAt(b, 0, .38));

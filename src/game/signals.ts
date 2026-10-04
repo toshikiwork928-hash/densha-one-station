@@ -47,7 +47,7 @@ export function createSignalSystem(ctx: GameContext, forceEB: () => void): Signa
   /** 上限（場内）と待避の抑止（出発）を反映 */
   const adjust = (i: number, a: SignalAspect): SignalAspect => {
     const o = st.overtake;
-    if (o && !o.cleared && o.depSignal === i) return 'R';
+    if (o && !o.cleared && o.localStopped && o.depSignal === i) return 'R';
     return restrict(a, caps[i]);
   };
   const precOnly = (i: number): SignalAspect => adjust(i, aspectOf(sigS, i, precTrains()));

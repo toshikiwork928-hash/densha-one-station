@@ -37,7 +37,8 @@ const LOOK: Record<CommuterVariant, Look> = {
 };
 
 /** 側面（head = 先頭車。前端 = -Z 側に乗務員扉と帯の立ち上がり） */
-export function paintCommuterSide(v: CommuterVariant, Lb: number, head: boolean): SheetMaps {
+/** open = 客用ドアを開けた状態（開口部は暗い車内、夜は点灯） */
+export function paintCommuterSide(v: CommuterVariant, Lb: number, head: boolean, open = false): SheetMaps {
   const L = LOOK[v], s = sideSheet(Lb, YTOP), hz = Lb / 2;
   const grd = s.c.createLinearGradient(0, 0, 0, s.H); grd.addColorStop(0, L.base[0]); grd.addColorStop(1, L.base[1]);
   s.base(grd, L.rough, L.metal);
@@ -55,6 +56,14 @@ export function paintCommuterSide(v: CommuterVariant, Lb: number, head: boolean)
   const [w0, w1] = L.win;
   const door = (zc: number, w: number, dbl: boolean) => {
     s.rect(zc - w / 2 - .03, zc + w / 2 + .03, 1.13, 3.08, v === 'old' ? '#a9adb3' : '#8b9198', .5, .3);
+    if (open && dbl) {
+      // 開口: 戸袋へ引き込まれた扉の縁だけを残し、車内（床・つり革・天井の灯り）を暗く描く
+      s.glass(zc - w / 2, zc + w / 2, 1.16, 3.05, '', .0, ['#4a463e', '#23262b']);
+      s.rect(zc - w / 2, zc + w / 2, 1.16, 1.3, '#5b5f66', .6, .1);
+      s.rect(zc - w / 2, zc + w / 2, 2.98, 3.05, '#d9d6c8', .5, 0);
+      for (const sg of [-1, 1]) s.rect(zc + sg * (w / 2 - .06) - .06, zc + sg * (w / 2 - .06) + .06, 1.16, 3.05, L.door, v === 'old' ? L.rough : .4, v === 'old' ? L.metal : .7);
+      return;
+    }
     s.rect(zc - w / 2, zc + w / 2, 1.16, 3.05, L.door, v === 'old' ? L.rough : .4, v === 'old' ? L.metal : .7);
     if (dbl) {
       s.rect(zc - .012, zc + .012, 1.16, 3.05, '#5e646b');
@@ -130,7 +139,7 @@ export function buildCommuterCar(v: CommuterVariant, kind: CarKind, Lb: number):
   // 雨樋
   for (const sx of [-1, 1]) add(sx * (HW - .03), 3.56, 0, .04, .04, Lb - (head ? .6 : 0), 0x8d939a, 0, 0, 0);
   addEndWall(b, hz, YTOP, HW, v === 'new' ? 0xb9bec4 : 0xbfc3c9);
-  let face: THREE.BufferGeometry | undefined, led: THREE.BufferGeometry | undefined;
+  let face: THREE.BufferGeometry | undefined, led: THREE.BufferGeometry | undefined, led2: THREE.BufferGeometry | undefined;
   if (head) {
     face = capGeo(HALF, { z: zf, inset: L.r }, YTOP, HW, -1);
     const z = zf - .005;
@@ -148,7 +157,9 @@ export function buildCommuterCar(v: CommuterVariant, kind: CarKind, Lb: number):
         tl.add('l', P.box, M(sx * 1.02, 1.79, z - .026, 0, .32, .09, .02), 0xffffff);
       }
       // 行先 LED（左右の黒い部分の上）
-      led = mergeLed([[.93, 3.42, .62], [-.93, 3.42, .62]], z - .01, .17);
+      // 左（正面から見て +X 側）= 種別、右 = 行先
+      led = mergeLed([[.93, 3.42, .62]], z - .01, .17);
+      led2 = mergeLed([[-.93, 3.42, .62]], z - .01, .17);
       // スカート（角ばった銀灰色）と連結器
       for (const sx of [-1, 1]) {
         b.add('paint', P.box, M(sx * .98, .7, zf - .1, sx * .15, .8, .6, .08, -.22), 0x9ca2a9);
@@ -196,7 +207,7 @@ export function buildCommuterCar(v: CommuterVariant, kind: CarKind, Lb: number):
     for (const sx of [-.85, .85]) add(sx, roofTop - .05, 0, .06, .06, Lb - 1, 0x8a8f95); // 配管
   }
   if (kind === 'pan') (v === 'new' ? addSingleArm : addLozenge)(b, -hz + 4.0, roofTop - .02);
-  return { shell, face, paint: b.geometry('paint')!, glass: gl.geometry('l') ?? undefined, led, head: lit.geometry('l') ?? undefined, tail: tl.geometry('l') ?? undefined, glows };
+  return { shell, face, paint: b.geometry('paint')!, glass: gl.geometry('l') ?? undefined, led, led2, head: lit.geometry('l') ?? undefined, tail: tl.geometry('l') ?? undefined, glows };
 }
 
 /** 行先 LED 面（[x, y, 幅]）を -Z 向きで */

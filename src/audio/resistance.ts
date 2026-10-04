@@ -1,12 +1,12 @@
 // 抵抗制御（カム軸式）の旧型通勤電車の主回路音
-// - 直流直巻電動機のうなり（回転数に比例して音程が上がる）＋整流子の細い鳴き＋ブラシ雑音
+// - VVVF 車の音から VVVF の成分（キャリア・側帯波・ヒス・同期モードの音程階段）を抜いた音: 主電動機の電磁音（高調波）と低いうなり、歯車音
 // - 力行中は速度上昇に合わせてカム軸が1段ずつ進み「カチッ」。直列 → 並列の渡りは少し大きく、一瞬電流が抜ける
 // - 惰行は歯車音だけ。ブレーキは空気ブレーキのみ（発電・回生のうなりは無し）。ノッチを切るとカムが戻る音
 // Vvvf と同じインターフェイスで差し替える
 import { harmonicWave, type AudioCore } from './engine';
 import type { Vvvf } from './vvvf';
 
-const HZ_PER_KMH = 1.45 * .5; // 電動機回転周波数 [Hz/(km/h)]（2極対相当のうなりの基本）
+const HZ_PER_KMH = 1.45; // 電動機回転周波数 [Hz/(km/h)]（VVVF の出力周波数と同じ）
 const GEAR_RATIO = 6.07;
 
 /** カム段の切替速度 [km/h]: 直列 → 渡り → 並列 → 弱め界磁 */
@@ -24,24 +24,15 @@ export function createResistance(core: AudioCore, dest: AudioNode = core.run): V
   const tone = ac.createBiquadFilter(); tone.type = 'lowpass'; tone.frequency.value = 3200; tone.Q.value = .5;
   out.connect(tone).connect(dest);
 
-  // うなり本体（低次の倍音が多い唸り）
-  const growl = ac.createOscillator(); growl.setPeriodicWave(harmonicWave(ac, { 1: .5, 2: 1, 3: .7, 4: .55, 6: .35, 8: .22, 10: .12, 12: .08 }));
-  const growlG = ac.createGain(); growlG.gain.value = .9;
-  const growlLp = ac.createBiquadFilter(); growlLp.type = 'lowpass'; growlLp.frequency.value = 900; growlLp.Q.value = 2.5;
-  growl.connect(growlLp).connect(growlG).connect(out);
-  // 振幅のゆらぎ（トルク脈動）
-  const wob = ac.createOscillator(); wob.frequency.value = 6;
-  const wobG = ac.createGain(); wobG.gain.value = .12;
-  wob.connect(wobG).connect(growlG.gain);
-  // 整流子の細い鳴き（高め・弱め）
-  const comm = ac.createOscillator(); comm.type = 'triangle';
-  const commG = ac.createGain(); commG.gain.value = .07;
-  comm.connect(commG).connect(out);
-  // ブラシ雑音
-  const brush = core.noiseSrc('pink');
-  const brushBp = ac.createBiquadFilter(); brushBp.type = 'bandpass'; brushBp.Q.value = 1.2; brushBp.frequency.value = 400;
-  const brushG = ac.createGain(); brushG.gain.value = .18;
-  brush.connect(brushBp).connect(brushG).connect(out);
+  // 主電動機の電磁音（VVVF 車と同じ 6k±1 次の高調波・基本波のうなり。インバータのキャリア・側帯波・ヒスは無し）。回転数に比例して滑らかに音程が上がる
+  const motor = ac.createOscillator(); motor.setPeriodicWave(harmonicWave(ac, { 1: .25, 2: .2, 5: 1, 7: .7, 11: .35, 13: .28, 17: .12, 19: .1 }));
+  const motorLp = ac.createBiquadFilter(); motorLp.type = 'lowpass'; motorLp.frequency.value = 1800;
+  const motorG = ac.createGain(); motorG.gain.value = .5;
+  motor.connect(motorLp).connect(motorG).connect(out);
+  const hum = ac.createOscillator(); hum.type = 'sawtooth';
+  const humLp = ac.createBiquadFilter(); humLp.type = 'lowpass'; humLp.frequency.value = 220;
+  const humG = ac.createGain(); humG.gain.value = .25;
+  hum.connect(humLp).connect(humG).connect(out);
 
   // 歯車音（惰行中も鳴る）
   const gearOut = ac.createGain(); gearOut.gain.value = 0; gearOut.connect(dest);
@@ -53,7 +44,7 @@ export function createResistance(core: AudioCore, dest: AudioNode = core.run): V
   const gearNG = ac.createGain(); gearNG.gain.value = 2.4;
   gearNoise.connect(gearBp).connect(gearNG).connect(gearOut);
 
-  for (const o of [growl, wob, comm, gear]) o.start();
+  for (const o of [motor, hum, gear]) o.start();
 
   // カム軸の音（運転台の床下から聞こえる機械音）は走行系バスへ
   const camBus = ac.createGain(); camBus.gain.value = 1; camBus.connect(dest);
@@ -89,13 +80,10 @@ export function createResistance(core: AudioCore, dest: AudioNode = core.run): V
     surgeT += dt; surge = 1 + (surge - 1) * Math.exp(-dt / .35);
     gap = Math.max(0, gap - dt);
 
-    // 電動機の回転・音程
+    // 電動機の回転・音程（VVVF の出力周波数と同じ。段階ではなく連続して上がる）
     const fr = Math.max(.5, kmh * HZ_PER_KMH);
-    growl.frequency.setTargetAtTime(Math.max(8, fr * 2), now, .04);
-    growlLp.frequency.setTargetAtTime(380 + kmh * 12, now, .1);
-    comm.frequency.setTargetAtTime(Math.max(30, fr * 24), now, .05);
-    brushBp.frequency.setTargetAtTime(250 + kmh * 9, now, .1);
-    wob.frequency.setTargetAtTime(3 + kmh * .12, now, .2);
+    motor.frequency.setTargetAtTime(fr, now, .04);
+    hum.frequency.setTargetAtTime(fr, now, .04);
 
     // 電流: 直列・並列の抵抗段では大きく、弱め界磁以降は速度とともに減る
     const notchI = power ? Math.min(1, .45 + notch * .14) : 0;

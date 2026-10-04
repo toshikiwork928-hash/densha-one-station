@@ -16,12 +16,12 @@ export function createOvertaking(ctx: GameContext): void {
   const { scene, track, route, events } = ctx, st = ctx.state;
   const cache = new Map<string, SetView>();
   const dest = route.stations[route.stations.length - 1]?.name ?? '';
-  const view = (kind: TrainKind, n: number, label: string): SetView => {
-    const key = `${kind}:${n}:${label}`;
+  const view = (kind: TrainKind, units: number[], label: string): SetView => {
+    const key = `${kind}:${units.join('+')}:${label}`;
     let v = cache.get(key);
     if (!v) {
       const group = new THREE.Group(); group.name = 'overtake-' + key; group.visible = false; scene.add(group);
-      const cars = createTrainSet(kind, n, ctx.renderer, { dest, label });
+      const cars = createTrainSet(kind, units.reduce((a, n) => a + n, 0), ctx.renderer, { dest, label, units });
       for (const c of cars) group.add(c.object);
       v = { group, cars }; cache.set(key, v);
     }
@@ -40,7 +40,7 @@ export function createOvertaking(ctx: GameContext): void {
     }
   };
   const zones = loopZones(route);
-  let hornDone = false, wasNear = false;
+  let hornDone = false, wasNear = false, lastH = 0;
 
   events.on('reset', () => { hornDone = false; });
   events.on('frame', () => {
@@ -53,8 +53,9 @@ export function createOvertaking(ctx: GameContext): void {
     const o = st.overtake;
     if (o && o.phase === 'run') {
       const svc = serviceOf(route, o.passedBy)!;
-      const v = view(svc.kind, svc.cars, svc.name);
+      const v = view(svc.kind, svc.units, svc.name);
       v.group.visible = true;
+      for (const c of v.cars) c.setDoors(o.stage === 'stopped' && o.localStopped); // 停車して接続中はドアを開ける
       place(v, o.head, () => 0);
       const gap = o.head < ps - plen ? ps - plen - o.head : o.head - o.len > ps ? o.head - o.len - ps : 0;
       if (!hornDone && o.head > ps - plen - 250) { hornDone = true; events.emit('oncomingHorn', { distance: Math.max(0, ps - plen - o.head) }); }
@@ -66,11 +67,15 @@ export function createOvertaking(ctx: GameContext): void {
     // 待避線の先行普通（自列車が本線を通る駅のみ。自列車の近くにいるときだけ表示）
     const local = serviceOf(route, 'local');
     if (!local || st.sel.service === 'local') return;
-    const h = st.precedingS;
+    const h = st.precedingS, prevH = lastH;
+    lastH = h;
     const z = zones.find(q => !route.stations[q.index].enterLoop && local.stops.includes(q.index) && h > q.inFrom && h < q.outTo + 400);
     if (!z || Math.abs(h - ps) > 1500) return;
-    const v = view(local.kind, local.cars, local.name);
+    const v = view(local.kind, local.units, local.name);
     v.group.visible = true;
+    // 待避線に停車している間はドアを開ける（動き出したら閉める）
+    const still = Math.abs(h - prevH) < 1e-3;
+    for (const c of v.cars) c.setDoors(still);
     place(v, h, s => z.lat * loopShape(z, s));
   });
 }

@@ -2,13 +2,14 @@
 // 実行: npm run timetable（src/route/routes/shiokaze-timetable.ts を書き換える）
 import { writeFileSync } from 'node:fs';
 import { shiokaze, shiokazeUp } from '../src/route/routes/shiokaze';
+import { waitDwell } from '../src/game/overtake';
 import { applyService } from '../src/route/service';
 import { buildTrack } from '../src/route/track';
 import type { Route, ServiceId } from '../src/route/types';
 import { TRAIN_PERF, stepTrain, type TrainState } from '../src/sim/train';
 
-/** 停車時間 [s]（普通の待避駅は追い越し待ち込み。追い越す列車がその駅に停車する場合は長め） */
-const DWELL = 25, WAIT_PASS = 75, WAIT_STOP = 100;
+/** 停車時間 [s]（普通の待避駅は優等列車の到着・通過待ち込み。game/overtake.ts の運動計画から求める） */
+const DWELL = 25;
 const MARGIN = 1.05, DT = 1 / 30;
 
 function run(route: Route, id: ServiceId) {
@@ -49,7 +50,7 @@ function run(route: Route, id: ServiceId) {
       si++;
       const last = i === route.stations.length - 1;
       const w = svc.waits?.find(x => x.station === i);
-      const dwell = !w ? DWELL : route.services?.find(x => x.id === w.passedBy)?.stops.includes(i) ? WAIT_STOP : WAIT_PASS;
+      const dwell = !w ? DWELL : waitDwell(route, i, route.services!.find(x => x.id === w.passedBy)!, svc.cars);
       out[i] = last ? { arr: t } : { arr: t, dep: t + dwell };
       if (!last) t += dwell;
     }
