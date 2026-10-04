@@ -14,7 +14,7 @@ const PREC_LEN = 80;
 const LAST_BLOCK = 500;
 /** 種別ごとの先行普通との時隔 [s] と停車駅ごとの追加停車 [s]（普通の後ろを走る急行・特急は途中で追いつく） */
 const HEADWAY_BY: Record<ServiceId, { h: number; extra: number }> = {
-  local: { h: 240, extra: 8 },
+  local: { h: 300, extra: 8 },
   express: { h: 200, extra: 6 },
   limited: { h: 240, extra: 6 },
 };

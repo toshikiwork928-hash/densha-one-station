@@ -36,6 +36,12 @@ export interface OvertakeState {
   phase: 'wait' | 'run' | 'done';
   /** 出現する時刻 [s]（st.t 基準） */
   spawnT: number;
+  /** 通過列車がこの駅に停車する場合の停止位置 [m]（本線ホーム）。停車しないなら null */
+  stopAt: number | null;
+  /** 停車中の残り時間 [s]（停車前は未使用） */
+  dwellLeft: number;
+  /** 停車列車の走行段階 */
+  stage: 'cruise' | 'brake' | 'stopped' | 'accel';
   /** 先頭位置 [m]・速度 [m/s]・編成長 [m] */
   head: number;
   v: number;

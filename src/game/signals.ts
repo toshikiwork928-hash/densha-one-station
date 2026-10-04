@@ -36,6 +36,8 @@ export function createSignalSystem(ctx: GameContext, forceEB: () => void): Signa
   let precDelay = 0;
   let lastEmit = '';
   let passed = -1; // 直前に通過した信号
+  /** 通過時に受けた現示（通過後に先行列車が詰めて現示が下がっても、制限は次の信号まで通過時のまま。上がる方向のみ追従） */
+  let passedAsp: SignalAspect = 'G';
   const redWarned = new Set<number>();
 
   const banner = (text: string, sec = 3) => events.emit('banner', { text, sec });
@@ -59,7 +61,9 @@ export function createSignalSystem(ctx: GameContext, forceEB: () => void): Signa
     const trains: [number, number][] = [...precTrains(), [st.train.s, route.trainLength]];
     for (let i = 0; i < sigS.length; i++) st.signals[i] = adjust(i, aspectOf(sigS, i, trains));
     // R（冒進後）は ATS が扱うので速度超過判定には使わない
-    const pa = passed >= 0 ? precOnly(passed) : 'G';
+    let pa: SignalAspect = passed >= 0 ? precOnly(passed) : 'G';
+    if (passed >= 0 && RANK[pa] < RANK[passedAsp]) pa = passedAsp;
+    else passedAsp = pa;
     st.sigLimit = pa === 'R' ? Infinity : ASPECT_LIMIT[pa];
     const n = st.nextSignal;
     const key = n >= 0 ? `${sigs[n].id}:${st.signals[n]}` : 'none';
@@ -100,6 +104,7 @@ export function createSignalSystem(ctx: GameContext, forceEB: () => void): Signa
       brake('停止信号冒進');
       return;
     }
+    passedAsp = asp;
     if (vk > lim + OVER_MARGIN) warn(`${ASPECT_LABEL[asp]}現示 ${lim}km/h 超過`);
   }
 
@@ -151,14 +156,16 @@ export function createSignalSystem(ctx: GameContext, forceEB: () => void): Signa
         }
         const precStops = local ? local.stops.includes(k) : true;
         if (precStops) precZones.push(z);
-        if (sta.pass && precStops && plan.depT[k] != null) {
-          holds.push({ zone: z, depT: plan.depT[k], passT: sta.scheduledArrival });
+        // 自列車が本線を通る（通過・本線ホームに停車）駅では、先行の普通を待避線に止めて先に行かせない
+        if (!sta.enterLoop && precStops && plan.depT[k] != null) {
+          const passT = sta.scheduledArrival + (sta.pass ? 0 : sta.dwell ?? 20);
+          holds.push({ zone: z, depT: plan.depT[k], passT });
           // 待避駅より先から始めるステージでは、定刻どおり待避した後の位置にしておく
-          if (st.train.s >= z.outTo) precDelay = Math.max(precDelay, sta.scheduledArrival + 15 - plan.depT[k]);
+          if (st.train.s >= z.outTo) precDelay = Math.max(precDelay, passT + 15 - plan.depT[k]);
         }
       });
       lastEmit = ''; redWarned.clear();
-      passed = -1;
+      passed = -1; passedAsp = 'G';
       for (let i = sigS.length - 1; i >= 0; i--) if (sigS[i] <= st.train.s) { passed = i; break; }
       st.nextSignal = sigS.findIndex(x => x > st.train.s);
       refreshAspects();

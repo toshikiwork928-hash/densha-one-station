@@ -63,11 +63,11 @@ export function createOvertaking(ctx: GameContext): void {
       wasNear = prox > 0;
     } else if (wasNear) { events.emit('overtakePass', { proximity: 0 }); wasNear = false; }
 
-    // 待避線の先行普通（自列車が通過する駅のみ。自列車の近くにいるときだけ表示）
+    // 待避線の先行普通（自列車が本線を通る駅のみ。自列車の近くにいるときだけ表示）
     const local = serviceOf(route, 'local');
     if (!local || st.sel.service === 'local') return;
     const h = st.precedingS;
-    const z = zones.find(q => route.stations[q.index].pass && local.stops.includes(q.index) && h > q.inFrom && h < q.outTo + 400);
+    const z = zones.find(q => !route.stations[q.index].enterLoop && local.stops.includes(q.index) && h > q.inFrom && h < q.outTo + 400);
     if (!z || Math.abs(h - ps) > 1500) return;
     const v = view(local.kind, local.cars, local.name);
     v.group.visible = true;

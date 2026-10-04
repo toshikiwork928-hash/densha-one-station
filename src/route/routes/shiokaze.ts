@@ -78,7 +78,8 @@ export const shiokaze: Route = {
       id: 'local', name: '普通', cars: 4, kind: 'commuter-new', kindOptions: ['commuter-new', 'commuter-old'], carsOptions: [4, 6], lineLimit: 90, useLoop: true,
       stops: [0, 1, 2, 3, 4, 5],
       timetable: TT.local,
-      waits: [{ station: 2, passedBy: 'express' }],
+      // 下り: 汐見町で急行、海浜公園で特急に抜かれる（上りは反転して 海浜公園で特急、汐見町で急行）
+      waits: [{ station: 2, passedBy: 'express' }, { station: 4, passedBy: 'limited' }],
     },
     {
       id: 'express', name: '急行', cars: 6, kind: 'commuter-old', kindOptions: ['commuter-old', 'commuter-new'], lineLimit: 100,

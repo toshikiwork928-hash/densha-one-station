@@ -7,8 +7,8 @@ import { buildTrack } from '../src/route/track';
 import type { Route, ServiceId } from '../src/route/types';
 import { TRAIN_PERF, stepTrain, type TrainState } from '../src/sim/train';
 
-/** 停車時間 [s]（普通の待避駅は追い越し待ち込み） */
-const DWELL = 25, WAIT_DWELL = 75;
+/** 停車時間 [s]（普通の待避駅は追い越し待ち込み。追い越す列車がその駅に停車する場合は長め） */
+const DWELL = 25, WAIT_PASS = 75, WAIT_STOP = 100;
 const MARGIN = 1.05, DT = 1 / 30;
 
 function run(route: Route, id: ServiceId) {
@@ -48,7 +48,8 @@ function run(route: Route, id: ServiceId) {
     if (stop) {
       si++;
       const last = i === route.stations.length - 1;
-      const dwell = svc.waits?.some(w => w.station === i) ? WAIT_DWELL : DWELL;
+      const w = svc.waits?.find(x => x.station === i);
+      const dwell = !w ? DWELL : route.services?.find(x => x.id === w.passedBy)?.stops.includes(i) ? WAIT_STOP : WAIT_PASS;
       out[i] = last ? { arr: t } : { arr: t, dep: t + dwell };
       if (!last) t += dwell;
     }
