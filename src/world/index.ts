@@ -38,7 +38,7 @@ export function buildWorld(ctx: GameContext): World {
   const oncoming = createOncoming(ctx);
   buildCrossings(ctx, oncoming);
   const player = createPlayerTrain(ctx);
-  createOvertaking(ctx); // [G] 待避の通過列車・待避線の先行各停
+  createOvertaking(ctx); // [G] 待避の通過列車・待避線の先行普通
   createCab(ctx);
 
   return {

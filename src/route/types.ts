@@ -39,7 +39,7 @@ export type ServiceId = 'local' | 'express' | 'limited';
 export type TrainKind = 'commuter-new' | 'commuter-old' | 'limited';
 export interface ServiceSpec {
   id: ServiceId;
-  /** 表示名（各停 / 急行 / 特急） */
+  /** 表示名（普通 / 急行 / 特急） */
   name: string;
   cars: number;
   kind: TrainKind;
@@ -49,6 +49,10 @@ export interface ServiceSpec {
   timetable: Record<number, { arr: number; dep?: number }>;
   /** 線区最高速度 [km/h]（種別ごと。未指定なら route.lineLimit） */
   lineLimit?: number;
+  /** プレイヤーが選べる車種（先頭が既定）。未指定なら kind 固定 */
+  kindOptions?: TrainKind[];
+  /** 選べる両数（未指定なら cars 固定） */
+  carsOptions?: number[];
   /** 待避（この駅で後続の通過列車を待つ）: 駅 index と、通過していく列車の種別 */
   waits?: { station: number; passedBy: ServiceId }[];
 }
@@ -72,9 +76,9 @@ export interface OncomingSpec {
   kmh: number;
   /** 走行線の横位置 */
   lat: number;
-  /** 車両の種類（未指定なら world/oncoming.ts が順に 各停/急行/特急 を割り当て） */
+  /** 車両の種類（未指定なら world/oncoming.ts が順に 普通/急行/特急 を割り当て） */
   kind?: TrainKind;
-  /** 種別表示（各停/急行/特急）と行先 */
+  /** 種別表示（普通/急行/特急）と行先 */
   label?: string;
   dest?: string;
 }

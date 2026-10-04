@@ -1,14 +1,39 @@
-// 自己ベスト（localStorage。使えない環境では記録しないだけ）
-import type { ServiceId } from '../route/types';
-import type { GameMode } from './state';
+// 記録（localStorage。使えない環境では記録しないだけ）: 自己ベスト・プレイ履歴・前回の選択
+import type { ServiceId, TrainKind } from '../route/types';
+import type { GameMode, Selection } from './state';
 
 const KEY = 'densha.best.v1';
+const KEY_HIST = 'densha.history.v1';
+const KEY_SEL = 'densha.selection.v1';
+const HIST_MAX = 100;
 
 export interface BestEntry { total: number; rank: string; date: string }
 
-function load(): Record<string, BestEntry> {
-  try { return JSON.parse(localStorage.getItem(KEY) ?? '{}') ?? {}; } catch { return {}; }
+/** 1プレイの記録 */
+export interface PlayRecord {
+  /** 日時（ISO 文字列） */
+  at: string;
+  service?: ServiceId;
+  kind?: TrainKind;
+  cars?: number;
+  stageId: string;
+  mode: GameMode;
+  result: 'stop' | 'overrun';
+  total: number;
+  rank: string;
+  /** 最後の停車の停止位置誤差 [m]・定刻差 [s] */
+  err: number;
+  delay: number;
 }
+
+function read<T>(key: string, fallback: T): T {
+  try { return JSON.parse(localStorage.getItem(key) ?? 'null') ?? fallback; } catch { return fallback; }
+}
+function write(key: string, v: unknown): void {
+  try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* 保存不可 */ }
+}
+
+const load = () => read<Record<string, BestEntry>>(KEY, {});
 
 // 急行は従来（種別導入前）の記録と同じキー
 const keyOf = (routeId: string, stageId: string, mode: GameMode, service?: ServiceId) =>
@@ -23,6 +48,26 @@ export function submitScore(routeId: string, stageId: string, mode: GameMode, to
   const all = load(), k = keyOf(routeId, stageId, mode, service), prev = all[k];
   if (prev && prev.total >= total) return { isNew: false, prev };
   all[k] = { total, rank, date: new Date().toISOString().slice(0, 10) };
-  try { localStorage.setItem(KEY, JSON.stringify(all)); } catch { /* 保存不可 */ }
+  write(KEY, all);
   return { isNew: true, prev };
 }
+
+/** プレイ履歴（新しい順） */
+export const getHistory = (routeId: string): PlayRecord[] => read<Record<string, PlayRecord[]>>(KEY_HIST, {})[routeId] ?? [];
+
+export function addHistory(routeId: string, rec: PlayRecord): void {
+  const all = read<Record<string, PlayRecord[]>>(KEY_HIST, {});
+  all[routeId] = [rec, ...(all[routeId] ?? [])].slice(0, HIST_MAX);
+  write(KEY_HIST, all);
+}
+
+/** 自己ベストと履歴をすべて消す */
+export function resetRecords(): void {
+  try { localStorage.removeItem(KEY); localStorage.removeItem(KEY_HIST); } catch { /* 保存不可 */ }
+}
+
+export const loadSelection = (): Selection | undefined => {
+  const s = read<Selection | null>(KEY_SEL, null);
+  return s && typeof s.service === 'string' ? { ...s, vehicles: s.vehicles ?? {} } : undefined;
+};
+export const saveSelection = (sel: Selection): void => write(KEY_SEL, sel);

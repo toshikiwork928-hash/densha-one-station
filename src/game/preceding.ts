@@ -8,11 +8,11 @@ const HEADWAY = 240;
 const LOCAL_STOP = 75;
 /** 先行（各駅停車）の停車駅での追加停車 [s] */
 const EXTRA_DWELL = 15;
-/** 先行列車の編成長 [m]（各停 4両） */
+/** 先行列車の編成長 [m]（普通 4両） */
 const PREC_LEN = 80;
 /** 最後の信号の閉そく長 [m]（終端側の閉そくを有限にする） */
 const LAST_BLOCK = 500;
-/** 種別ごとの先行各停との時隔 [s] と停車駅ごとの追加停車 [s]（各停の後ろを走る急行・特急は途中で追いつく） */
+/** 種別ごとの先行普通との時隔 [s] と停車駅ごとの追加停車 [s]（普通の後ろを走る急行・特急は途中で追いつく） */
 const HEADWAY_BY: Record<ServiceId, { h: number; extra: number }> = {
   local: { h: 240, extra: 8 },
   express: { h: 200, extra: 6 },
@@ -24,7 +24,7 @@ interface Key { t: number; s: number }
 /** 先行列車の計画。depT = 駅 index → その駅の発車キーの時刻（待避線での抑止に使う） */
 export interface PrecedingPlan { keys: Key[]; depT: Record<number, number>; arrT: Record<number, number> }
 
-/** 先行列車の走行計画 (t, s) キー。区間内は smoothstep で加減速を近似。種別あり路線では先行は各停 */
+/** 先行列車の走行計画 (t, s) キー。区間内は smoothstep で加減速を近似。種別あり路線では先行は普通 */
 export function buildPrecedingKeys(route: Route, service?: ServiceId): PrecedingPlan {
   const keys: Key[] = [], depT: Record<number, number> = {}, arrT: Record<number, number> = {};
   const local = route.services?.find(x => x.id === 'local');

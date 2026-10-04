@@ -7,11 +7,11 @@ import type { GameActions, GameContext } from '../core/context';
 import type { CameraMode } from '../core/events';
 import { DEFAULT_PERF, TRAIN_PERF, stepTrain } from '../sim/train';
 import { serviceOf } from '../route/service';
-import type { ServiceId } from '../route/types';
 import { createOvertake } from './overtake';
 import { createReplay } from './replay';
 import { judgeStop, scoreGame } from './scoring';
 import { createSignalSystem } from './signals';
+import { saveSelection } from './ranking';
 import { departureTime, isFinalStop, nextStopIndex, resetState, stagesOf, type GameMode, type GameStateName } from './state';
 
 const MIN_DWELL = 10; // 遅着時でも最低これだけ停車 [s]
@@ -48,12 +48,13 @@ export function createGame(ctx: GameContext): Game {
   const overtake = createOvertake(ctx);
 
   /** 種別の反映（route は resetState が書き換え済み）。変わったら描画側へ通知 */
-  let appliedService: ServiceId | null = null;
+  let appliedService = '';
   function syncService() {
     ctx.service = serviceOf(route, st.sel.service);
     ctx.trainEnv.perf = ctx.service ? TRAIN_PERF[ctx.service.kind] : DEFAULT_PERF;
-    if (ctx.service && ctx.service.id !== appliedService) {
-      appliedService = ctx.service.id;
+    const key = ctx.service ? `${ctx.service.id}:${ctx.service.kind}:${ctx.service.cars}` : '';
+    if (ctx.service && key !== appliedService) {
+      appliedService = key;
       events.emit('serviceChange', { service: ctx.service });
     }
   }
@@ -259,7 +260,8 @@ export function createGame(ctx: GameContext): Game {
       service = svcs[(k + serviceDelta + svcs.length) % svcs.length].id;
       if (stageId !== 'all') stageId = ''; // 種別が変わると停車駅間が変わるので先頭区間へ（全線通しは維持）
     }
-    st.sel = { stageId, mode: MODES[(mi + modeDelta + MODES.length) % MODES.length], service };
+    st.sel = { stageId, mode: MODES[(mi + modeDelta + MODES.length) % MODES.length], service, vehicles: st.sel.vehicles };
+    saveSelection(st.sel);
     reset();
   }
 
@@ -300,6 +302,15 @@ export function createGame(ctx: GameContext): Game {
     selectStage: d => select(d, 0),
     selectMode: d => select(0, d),
     selectService: d => select(0, 0, d),
+    selectVehicle: v => {
+      if (st.state !== 'title') return;
+      const svc = serviceOf(route, st.sel.service);
+      if (!svc) return;
+      const cur = st.sel.vehicles[svc.id] ?? { kind: svc.kind, cars: svc.cars };
+      st.sel.vehicles = { ...st.sel.vehicles, [svc.id]: { kind: v.kind ?? cur.kind, cars: v.cars ?? cur.cars } };
+      saveSelection(st.sel);
+      reset();
+    },
   };
   ctx.actions = actions;
   signals.reset();

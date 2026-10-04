@@ -2,16 +2,23 @@
 import { notchName } from '../core/config';
 import type { GameContext } from '../core/context';
 import { $, fmtClock } from '../core/dom';
-import { getBest, submitScore } from '../game/ranking';
+import { addHistory, getBest, getHistory, resetRecords, submitScore } from '../game/ranking';
 import type { GameResult } from '../game/scoring';
 import { safetyDeductions } from '../game/scoring';
 import { MODE_LABEL, findStage, stagesOf, type GameMode } from '../game/state';
 import { serviceOf } from '../route/service';
-import type { ServiceSpec } from '../route/types';
+import type { ServiceSpec, TrainKind } from '../route/types';
 
 /** 種別の説明（停車駅・編成） */
 const svcDesc = (route: GameContext['route'], v: ServiceSpec) =>
   `${v.cars}両・${v.stops.length === route.stations.length ? '各駅に停車' : v.stops.length === 2 ? '途中駅すべて通過' : `${route.stations.filter((_, i) => !v.stops.includes(i)).map(x => x.name).join('・')} 通過`}`;
+
+/** 車種の説明（選択画面用） */
+const KIND_INFO: Record<TrainKind, { name: string; desc: string }> = {
+  'commuter-new': { name: '新型通勤車', desc: 'ステンレス・すそ絞り車体・VVVF。加速 3.0km/h/s' },
+  'commuter-old': { name: '旧型通勤車', desc: '鋼製・直線車体・抵抗制御。加速 2.5km/h/s、高速域は弱め' },
+  limited: { name: '特急車', desc: '流線形の先頭・定出力域が広く高速が得意' },
+};
 
 const MODE_DESC: Record<GameMode, string> = {
   normal: '停止位置・定時・安全で採点',
@@ -28,8 +35,8 @@ export function attachOverlay(ctx: GameContext): void {
   function bindGo() { $('go').onclick = () => ctx.actions.startOrRetry(); }
 
   // タイトルのタブ（再描画しても選択を保持）
-  type Tab = 'stage' | 'env' | 'sound' | 'keys';
-  const TABS: [Tab, string][] = [['stage', 'ステージ'], ['env', '環境'], ['sound', 'サウンド'], ['keys', '操作']];
+  type Tab = 'stage' | 'car' | 'rec' | 'env' | 'sound' | 'keys';
+  const TABS: [Tab, string][] = [['stage', '運転'], ['car', '車両'], ['rec', '記録'], ['env', '環境'], ['sound', '音'], ['keys', '操作']];
   let tab: Tab = 'stage';
   function showTab(t: Tab) {
     tab = t;
@@ -68,6 +75,8 @@ export function attachOverlay(ctx: GameContext): void {
       <p class="brief">${first.name}を定刻に発車し、${last.name}の<b>停止位置ピッタリ</b>に<b>定刻どおり</b>止めよう。${notes ? notes + '。' : ''}${wait ? wait + '。' : ''}信号（YG 65 / Y 45 / R 停止）に従うこと。</p>
       <div class="best">${best ? `自己ベスト ${best.total}点（${best.rank}）${best.date}` : '自己ベスト なし'}</div>
     </div>
+    <div class="tabPane" data-pane="car" hidden>${vehiclePane(svc)}</div>
+    <div class="tabPane" data-pane="rec" hidden>${recordPane()}</div>
     <div class="tabPane" data-pane="env" hidden></div>
     <div class="tabPane" data-pane="sound" hidden></div>
     <div class="tabPane" data-pane="keys" hidden>
@@ -96,6 +105,10 @@ export function attachOverlay(ctx: GameContext): void {
       const list = route.services ?? [], cur = list.findIndex(v => v.id === st.sel.service), to = list.findIndex(v => v.id === b.dataset.service);
       ctx.actions.selectService(to - cur);
     });
+    card.querySelectorAll<HTMLButtonElement>('[data-kind]').forEach(b => b.onclick = () => ctx.actions.selectVehicle({ kind: b.dataset.kind as TrainKind }));
+    card.querySelectorAll<HTMLButtonElement>('[data-cars]').forEach(b => b.onclick = () => ctx.actions.selectVehicle({ cars: Number(b.dataset.cars) }));
+    const rb = card.querySelector<HTMLButtonElement>('#resetRec');
+    if (rb) rb.onclick = () => { if (confirm('自己ベストとプレイ履歴をすべて消します。よろしいですか？')) { resetRecords(); showTitle(); } };
     card.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(b => b.onclick = () => {
       const list = Object.keys(MODE_LABEL), cur = list.indexOf(st.sel.mode), to = list.indexOf(b.dataset.mode!);
       ctx.actions.selectMode(to - cur);
@@ -108,6 +121,49 @@ export function attachOverlay(ctx: GameContext): void {
     extra.querySelectorAll('.audio-settings').forEach(e => pane('sound').appendChild(e));
     while (extra.firstChild) pane('stage').appendChild(extra.firstChild);
     showTab(tab);
+  }
+
+  /** 車両タブ: 選択中の種別の車種・両数 */
+  function vehiclePane(svc: ServiceSpec | undefined): string {
+    if (!svc) return '<p class="sub">この路線は車両を選べません。</p>';
+    const kinds = svc.kindOptions ?? [svc.kind], carsOpt = svc.carsOptions ?? [svc.cars];
+    const kb = kinds.map(k => `<button data-kind="${k}" class="${k === svc.kind ? 'on' : ''}" ${kinds.length < 2 ? 'disabled' : ''}>${KIND_INFO[k].name}<small>${KIND_INFO[k].desc}</small></button>`).join('');
+    const cb = carsOpt.map(n => `<button data-cars="${n}" class="${n === svc.cars ? 'on' : ''}" ${carsOpt.length < 2 ? 'disabled' : ''}>${n}両</button>`).join('');
+    return `<div class="selLbl"><span class="svcBadge svc-${svc.id}">${svc.name}</span> の車両${kinds.length < 2 ? '（固定）' : ''}</div>
+      <div class="sel col" id="selKind">${kb}</div>
+      <div class="selLbl">両数${carsOpt.length < 2 ? '（固定）' : ''}</div><div class="sel" id="selCars">${cb}</div>
+      <p class="sub">${svc.cars}両編成。駅では「${svc.cars}両」の停止位置目標に止める。</p>`;
+  }
+
+  /** 記録タブ: 自己ベスト（種別×区間）と最近のプレイ */
+  function recordPane(): string {
+    const svcs = route.services ?? [];
+    const rows: string[] = [];
+    for (const v of svcs) for (const sg of stagesOfService(v.id)) {
+      const b = getBest(route.id, sg.id, st.sel.mode, v.id);
+      rows.push(`<tr><td><span class="svcBadge svc-${v.id}">${v.name}</span></td><td>${sg.id === 'all' ? '全線通し' : sg.label}</td><td>${b ? `${b.total}点 ${b.rank}` : '-'}</td></tr>`);
+    }
+    const hist = getHistory(route.id).slice(0, 20).map(h => {
+      const v = svcs.find(x => x.id === h.service), d = new Date(h.at);
+      const when = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      const sg = stagesOfService(h.service).find(x => x.id === h.stageId);
+      return `<tr><td>${when}</td><td>${v ? `<span class="svcBadge svc-${v.id}">${v.name}</span>` : ''} ${h.cars ?? ''}${h.cars ? '両' : ''}</td><td>${sg ? (sg.id === 'all' ? '全線' : sg.label) : h.stageId}</td><td>${h.result === 'overrun' ? '失格' : `${h.total}点 ${h.rank}`}</td></tr>`;
+    }).join('');
+    return `<div class="selLbl">自己ベスト（${MODE_LABEL[st.sel.mode]}モード）</div>
+      <table class="res rec">${rows.join('')}</table>
+      <div class="selLbl">最近のプレイ</div>
+      ${hist ? `<table class="res rec">${hist}</table>` : '<p class="sub">まだ記録がありません。</p>'}
+      <button class="btn sub2" id="resetRec">記録をリセット</button>`;
+  }
+
+  /** 種別ごとのステージ一覧（route は選択中の種別で書き換わっているので停車駅から作り直す） */
+  function stagesOfService(id: string | undefined) {
+    const v = route.services?.find(x => x.id === id);
+    if (!v) return stagesOf(route);
+    const idx = v.stops, list = [];
+    for (let k = 0; k < idx.length - 1; k++) list.push({ id: `${idx[k]}-${idx[k + 1]}`, label: `${route.stations[idx[k]].name} → ${route.stations[idx[k + 1]].name}` });
+    if (idx.length > 2) list.push({ id: 'all', label: '全線通し' });
+    return list;
   }
 
   function showResult(r: GameResult) {
@@ -163,6 +219,10 @@ export function attachOverlay(ctx: GameContext): void {
   events.on('stateChange', ({ to }) => { if (to === 'run' || to === 'dwell') overlay.classList.add('hidden'); });
   events.on('result', r => {
     const rec = r.kind === 'stop' ? submitScore(route.id, r.stageId, r.mode, r.total, r.rank, r.service) : { isNew: false };
+    addHistory(route.id, {
+      at: new Date().toISOString(), service: r.service, kind: ctx.service?.kind, cars: ctx.service?.cars, stageId: r.stageId, mode: r.mode,
+      result: r.kind, total: r.total, rank: r.rank, err: r.last.err, delay: r.last.delay,
+    });
     lastRecord = { isNew: rec.isNew };
     showResult(r);
   });

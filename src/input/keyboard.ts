@@ -17,7 +17,7 @@ export function attachKeyboard(actions: GameActions, target: Window = window): (
       else if (k === 'ArrowRight') actions.selectStage(1);
       else if (k === 'ArrowUp') actions.selectMode(-1);
       else if (k === 'ArrowDown') actions.selectMode(1);
-      else if (k === 'Tab' || k === 'KeyK') actions.selectService(1); // 種別（各停 → 急行 → 特急）
+      else if (k === 'Tab' || k === 'KeyK') actions.selectService(1); // 種別（普通 → 急行 → 特急）
       else if (k === 'KeyR') actions.toggleReplay();
       else if (k === 'Escape' || k === 'KeyT') actions.toTitle();
       return;

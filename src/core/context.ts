@@ -31,8 +31,10 @@ export interface GameActions {
   /** [A] タイトルでステージ/モード選択（delta で前後へ） */
   selectStage(delta: number): void;
   selectMode(delta: number): void;
-  /** タイトルで運行種別選択（各停・急行・特急） */
+  /** タイトルで運行種別選択（普通・急行・特急） */
   selectService(delta: number): void;
+  /** タイトルで選択中の種別の車種・両数を変更 */
+  selectVehicle(v: { kind?: import('../route/types').TrainKind; cars?: number }): void;
 }
 
 export interface GameContext {

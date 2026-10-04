@@ -12,7 +12,9 @@ export type CommuterVariant = 'new' | 'old';
 
 export const HW = 1.45;
 export const YTOP = 3.84;
-const HALF: V2[] = [[HW - .06, Y0], [HW, 1.5], [HW, 3.42], [HW - .05, 3.58], [HW - .3, 3.71], [HW - .75, 3.8], [0, YTOP]];
+const ROOF: V2[] = [[HW, 3.42], [HW - .05, 3.58], [HW - .3, 3.71], [HW - .75, 3.8], [0, YTOP]];
+/** 断面: new = すそ絞り、old = 直線車体（鋼製） */
+const HALFS: Record<CommuterVariant, V2[]> = { new: [[HW - .06, Y0], [HW, 1.5], ...ROOF], old: [[HW, Y0], ...ROOF] };
 const DOORS = [-7.2, -2.4, 2.4, 7.2], DOOR_W = 1.3;
 const BLUE = '#2f3fa8', ORANGE = '#f0961c';
 
@@ -30,7 +32,7 @@ const LOOK: Record<CommuterVariant, Look> = {
   old: {
     r: .3, base: ['#cfd2d7', '#bfc3c9'], roof: '#9fa4aa', rough: .42, metal: .12,
     topBand: [3.22, 3.42], topLine: [3.13, 3.18], lowBand: [1.6, 1.67], lowLine: [1.53, 1.57],
-    frontBand: [1.6, 2.02], frontLine: [1.49, 1.56], win: [1.98, 3.0], door: '#b9bec4',
+    frontBand: [1.6, 2.02], frontLine: [1.49, 1.56], win: [1.98, 3.0], door: '#c9ccd1', // ドアは車体と同系色の塗装
   },
 };
 
@@ -52,8 +54,8 @@ export function paintCommuterSide(v: CommuterVariant, Lb: number, head: boolean)
   }
   const [w0, w1] = L.win;
   const door = (zc: number, w: number, dbl: boolean) => {
-    s.rect(zc - w / 2 - .03, zc + w / 2 + .03, 1.13, 3.08, '#8b9198', .5, .3);
-    s.rect(zc - w / 2, zc + w / 2, 1.16, 3.05, L.door, .4, .7);
+    s.rect(zc - w / 2 - .03, zc + w / 2 + .03, 1.13, 3.08, v === 'old' ? '#a9adb3' : '#8b9198', .5, .3);
+    s.rect(zc - w / 2, zc + w / 2, 1.16, 3.05, L.door, v === 'old' ? L.rough : .4, v === 'old' ? L.metal : .7);
     if (dbl) {
       s.rect(zc - .012, zc + .012, 1.16, 3.05, '#5e646b');
       for (const sg of [-1, 1]) s.glass(zc + sg * w / 4 - .17, zc + sg * w / 4 + .17, 2.08, 2.92, '#5a6067', .03);
@@ -105,7 +107,7 @@ export function paintCommuterFace(v: CommuterVariant): SheetMaps {
     s.glass(-1.26, -.6, 2.24, 3.08, '#22262b', .06);
     // 貫通扉（黒い幌枠の内側）
     s.rect(-.5, .5, 1.2, 3.2, '#1d2024', .5, 0, .12);
-    s.rect(-.4, .4, 1.25, 3.1, '#c3c7cc', .4, .2, .05);
+    s.rect(-.4, .4, 1.25, 3.1, L.door, L.rough, L.metal, .05);
     s.rect(-.4, .4, L.frontBand[0], L.frontBand[1], BLUE, .35, .1);
     s.rect(-.4, .4, L.frontLine[0], L.frontLine[1], ORANGE, .35, .1);
     s.glass(-.28, .28, 2.3, 2.98, '#22262b', .05);
@@ -119,7 +121,7 @@ export function paintCommuterFace(v: CommuterVariant): SheetMaps {
 
 /** 1両分のジオメトリ */
 export function buildCommuterCar(v: CommuterVariant, kind: CarKind, Lb: number): CarParts {
-  const L = LOOK[v], hz = Lb / 2, head = kind === 'head', zf = -hz;
+  const L = LOOK[v], HALF = HALFS[v], hz = Lb / 2, head = kind === 'head', zf = -hz;
   const rings: Ring[] = [...(head ? roundRings(zf, L.r, 1) : [{ z: -hz, inset: 0 }]), { z: hz, inset: 0 }];
   const shell = shellGeo(HALF, rings, YTOP, Lb);
   const b = new GeoBatch(), add = adder(b), lit = new GeoBatch(), tl = new GeoBatch(), gl = new GeoBatch();

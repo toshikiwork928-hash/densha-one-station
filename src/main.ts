@@ -10,6 +10,7 @@ import { DEFAULT_ROUTE } from './route';
 import { buildTrack } from './route/track';
 import { createTrainEnv } from './sim/train';
 import { createState } from './game/state';
+import { loadSelection } from './game/ranking';
 import { createGame } from './game/loop';
 import { createRenderCore } from './render/renderer';
 import { createCabCamera } from './render/camera';
@@ -31,7 +32,7 @@ const ctx: GameContext = {
   route,
   track: buildTrack(route),
   events: new EventBus(),
-  state: createState(route),
+  state: createState(route, loadSelection()),
   trainEnv: createTrainEnv(),
   scene, camera, renderer, env,
   rng: createRng(12345),
@@ -73,4 +74,11 @@ function loop() {
 loop();
 
 // デバッグ用（開発時のみ）
-if (import.meta.env.DEV) (window as any).__densha = ctx;
+if (import.meta.env.DEV) {
+  (window as any).__densha = ctx;
+  // 描画せずにゲーム時間を進める（QA 用）
+  let simT = 0;
+  (window as any).__advance = (sec: number, dt = 1 / 30) => {
+    for (let k = 0; k < sec / dt; k++) { simT += dt; game.update(dt); ctx.events.emit('frame', { dt, time: simT, state: ctx.state.state }); }
+  };
+}

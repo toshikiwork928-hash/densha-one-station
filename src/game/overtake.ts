@@ -1,4 +1,4 @@
-// 待避: 各停が2面4線駅の待避線に停車中、後続の通過列車（特急など）が本線を通過していく。
+// 待避: 普通が2面4線駅の待避線に停車中、後続の通過列車（特急など）が本線を通過していく。
 // 通過列車が出口分岐器を抜けるまで出発信号は停止現示（game/signals.ts が st.overtake を見る）
 import type { GameContext } from '../core/context';
 import { CAR_LEN, loopZone, serviceOf } from '../route/service';

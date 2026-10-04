@@ -1,5 +1,5 @@
 // 汐風線（架空）: 桜ヶ丘 → みなと川 → 汐見町 → 白浜台 → 海浜公園（約9.7km）
-// 運行種別 各停（4両・全駅）/ 急行（6両・汐見町通過）/ 特急（6両・途中駅すべて通過）。汐見町と海浜公園は2面4線
+// 運行種別 普通（4両・全駅）/ 急行（6両・汐見町通過）/ 特急（6両・途中駅すべて通過）。汐見町と海浜公園は2面4線
 // stations の stopS は6両の停止位置、pass/scheduledArrival/dwell は急行の値（種別適用で route/service.ts が書き換える）
 import type { Route, Sign, SpeedLimit, StationLoop } from '../types';
 
@@ -63,15 +63,15 @@ export const shiokaze: Route = {
     { name: '白浜台', kana: 'しらはまだい', stopS: 7400, platform: { from: 7220, to: 7420, side: 'L' }, scheduledArrival: 466, dwell: 25, stopMarkerCars: 6 },
     { name: '海浜公園', kana: 'かいひんこうえん', stopS: 9900, platform: { from: 9720, to: 9920, side: 'L' }, scheduledArrival: 646, stopMarkerCars: 6, loop: LOOP },
   ],
-  // 時刻は自動運転（ヘッドレス）の最速走行 +5% 程度を 5 秒単位に切り上げ。通過駅は arr = 通過時刻。各停の汐見町は特急の待避込み 75 秒停車
+  // 時刻は自動運転（ヘッドレス）の最速走行 +5% 程度を 5 秒単位に切り上げ。通過駅は arr = 通過時刻。普通の汐見町は特急の待避込み 75 秒停車
   services: [
     {
-      id: 'local', name: '各停', cars: 4, kind: 'commuter-new', lineLimit: 90, stops: [0, 1, 2, 3, 4],
+      id: 'local', name: '普通', cars: 4, kind: 'commuter-new', kindOptions: ['commuter-new', 'commuter-old'], carsOptions: [4, 6], lineLimit: 90, stops: [0, 1, 2, 3, 4],
       timetable: { 0: { arr: 0, dep: 0 }, 1: { arr: 160, dep: 185 }, 2: { arr: 350, dep: 425 }, 3: { arr: 600, dep: 625 }, 4: { arr: 795 } },
       waits: [{ station: 2, passedBy: 'limited' }],
     },
     {
-      id: 'express', name: '急行', cars: 6, kind: 'commuter-old', lineLimit: 100, stops: [0, 1, 3, 4],
+      id: 'express', name: '急行', cars: 6, kind: 'commuter-old', kindOptions: ['commuter-old', 'commuter-new'], lineLimit: 100, stops: [0, 1, 3, 4],
       timetable: { 0: { arr: 0, dep: 0 }, 1: { arr: 170, dep: 195 }, 2: { arr: 340 }, 3: { arr: 485, dep: 510 }, 4: { arr: 695 } },
     },
     {

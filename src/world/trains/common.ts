@@ -183,7 +183,7 @@ export function capGeo(half: V2[], rg: Ring, ytop: number, hw: number, facing: -
 export function ledTexture(label: string, dest: string): THREE.CanvasTexture {
   const [k, g] = cv(512, 128);
   g.fillStyle = '#0b0b0b'; g.fillRect(0, 0, 512, 128);
-  const col: Record<string, string> = { 各停: '#e8e8e8', 普通: '#e8e8e8', 急行: '#ff5a3a', 特急: '#ff4a6a', 準急: '#5ad06a', 快速: '#ff9a2a' };
+  const col: Record<string, string> = { 普通: '#e8e8e8', 急行: '#ff5a3a', 特急: '#ff4a6a', 準急: '#5ad06a', 快速: '#ff9a2a' };
   const kc = col[label] ?? '#ffb347';
   g.textAlign = 'center'; g.textBaseline = 'middle';
   g.fillStyle = kc; g.font = `800 58px ${FONT}`; g.fillText(label, 78, 66, 140);

@@ -1,6 +1,6 @@
-// 運行種別（各停・急行・特急）の適用と、2面4線駅の待避線の形状
+// 運行種別（普通・急行・特急）の適用と、2面4線駅の待避線の形状
 // route は各モジュールが参照を保持しているので、種別の切替は route の中身を書き換えて反映する（元データは初回に退避）
-import type { Route, ServiceId, ServiceSpec, SpeedLimit, Station } from './types';
+import type { Route, ServiceId, ServiceSpec, SpeedLimit, Station, TrainKind } from './types';
 
 /** 1両の長さ [m] */
 export const CAR_LEN = 20;
@@ -61,6 +61,18 @@ const bases = new WeakMap<Route, Base>();
 
 export const serviceOf = (route: Route, id: ServiceId | undefined): ServiceSpec | undefined =>
   route.services?.find(s => s.id === id) ?? route.services?.[0];
+
+const defaults = new WeakMap<ServiceSpec, { kind: TrainKind; cars: number }>();
+/** 選択した車種・両数を route.services へ反映（選択肢にないものは既定値） */
+export function applyVehicles(route: Route, sel: Partial<Record<ServiceId, { kind: TrainKind; cars: number }>>): void {
+  for (const svc of route.services ?? []) {
+    let d = defaults.get(svc);
+    if (!d) { d = { kind: svc.kind, cars: svc.cars }; defaults.set(svc, d); }
+    const v = sel[svc.id];
+    svc.kind = v && svc.kindOptions?.includes(v.kind) ? v.kind : d.kind;
+    svc.cars = v && svc.carsOptions?.includes(v.cars) ? v.cars : d.cars;
+  }
+}
 
 /** 種別を route へ反映（停車駅・時刻・停止位置・編成長・制限）。何度呼んでもよい */
 export function applyService(route: Route, id: ServiceId | undefined): ServiceSpec | undefined {

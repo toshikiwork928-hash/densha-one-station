@@ -1,5 +1,5 @@
-// 待避の描画: 各停の待避中に本線を通過していく後続列車（st.overtake）と、
-// 急行・特急で通過する2面4線駅の待避線に止まっている先行の各停（st.precedingS が待避線にいる間）
+// 待避の描画: 普通の待避中に本線を通過していく後続列車（st.overtake）と、
+// 急行・特急で通過する2面4線駅の待避線に止まっている先行の普通（st.precedingS が待避線にいる間）
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import { loopShape, loopZones, serviceOf } from '../route/service';
@@ -63,7 +63,7 @@ export function createOvertaking(ctx: GameContext): void {
       wasNear = prox > 0;
     } else if (wasNear) { events.emit('overtakePass', { proximity: 0 }); wasNear = false; }
 
-    // 待避線の先行各停（自列車が通過する駅のみ。自列車の近くにいるときだけ表示）
+    // 待避線の先行普通（自列車が通過する駅のみ。自列車の近くにいるときだけ表示）
     const local = serviceOf(route, 'local');
     if (!local || st.sel.service === 'local') return;
     const h = st.precedingS;

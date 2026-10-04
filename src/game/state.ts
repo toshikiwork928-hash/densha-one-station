@@ -1,8 +1,8 @@
 // ゲーム状態（1プレイ分）
 import { NOTCH_INITIAL } from '../core/config';
 import type { SignalAspect } from '../core/events';
-import { applyService } from '../route/service';
-import type { Route, ServiceId } from '../route/types';
+import { applyService, applyVehicles } from '../route/service';
+import type { Route, ServiceId, TrainKind } from '../route/types';
 import type { TrainState } from '../sim/train';
 import type { PassJudgement, StopJudgement } from './scoring';
 
@@ -15,7 +15,12 @@ export const MODE_LABEL: Record<GameMode, string> = { normal: '通常', recovery
 /** ステージ = 停車駅間（全線通しは from = 始発, to = 終着） */
 export interface Stage { id: string; from: number; to: number; label: string }
 
-export interface Selection { stageId: string; mode: GameMode; /** 運行種別（route.services が無い路線では無視） */ service: ServiceId }
+/** 種別ごとに選んだ車種・両数 */
+export type VehicleSel = Partial<Record<ServiceId, { kind: TrainKind; cars: number }>>;
+export interface Selection {
+  stageId: string; mode: GameMode; /** 運行種別（route.services が無い路線では無視） */ service: ServiceId;
+  vehicles: VehicleSel;
+}
 
 /** 待避中に通過していく後続列車（game/overtake.ts が動かし、world/overtaking.ts が描画） */
 export interface OvertakeState {
@@ -98,7 +103,7 @@ export interface GameState {
   precedingS: number;
   ats: AtsState;
   penalties: Penalties;
-  /** 待避（各停のみ）。無ければ null */
+  /** 待避（普通のみ）。無ければ null */
   overtake: OvertakeState | null;
 }
 
@@ -134,14 +139,16 @@ export const departureTime = (route: Route, index: number): number => {
 export const lateStartFor = (stage: Stage, mode: GameMode): number =>
   mode !== 'recovery' ? 0 : stage.id === 'all' ? 45 : 20;
 
-export function createState(route: Route): GameState {
+export function createState(route: Route, sel?: Selection): GameState {
   const st = {} as GameState;
+  if (sel) st.sel = sel;
   resetState(st, route);
   return st;
 }
 
 export function resetState(st: GameState, route: Route): void {
-  const sel: Selection = st.sel ?? { stageId: '', mode: 'normal', service: route.services?.find(x => x.id === 'express')?.id ?? route.services?.[0]?.id ?? 'express' };
+  const sel: Selection = st.sel ?? { stageId: '', mode: 'normal', service: route.services?.find(x => x.id === 'express')?.id ?? route.services?.[0]?.id ?? 'express', vehicles: {} };
+  applyVehicles(route, sel.vehicles);
   applyService(route, sel.service); // 停車駅・時刻・編成長を種別に合わせてから区間を決める
   if (!sel.stageId) sel.stageId = stagesOf(route)[0]?.id ?? 'all';
   const stage = findStage(route, sel.stageId);

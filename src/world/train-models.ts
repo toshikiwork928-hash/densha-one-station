@@ -13,7 +13,7 @@ export interface TrainCar { object: THREE.Object3D; length: number }
 export interface TrainSetOptions {
   /** 行先（既定 海浜公園） */
   dest?: string;
-  /** 種別表示（既定は車種から 各停/急行/特急） */
+  /** 種別表示（既定は車種から 普通/急行/特急） */
   label?: string;
 }
 
@@ -21,7 +21,7 @@ export interface TrainSetOptions {
 export type CreateTrainSet = (kind: TrainKind, cars: number, renderer: THREE.WebGLRenderer, opts?: TrainSetOptions) => TrainCar[];
 
 export const TRAIN_KINDS: Record<TrainKind, { label: string; service: string }> = {
-  'commuter-new': { label: '通勤形（ステンレス・黒顔）', service: '各停' },
+  'commuter-new': { label: '通勤形（ステンレス・黒顔）', service: '普通' },
   'commuter-old': { label: '通勤形（鋼製・貫通扉）', service: '急行' },
   limited: { label: '特急形', service: '特急' },
 };

@@ -40,7 +40,7 @@ export function attachHud(ctx: GameContext): void {
     lamps: side.querySelector<HTMLElement>('.sigLamps')!, sigTxt: $('sigTxt'), sigDist: $('sigDist'), ats: $('atsLine'),
     door: $('doorLamp'), doorTxt: $('doorTxt'), tt: $<HTMLTableElement>('ttTable'), replay: $('replayTag'), svc: $('svcPanel'),
   };
-  /** 種別表示（各停・急行・特急、両数） */
+  /** 種別表示（普通・急行・特急、両数） */
   function renderService() {
     const v = route.services ? serviceOf(route, st.sel.service) : undefined;
     sx.svc.hidden = !v;

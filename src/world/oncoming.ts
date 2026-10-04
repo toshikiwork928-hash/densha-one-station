@@ -1,5 +1,5 @@
 // 対向列車（route.oncoming ごとに1編成。種別・両数が混在）。tick で移動し、警笛・すれ違いをイベントで通知
-// spec.kind 未指定なら 各停(新型4両) → 急行(旧型6両) → 特急(6両) の順に割り当てる
+// spec.kind 未指定なら 普通(新型4両) → 急行(旧型6両) → 特急(6両) の順に割り当てる
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import type { OncomingSpec, TrainKind } from '../route/types';
