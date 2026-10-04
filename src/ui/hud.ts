@@ -1,0 +1,135 @@
+// HUD（時計・制限速度・距離・ノッチ表示・バナー・信号/ATS・戸閉・時刻表）
+import { NOTCH_EB, NOTCH_MAX, NOTCH_MIN, OVERSPEED_MARGIN, notchName } from '../core/config';
+import type { GameContext } from '../core/context';
+import { $, fmtClock } from '../core/dom';
+import { ASPECT_LABEL, ASPECT_LIMIT } from '../game/preceding';
+import { departureTime } from '../game/state';
+import { drawMeter } from './meter';
+
+const fmtHM = (sec: number) => fmtClock(sec);
+
+export function attachHud(ctx: GameContext): void {
+  const { route, events, track } = ctx, st = ctx.state;
+  const mctx = $<HTMLCanvasElement>('meter').getContext('2d')!;
+  const el = {
+    clock: $('clock'), sched: $('sched'), delay: $('delay'), limit: $('limit'), limitPanel: $('limitPanel'),
+    nextLimit: $('nextLimit'), dist: $('dist'), nextSta: $('nextSta'), banner: $('banner'), notches: $('notches'),
+  };
+  const distLbl = $('distPanel').querySelector<HTMLElement>('.lbl');
+
+  // 追加パネル（信号・ATS・戸閉・時刻表）。index.html は触らずここで生成
+  const side = document.createElement('div');
+  side.id = 'sidePanel';
+  side.innerHTML = `
+    <div class="panel sp-sig"><div class="lbl">次の信号</div>
+      <div class="sigRow"><div class="sigLamps"><i class="l-g"></i><i class="l-y1"></i><i class="l-r"></i><i class="l-y2"></i></div>
+      <div><div id="sigTxt">-</div><div class="sub" id="sigDist">&nbsp;</div></div></div>
+      <div id="atsLine" class="ats-ok">ATS 正常</div>
+    </div>
+    <div class="panel sp-door"><span id="doorLamp" class="doorLamp on">戸閉</span><span id="doorTxt" class="sub"></span></div>
+    <div class="panel sp-tt"><div class="lbl">時刻表</div><table id="ttTable"></table></div>
+    <div id="replayTag">REPLAY</div>`;
+  $('hud').appendChild(side);
+  const sx = {
+    lamps: side.querySelector<HTMLElement>('.sigLamps')!, sigTxt: $('sigTxt'), sigDist: $('sigDist'), ats: $('atsLine'),
+    door: $('doorLamp'), doorTxt: $('doorTxt'), tt: $<HTMLTableElement>('ttTable'), replay: $('replayTag'),
+  };
+
+  // 表示対象の駅（次の停車駅。終了後は最後に判定した駅）
+  const targetIndex = () => st.target >= 0 ? st.target : route.stations.length - 1;
+  /** 次の停車駅より手前の通過駅（未通過） */
+  const nextPass = () => route.stations.findIndex((x, i) => x.pass && i > st.fromIndex && i < targetIndex() && !st.flags['passed' + i]);
+
+  function renderTarget() {
+    const sta = route.stations[targetIndex()];
+    el.sched.textContent = fmtClock(route.startClock + sta.scheduledArrival);
+    const p = nextPass();
+    el.nextSta.textContent = `次は ${sta.name}` + (p >= 0 ? `（${route.stations[p].name} 通過）` : '');
+    renderTimetable();
+  }
+
+  function renderTimetable() {
+    const rows: string[] = [];
+    for (let i = st.fromIndex; i <= st.endIndex; i++) {
+      const x = route.stations[i], c = route.startClock;
+      const arr = i === st.fromIndex ? '' : fmtHM(c + x.scheduledArrival).slice(0, -3) + `<small>${fmtHM(c + x.scheduledArrival).slice(-2)}</small>`;
+      const dep = x.pass ? 'レ' : i === st.endIndex ? '' : fmtHM(c + departureTime(route, i)).slice(0, -3) + `<small>${fmtHM(c + departureTime(route, i)).slice(-2)}</small>`;
+      const done = st.stops.some(j => j.index === i) || st.passes.some(j => j.index === i) || i === st.fromIndex && st.state !== 'title';
+      const cls = i === targetIndex() ? 'next' : done ? 'done' : '';
+      rows.push(`<tr class="${cls}${x.pass ? ' pass' : ''}"><td>${x.name}</td><td>${arr}</td><td>${dep}</td></tr>`);
+    }
+    sx.tt.innerHTML = rows.join('');
+  }
+
+  // ノッチ列
+  const notchEls: [number, HTMLDivElement][] = [];
+  for (let n = NOTCH_MAX; n >= NOTCH_MIN; n--) {
+    const d = document.createElement('div'); d.textContent = notchName(n);
+    d.className = n > 0 ? 'p' : n === 0 ? 'n' : n === NOTCH_EB ? 'e' : 'b';
+    el.notches.appendChild(d); notchEls.push([n, d]);
+  }
+  const renderNotches = () => { for (const [n, d] of notchEls) d.classList.toggle('on', n === st.train.notch); };
+
+  let bannerTimer = 0;
+  const showBanner = (text: string, sec: number) => { el.banner.textContent = text; el.banner.classList.add('show'); bannerTimer = sec; };
+
+  function updateSide() {
+    const sigs = route.signals ?? [], n = st.nextSignal;
+    if (n >= 0 && sigs[n]) {
+      const a = st.signals[n], lim = ASPECT_LIMIT[a];
+      sx.lamps.dataset.a = a;
+      sx.sigTxt.textContent = `${a === 'YG' ? 'YG' : a} ${ASPECT_LABEL[a]}${a === 'R' ? '' : lim < Infinity ? ` ${lim}` : ''}`;
+      sx.sigTxt.className = 'asp-' + a;
+      sx.sigDist.textContent = `${Math.round(sigs[n].s - st.train.s)} m`;
+    } else { sx.lamps.dataset.a = ''; sx.sigTxt.textContent = '-'; sx.sigDist.innerHTML = '&nbsp;'; }
+    const ats = st.ats;
+    sx.ats.className = 'ats-' + (ats.state === 'normal' ? 'ok' : ats.state);
+    sx.ats.textContent = ats.state === 'normal' ? (st.sigLimit < Infinity ? `ATS 正常（信号制限 ${st.sigLimit}）` : 'ATS 正常')
+      : ats.state === 'warn' ? `ATS 警報 ${Math.max(0, ats.timer).toFixed(1)}s — B4以上＋確認(A)`
+        : `ATS 非常制動 — 停止後 確認(A)で復帰`;
+    const open = st.doors === 'open';
+    sx.door.classList.toggle('on', !open);
+    sx.door.textContent = open ? 'ドア開' : '戸閉';
+    sx.doorTxt.textContent = st.state === 'dwell' ? (open ? ` 戸閉めまで ${Math.ceil(st.dwellT)}秒` : ' 力行で発車') : '';
+    sx.replay.classList.toggle('show', ctx.cameraMode === 'replay');
+  }
+
+  function update() {
+    const { s, v } = st.train, vk = v * 3.6, now = route.startClock + st.t;
+    const lim = Math.min(track.limitAt(s), st.state === 'run' ? st.sigLimit : Infinity);
+    const sta = route.stations[targetIndex()];
+    el.clock.textContent = fmtClock(now);
+    const running = st.state === 'run' || st.state === 'dwell';
+    const remain = sta.scheduledArrival - st.t;
+    if (running && remain < 0) { el.delay.textContent = `(遅れ ${Math.floor(-remain)}秒)`; el.delay.className = 'late'; }
+    else { el.delay.textContent = running ? `(あと ${Math.ceil(remain)}秒)` : ''; el.delay.className = 'early'; }
+    el.limit.textContent = String(lim);
+    el.limitPanel.classList.toggle('over', vk > lim + OVERSPEED_MARGIN);
+    let nxt = '&nbsp;';
+    for (const L of route.limits) if (L.from > s && L.from - s < 900) { nxt = `${L.kmh} まで ${Math.round(L.from - s)}m`; break; }
+    el.nextLimit.innerHTML = nxt;
+    // 通過駅が手前にあればそこまでの距離を補助表示
+    const p = nextPass();
+    const d = sta.stopS - s;
+    el.dist.textContent = d > 100 ? `${Math.round(d)} m` : d >= 0 ? `${d.toFixed(2)} m` : `+${(-d).toFixed(2)} m`;
+    el.dist.classList.toggle('near', d <= 100);
+    if (distLbl) distLbl.textContent = p >= 0 ? `停止位置まで（${route.stations[p].name}通過まで ${Math.max(0, Math.round(route.stations[p].stopS - s))}m）` : '停止位置まで';
+    drawMeter(mctx, vk, lim);
+    updateSide();
+  }
+
+  let passCount = 0;
+  renderTarget();
+  renderNotches();
+  events.on('notch', renderNotches);
+  events.on('reset', () => { renderNotches(); renderTarget(); });
+  events.on('depart', renderTarget);
+  events.on('arrive', renderTimetable);
+  events.on('stateChange', renderTimetable);
+  events.on('banner', e => showBanner(e.text, e.sec));
+  events.on('frame', ({ dt }) => {
+    if (bannerTimer > 0 && (bannerTimer -= dt) <= 0) el.banner.classList.remove('show');
+    if (st.passes.length !== passCount) { passCount = st.passes.length; renderTarget(); } // 通過駅を過ぎたら更新
+    update();
+  });
+}
