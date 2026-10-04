@@ -320,11 +320,11 @@ export function buildTown(ctx: GameContext): TownResult {
     fence: new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: .38, depthWrite: false, side: THREE.DoubleSide }),
   };
 
-  const platSide = (sd: number, s: number, m: number) => route.stations.some(st => (st.platform.side === 'L' ? -1 : 1) === sd && s > st.platform.from - m && s < st.platform.to + m);
+  const platSide = (sd: number, s: number, m: number) => route.stations.some(st => (st.loop || st.platform.side === 'L' ? -1 : 1) === sd && s > st.platform.from - m && s < st.platform.to + m); // 島式2面4線は駅舎が左
   /** 2面4線駅の待避線区間（両側。対向側ホーム・分岐器・門型架線柱の分） */
   const loopNear = (s: number, m: number) => route.stations.some(st => { const z = loopZone(st); return !!z && s > z.inFrom - m && s < z.outTo + m; });
   /** 待避線駅は駅舎が待避線の分だけ外へずれる */
-  const stationDepth = (s: number) => route.stations.some(st => st.loop && s > st.platform.from - 25 && s < st.platform.to + 25) ? 40 : 32;
+  const stationDepth = (s: number) => route.stations.some(st => st.loop && s > st.platform.from - 25 && s < st.platform.to + 25) ? 54 : 32;
   const tunnelNear = (s: number, m: number) => T.structureAt(s, m)?.kind === 'tunnel';
   const zone = (s: number): 'city' | 'suburb' | 'rural' => {
     if (T.isCity(s)) return 'city';

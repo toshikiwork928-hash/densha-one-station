@@ -244,10 +244,15 @@ export function buildCatenary(ctx: GameContext): void {
     // 偏位: 直線は交互 ±0.22m、曲線は外側へ 0.2m（径間中央は弦の分だけ内側へ寄る）
     const stg = Math.abs(k) > 1 / 2500 ? -Math.sign(k) * .2 : (i % 2 ? .22 : -.22);
     let pl = L0 - 3.3, pr = L1 + 3.3;
-    if (kind === 'viaduct' || kind === 'bridge') { pl = L0 - 3.15; pr = L1 + 3.15; }
+    if (kind === 'viaduct' || kind === 'bridge') {
+      // 高架駅はホームの外縁に立てる
+      const el = route.stations.some(q => q.elevated && s > q.platform.from - 10 && s < q.platform.to + 10);
+      pl = L0 - (el ? 6.9 : 3.15); pr = L1 + (el ? 6.9 : 3.15);
+    }
     if (kind === 'loop') {
+      // 島式2面4線: 待避線の外側
       const z = zones.find(q => s >= q.inFrom - 12 && s <= q.outTo + 12)!;
-      pl = L0 + z.lat - 7.4; pr = L1 - z.lat + 7.4;
+      pl = L0 + z.lat - 3.3; pr = L1 - z.lat + 3.3;
     }
     if (kind === 'station') {
       const x = route.stations.find(q => s > q.platform.from - 10 && s < q.platform.to + 10)!;

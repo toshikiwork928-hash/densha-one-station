@@ -41,7 +41,7 @@ export function createCabCamera(ctx: GameContext): CabCamera {
   function nextShot(s: number, v: number, time: number): Shot {
     const L = route.trainLength;
     const sta = nearStation(s);
-    if (sta && v > 1) return { kind: 'platform', s: sta.stopS + 12, lat: -4.2 + (loopZone(sta)?.lat ?? 0), h: 2.4, t0: time, fov: 40 };
+    if (sta && v > 1) return { kind: 'platform', s: sta.stopS + 12, lat: sta.enterLoop ? (loopZone(sta)?.lat ?? 0) + 4.2 : -4.2, h: 2.4, t0: time, fov: 40 };
     const kind = SHOT_ORDER[shotN++ % SHOT_ORDER.length];
     const ahead = Math.max(120, v * 7);
     const side = shotN % 2 ? -1 : 1;

@@ -1,7 +1,6 @@
 // 線路脇の標識（route.signs から生成）。速度制限・制限解除は種別（編成長・分岐器）ごとに route.limits から作り直す
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
-import { stationLoopLat } from '../route/service';
 import type { Sign } from '../route/types';
 import { limitTex, postMat, textBoard } from './canvas-tex';
 import { cullByDistance } from './cull';
@@ -38,11 +37,35 @@ function buildSign(ctx: GameContext, sg: Sign, lat0: number, parent?: THREE.Obje
   }
 }
 
+function clear(group: THREE.Group): void {
+  for (const c of [...group.children]) {
+    group.remove(c);
+    c.traverse(o => { if (o instanceof THREE.Mesh && o.material !== postMat) { (o.material as THREE.MeshBasicMaterial).map?.dispose(); (o.material as THREE.Material).dispose(); o.geometry.dispose(); } });
+  }
+}
+
 export function buildSigns(ctx: GameContext): void {
   const { route, track, events } = ctx;
-  // 距離標・停止位置目標はホームに面する線路（2面4線駅は待避線）の左
-  for (const sg of route.signs) buildSign(ctx, sg, sg.kind === 'distance' || sg.kind === 'stopMarker' ? stationLoopLat(route, sg.s) : 0);
-  if (!route.services) return;
+  if (!route.services) {
+    for (const sg of route.signs) buildSign(ctx, sg, 0);
+    return;
+  }
+  // 距離標・停止位置目標: 自列車の走行線の左（2面4線駅は種別により待避線または本線）。待避線ではホームが右なので右に立てる
+  const stopGroup = new THREE.Group(); stopGroup.name = 'stopSigns'; ctx.scene.add(stopGroup);
+  let stopBuilt = '';
+  const rebuildStop = () => {
+    const key = route.stations.map(x => `${x.enterLoop ? 1 : 0}`).join('') + ':' + (ctx.service?.cars ?? 0);
+    if (key === stopBuilt) return;
+    stopBuilt = key;
+    clear(stopGroup);
+    for (const sg of route.signs) {
+      const lat = track.pathLat(sg.s), loopSta = route.stations.find(x => x.enterLoop && Math.abs(x.stopS - sg.s) < 520);
+      buildSign(ctx, loopSta && lat < -1 ? { ...sg, lat: 2.0 } : sg, lat, stopGroup);
+    }
+  };
+  rebuildStop();
+  events.on('serviceChange', rebuildStop);
+  events.on('reset', rebuildStop);
   // 速度制限・解除: 自列車の走行線の左。解除標は、より厳しい制限の中・終着駅より先なら立てない
   const group = new THREE.Group(); group.name = 'limitSigns'; ctx.scene.add(group);
   let built = '';
@@ -50,10 +73,7 @@ export function buildSigns(ctx: GameContext): void {
     const key = route.lineLimit + ':' + route.limits.map(L => `${L.from}-${L.to}-${L.kmh}`).join();
     if (key === built) return;
     built = key;
-    for (const c of [...group.children]) {
-      group.remove(c);
-      c.traverse(o => { if (o instanceof THREE.Mesh && o.material !== postMat) { (o.material as THREE.MeshBasicMaterial).map?.dispose(); (o.material as THREE.Material).dispose(); o.geometry.dispose(); } });
-    }
+    clear(group);
     const last = route.stations[route.stations.length - 1].stopS;
     // 始発駅を出た所の線区最高速度（種別ごと）
     buildSign(ctx, { kind: 'limit', s: route.startS + 60, kmh: route.lineLimit, size: .9 }, 0, group);

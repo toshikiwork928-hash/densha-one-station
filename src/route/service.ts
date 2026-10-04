@@ -39,14 +39,14 @@ export function loopZones(route: Route): (LoopZone & { index: number })[] {
 export function playerPathLat(route: Route, s: number): number {
   let lat = 0;
   for (const sta of route.stations) {
-    if (sta.pass || !sta.loop) continue;
+    if (!sta.enterLoop || !sta.loop) continue;
     const z = loopZone(sta)!;
     if (s > z.inFrom && s < z.outTo) lat += z.lat * loopShape(z, s);
   }
   return lat;
 }
 
-/** 線路側の横ずれ（種別に関係なく、待避線に沿う標識・ホーム用）。s が待避線区間外なら 0 */
+/** 線路側の横ずれ（種別に関係なく待避線に沿う）。s が待避線区間外なら 0 */
 export function stationLoopLat(route: Route, s: number): number {
   let lat = 0;
   for (const sta of route.stations) {
@@ -94,13 +94,16 @@ export function applyService(route: Route, id: ServiceId | undefined): ServiceSp
     sta.scheduledArrival = tt?.arr ?? base.scheduledArrival;
     sta.dwell = tt?.dep != null ? tt.dep - tt.arr : undefined;
     sta.stopMarkerCars = svc.cars;
+    sta.enterLoop = !!sta.loop && !sta.pass && !!svc.useLoop;
+    // 島式ホーム: 待避線に入ると右側、本線は左側がホーム
+    sta.platform.side = sta.loop ? (sta.enterLoop ? 'R' : 'L') : base.platform.side;
   });
   // 曲線制限の解除位置は編成長に合わせる（元データは base.trainLength 分を含む）
   const lim: SpeedLimit[] = b.limits.map(L => ({ ...L, to: L.to - b.trainLength + len }));
-  // 停車する 2面4線駅: 入口分岐器から出口分岐器を後部が抜けるまで分岐器制限
+  // 待避線に入る 2面4線駅: 入口分岐器から出口分岐器を後部が抜けるまで分岐器制限
   route.stations.forEach(sta => {
     const z = loopZone(sta);
-    if (!z || sta.pass) return;
+    if (!z || !sta.enterLoop) return;
     lim.push({ from: z.inFrom, to: z.outTo + len, kmh: z.limit, label: '分岐器制限' });
   });
   lim.sort((a, c) => a.from - c.from);

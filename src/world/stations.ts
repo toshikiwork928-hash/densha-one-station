@@ -6,6 +6,7 @@ import type { GameContext } from '../core/context';
 import type { Station } from '../route/types';
 import { GeoBatch, M, P, onLight } from './batch';
 import { canvasTex } from './canvas-tex';
+import { getTerrain } from './terrain';
 
 const platMat = new THREE.MeshLambertMaterial({ color: 0xc9c5bc });
 const bodyMat = new THREE.MeshLambertMaterial({ vertexColors: true });
@@ -36,7 +37,7 @@ function nameTex(sta: Station, prevName: string, nextName: string): THREE.Canvas
 }
 
 /** lat = ホームに面する線路の横位置（2面4線駅は待避線）、side = ホームの側、minimal = 駅舎・駅前広場を作らない（対向側ホーム） */
-export interface StationBuildOpts { lat?: number; side?: 'L' | 'R'; minimal?: boolean }
+export interface StationBuildOpts { lat?: number; side?: 'L' | 'R'; minimal?: boolean; /** 高架駅: 地面までの高さ（負）。駅舎・広場を地面に置き、ホームを高架上に */ elevatedDy?: number }
 
 export function buildStation(ctx: GameContext, sta: Station, prevName: string, nextName: string, opt: StationBuildOpts = {}): THREE.Group {
   const { rng: rnd, track } = ctx;
@@ -88,8 +89,14 @@ export function buildStation(ctx: GameContext, sta: Station, prevName: string, n
     b.parent = null;
   }
 
-  // 駅舎・駅前広場（ホーム裏、中央付近）
-  const bw = 26, bd = 10, bx = -(7.2 + bd / 2);
+  // 駅舎・駅前広場（ホーム裏、中央付近）。高架駅は地上（gy）に置き、ホームへ上がる階段を付ける
+  const bw = 26, bd = 10, bx = -(7.2 + bd / 2), gy = opt.elevatedDy ?? 0;
+  if (gy) {
+    b.parent = new THREE.Matrix4().makeTranslation(0, gy, 0);
+    // 高架下からホームへの階段室
+    box(-5.2, -gy / 2 + .6, len * .2, 2.6, -gy + 1.2, 7, 0xd8d4ca);
+    box(-5.2, 1.1 + 2.6, len * .2, 2.8, .2, 7.4, 0x6b7680);
+  }
   if (!opt.minimal) {
   b.add('body', P.plane, M(X(-21), .04, 0, 0, 28, len * .9, 1, -Math.PI / 2), 0x6a6c70); // 広場の舗装
   for (let z = -len * .3; z < len * .3; z += 3) box(-28, .06, z, 4.5, .02, .1, 0xeeeeee); // 駐車枠
@@ -110,10 +117,16 @@ export function buildStation(ctx: GameContext, sta: Station, prevName: string, n
   // 駐輪場
   box(-12, 2.1, -len * .3, 3, .06, 14, 0x9aa4ae);
   for (let z = -len * .3 - 6; z < -len * .3 + 6; z += .6) box(-12, .5, z, 1.6, .9, .05, [0x333333, 0x9a2a2a, 0x2a4a8a, 0xcccccc][Math.floor(rnd() * 4)]);
-  } else {
+  } else if (!gy) {
     // 対向側ホーム: 跨線橋の階段口（簡易）
     box(-4.6, 2.3, len * .18, 2.2, 2.4, 9, 0xd8d4ca);
     box(-4.6, 3.6, len * .18, 2.6, .2, 9.6, 0x6b7680);
+  }
+  b.parent = null;
+  if (gy) {
+    // 高架駅のホーム: 高架の外側に張り出した床（支柱付き）
+    box(-4.1, -.2, 0, 5, .5, len, 0xb9b5ac);
+    for (let z = -len / 2 + 5; z < len / 2; z += 15) box(-5.4, gy / 2 - .2, z, .7, -gy, .7, 0xb9b5ac);
   }
   b.build({ body: bodyMat }, grp);
 
@@ -132,26 +145,132 @@ export function buildStation(ctx: GameContext, sta: Station, prevName: string, n
   // 駅舎の正面看板（広場側）と線路側
   if (!opt.minimal) {
   const front = new THREE.Mesh(new THREE.PlaneGeometry(9, 1.7), bsMat);
-  front.position.set(X(bx - bd / 2 - .05), 6.4, 0); front.rotation.y = -sx * Math.PI / 2; grp.add(front);
+  front.position.set(X(bx - bd / 2 - .05), 6.4 + gy, 0); front.rotation.y = -sx * Math.PI / 2; grp.add(front);
   const back = new THREE.Mesh(new THREE.PlaneGeometry(9, 1.7), bsMat);
-  back.position.set(X(bx + bd / 2 + .05), 6.4, 0); back.rotation.y = sx * Math.PI / 2; grp.add(back);
+  back.position.set(X(bx + bd / 2 + .05), 6.4 + gy, 0); back.rotation.y = sx * Math.PI / 2; grp.add(back);
   }
 
   onLight(ctx, f => { signMat.emissiveIntensity = bsMat.emissiveIntensity = .05 + f * .75; });
   return grp;
 }
 
+/** 島式ホーム（幅 PW、両側に線路）。lat = ホーム中心の横位置。駅名標は rev で前後を入れ替え（対向側） */
+const PW = 6;
+function buildIsland(ctx: GameContext, sta: Station, prevName: string, nextName: string, lat: number): THREE.Group {
+  const { rng: rnd, track } = ctx;
+  const s0 = sta.platform.from, s1 = sta.platform.to;
+  const len = s1 - s0, sc = (s0 + s1) / 2, t = track.trackAt(sc);
+  const grp = new THREE.Group(); grp.position.copy(track.at(sc, lat, 0)); grp.rotation.y = -t.phi; ctx.scene.add(grp);
+  const plat = new THREE.Mesh(new THREE.BoxGeometry(PW, 1.1, len), platMat); plat.position.set(0, .55, 0); grp.add(plat);
+  const b = new GeoBatch();
+  const box = (x: number, y: number, z: number, w: number, h: number, d: number, col: number) => b.add('body', P.box, M(x, y, z, 0, w, h, d), col);
+  for (const sx of [-1, 1]) {
+    const e = sx * PW / 2;
+    box(e - sx * .7, 1.11, 0, .3, .02, len, 0xf2c200); // 点字ブロック
+    box(e - sx * .12, 1.115, 0, .25, .03, len, 0xf4f4f4); // 白線
+    box(e - sx * .02, .9, 0, .06, .3, len, 0x9a968c);
+  }
+  // 上屋（中央の柱1列）
+  const rl = len * .7;
+  box(0, 4.35, 0, PW - .8, .14, rl, 0x6b7680);
+  box(0, 4.22, 0, PW - 1, .12, rl, 0xdcdcd8);
+  for (const sx of [-1, 1]) box(sx * (PW / 2 - .45), 4.15, 0, .1, .35, rl, 0x6b7680);
+  for (let z = -rl / 2 + 4; z <= rl / 2 - 4; z += 10) {
+    box(0, 2.65, z, .22, 3.1, .22, 0x8a9096);
+    box(0, 4.1, z, PW - 1.2, .16, .14, 0x8a9096);
+  }
+  // ベンチ（背中合わせ）・自販機・時計
+  for (let z = -rl / 2 + 8; z <= rl / 2 - 8; z += 16) for (const sx of [-1, 1]) {
+    box(sx * .55, 1.55, z, .45, .06, 2.2, 0x2a6aa8); box(sx * .32, 1.85, z, .06, .45, 2.2, 0x2a6aa8);
+  }
+  for (const z of [-rl / 2 + 3, rl / 2 - 14]) b.add('body', P.boxB, M(0, 1.1, z, 0, .95, 1.83, .7), [0xc8282a, 0x2a5fb0][z < 0 ? 0 : 1]);
+  box(0, 3.7, 6, .5, .5, .1, 0x222222);
+  const signs: number[] = [-len * .3, len * .3];
+  for (const z of signs) for (const dz of [-1.5, 1.5]) box(0, 1.9, z + dz, .08, 1.6, .08, 0x777d84);
+  // 階段口（跨線橋へ。ホーム中央）
+  box(0, 1.6, 0, 2.6, 1.0, 14, 0xd8d4ca);
+  for (const sx of [-1, 1]) box(sx * 1.32, 2.6, 0, .06, 1.0, 14, 0x9aa0a6);
+  // 人（両側の乗車位置付近）
+  for (let k = 0; k < 26; k++) {
+    const z = (rnd() - .5) * len * .8, sx = rnd() < .5 ? -1 : 1;
+    if (Math.abs(z) < 8) continue;
+    b.parent = new THREE.Matrix4().makeTranslation(0, 1.1, 0);
+    person(b, rnd, sx * (1.2 + rnd() * 1.4), z, rnd() < .7 ? (sx > 0 ? -Math.PI / 2 : Math.PI / 2) : rnd() * 6);
+    b.parent = null;
+  }
+  b.build({ body: bodyMat }, grp);
+  const tex = nameTex(sta, prevName, nextName), tex2 = nameTex(sta, nextName, prevName);
+  const signMats = [tex, tex2].map(tx => new THREE.MeshLambertMaterial({ map: tx, emissive: 0xffffff, emissiveMap: tx, emissiveIntensity: .05 }));
+  for (const z of signs) for (const [k, sx] of [[0, -1], [1, 1]] as const) {
+    // 進行方向から読めるよう両面を少し線路側へ向ける（左側の線路 = 下り側の駅名標）
+    const bb = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 1.0), signMats[k]);
+    bb.position.set(sx * .05, 3.0, z); bb.rotation.y = sx < 0 ? -Math.PI / 2 : Math.PI / 2; grp.add(bb);
+  }
+  onLight(ctx, f => { for (const m of signMats) m.emissiveIntensity = .05 + f * .75; });
+  return grp;
+}
+
+/** 島式2面4線駅の駅舎（自線の待避線の外）と跨線橋 */
+function buildIslandConcourse(ctx: GameContext, sta: Station, loopLat: number): void {
+  const { track, route } = ctx;
+  const sc = (sta.platform.from + sta.platform.to) / 2, t = track.trackAt(sc);
+  const L1 = Math.max(...route.tracks);
+  const grp = new THREE.Group(); grp.position.copy(track.at(sc, 0, 0)); grp.rotation.y = -t.phi; ctx.scene.add(grp);
+  const b = new GeoBatch();
+  const box = (x: number, y: number, z: number, w: number, h: number, d: number, col: number) => b.add('body', P.box, M(x, y, z, 0, w, h, d), col);
+  // 駅舎（待避線の外側、2階で跨線橋につながる）
+  const bx = loopLat - 3.2 - 6, bd = 12, bw = 24;
+  b.add('body', P.boxB, M(bx, 0, 0, 0, bd, 11.5, bw), 0xe8e4da);
+  box(bx, 11.75, 0, bd + .6, .5, bw + .6, 0x6b7680);
+  box(bx - bd / 2 - .02, 2.0, 0, .04, 3.2, 8, 0x2b343d);
+  box(bx - bd / 2 - 1.2, 3.8, 0, 2.4, .15, 10, 0x8a9096);
+  for (let z = -bw / 2 + 2; z < bw / 2 - 1; z += 3.2) if (Math.abs(z) > 5) box(bx - bd / 2 - .02, 8.5, z, .04, 1.6, 2, 0x2b343d);
+  b.add('body', P.plane, M(bx - bd / 2 - 12, .04, 0, 0, 24, 60, 1, -Math.PI / 2), 0x6a6c70);
+  // 跨線橋（駅舎 → 両方の島式ホーム。架線の上を通す）
+  const x0 = bx + bd / 2, x1 = L1 - loopLat / 2 + 2, yb = 8.4, w = 4;
+  box((x0 + x1) / 2, yb + 1.5, 0, x1 - x0, 3, w, 0xdedad0); // 通路
+  box((x0 + x1) / 2, yb + 3.1, 0, x1 - x0 + .4, .2, w + .4, 0x6b7680); // 屋根
+  for (let x = x0 + 2; x < x1; x += 2.2) for (const sz of [-1, 1]) box(x, yb + 1.9, sz * (w / 2 + .01), 1.6, .9, .02, 0x2b343d); // 窓
+  // 階段（島式ホームの階段口から上がる）と橋脚
+  for (const c of [loopLat / 2, L1 - loopLat / 2]) {
+    box(c, (1.1 + yb) / 2 + .6, 0, 2.6, yb - 1.1, 3, 0xd8d4ca);
+    for (const sz of [-1, 1]) box(c, yb / 2, sz * (w / 2 - .2), .4, yb, .4, 0x9aa0a6);
+  }
+  for (const x of [x1 - .3]) for (const sz of [-1, 1]) box(x, yb / 2, sz * (w / 2 - .2), .4, yb, .4, 0x9aa0a6);
+  b.build({ body: bodyMat }, grp);
+  const bTex = canvasTex(1024, 192, (g, w2, h) => {
+    g.fillStyle = '#1d2a5a'; g.fillRect(0, 0, w2, h);
+    g.fillStyle = '#fff'; g.font = `800 120px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(sta.name + '駅', w2 / 2, h / 2 + 6);
+  });
+  const bsMat = new THREE.MeshLambertMaterial({ map: bTex, emissive: 0xffffff, emissiveMap: bTex, emissiveIntensity: .05 });
+  for (const [x, ry] of [[bx - bd / 2 - .05, -Math.PI / 2], [(x0 + x1) / 2, 0]] as const) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(9, 1.7), bsMat);
+    if (ry === 0) { m.position.set(x, yb + 4.1, 0); m.rotation.y = Math.PI; m.scale.set(.8, .8, 1); }
+    else { m.position.set(x, 10, 0); m.rotation.y = ry; }
+    grp.add(m);
+  }
+  onLight(ctx, f => { bsMat.emissiveIntensity = .05 + f * .75; });
+}
+
 export function buildStations(ctx: GameContext): void {
-  const st = ctx.route.stations;
+  const st = ctx.route.stations, T = getTerrain(ctx);
   st.forEach((sta, i) => {
     const prev = st[i - 1]?.name ?? ctx.route.prevName ?? '';
     const next = st[i + 1]?.name ?? ctx.route.nextName ?? '';
-    const lat = sta.loop?.lat ?? 0;
-    buildStation(ctx, sta, prev, next, { lat });
-    // 2面4線: 対向線の外側（待避線）にもホーム。駅名標の前後は逆向き
     if (sta.loop) {
+      // 島式2面4線: 自線（本線と待避線の間）と対向線（同）に島式ホーム
+      const L1 = Math.max(...ctx.route.tracks), lp = sta.loop.lat;
+      buildIsland(ctx, sta, prev, next, lp / 2);
+      buildIsland(ctx, sta, next, prev, L1 - lp / 2);
+      buildIslandConcourse(ctx, sta, lp);
+      return;
+    }
+    const sc = (sta.platform.from + sta.platform.to) / 2;
+    const dy = sta.elevated ? T.groundY(sc) - T.trackY(sc) : 0;
+    buildStation(ctx, sta, prev, next, { elevatedDy: dy });
+    if (sta.elevated) {
       const L1 = Math.max(...ctx.route.tracks);
-      buildStation(ctx, sta, next, prev, { lat: L1 - lat, side: sta.platform.side === 'L' ? 'R' : 'L', minimal: true });
+      buildStation(ctx, sta, next, prev, { lat: L1, side: sta.platform.side === 'L' ? 'R' : 'L', minimal: true, elevatedDy: dy });
     }
   });
 }

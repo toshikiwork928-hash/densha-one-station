@@ -78,7 +78,10 @@ if (import.meta.env.DEV) {
   (window as any).__densha = ctx;
   // 描画せずにゲーム時間を進める（QA 用）
   let simT = 0;
-  (window as any).__advance = (sec: number, dt = 1 / 30) => {
-    for (let k = 0; k < sec / dt; k++) { simT += dt; game.update(dt); ctx.events.emit('frame', { dt, time: simT, state: ctx.state.state }); }
+  (window as any).__advance = (sec: number, dt = 1 / 30, hook?: () => boolean | void) => {
+    for (let k = 0; k < sec / dt; k++) {
+      if (hook?.()) return;
+      simT += dt; game.update(dt); ctx.events.emit('frame', { dt, time: simT, state: ctx.state.state });
+    }
   };
 }

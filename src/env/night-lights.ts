@@ -56,15 +56,16 @@ export function createNightLights(ctx: GameContext): NightLights {
   // 2面4線駅はホームが待避線側（lat0 だけずれる）で、対向側の外にもホーム
   for (const sta of route.stations) {
     const s0 = sta.platform.from, s1 = sta.platform.to, len = s1 - s0;
-    const sx0 = sta.platform.side === 'L' ? -1 : 1;
     const L1 = Math.max(...route.tracks), lp = sta.loop?.lat ?? 0;
-    const sides: [number, number][] = sta.loop ? [[sx0, lp], [-sx0, L1 - lp]] : [[sx0, 0]];
+    // [蛍光灯の横位置, 照らす床の横位置[]]。島式ホームは中央に蛍光灯、床は両側
+    const sides: [number, number[]][] = sta.loop
+      ? [[lp / 2, [lp / 2 - 1.5, lp / 2 + 1.5]], [L1 - lp / 2, [L1 - lp / 2 - 1.5, L1 - lp / 2 + 1.5]]]
+      : sta.elevated ? [[-4.2, [-3.6]], [L1 + 4.2, [L1 + 3.6]]] : [[sta.platform.side === 'L' ? -4.2 : 4.2, [sta.platform.side === 'L' ? -3.6 : 3.6]]];
     const rl = len * .6, sc = (s0 + s1) / 2;
-    sides.forEach(([sx, lat0], k) => {
-      const lat = lat0 + sx * 4.2;
+    sides.forEach(([lat, floors], k) => {
       for (let z = -rl / 2 + 3; z <= rl / 2 - 3; z += 8) {
         bulbs.push({ s: sc + z, lat, y: 4.1, w: .18, d: 1.6 });
-        pools.push({ s: sc + z, lat: lat0 + sx * 3.6, y: 1.13, r: 7 });
+        for (const f of floors) pools.push({ s: sc + z, lat: f, y: 1.13, r: 7 });
       }
       if (k === 0) platSpots.push({ sc, pos: [-.22, .22].map(q => track.at(sc + rl * q, lat, 3.9)) });
     });

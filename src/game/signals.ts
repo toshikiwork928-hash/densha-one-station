@@ -144,7 +144,7 @@ export function createSignalSystem(ctx: GameContext, forceEB: () => void): Signa
       route.stations.forEach((sta, k) => {
         const z = loopZone(sta);
         if (!z) return;
-        if (!sta.pass) {
+        if (sta.enterLoop) {
           let home = -1;
           for (let i = 0; i < sigS.length; i++) if (sigS[i] < z.inFrom) home = i;
           if (home >= 0) caps[home] = 'Y';

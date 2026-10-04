@@ -26,11 +26,16 @@ export interface Station {
   pass?: boolean;
   /** 停止位置目標の両数表示 */
   stopMarkerCars?: number;
-  /** 2面4線駅: 外側に待避線（ホームは待避線側）。停車列車は分岐器で待避線へ入り、通過列車は本線を通る */
+  /** 2面4線駅（島式ホーム2面）: 本線の外側に待避線、本線と待避線の間に島式ホーム。
+   *  待避線を使う種別（ServiceSpec.useLoop）は分岐器で待避線へ入り、それ以外は本線のホームに停車・本線を通過 */
   loop?: StationLoop;
+  /** 種別適用後: この駅で自列車が待避線に入る（route/service.ts が設定） */
+  enterLoop?: boolean;
+  /** 高架駅（ホームは高架上、駅舎は高架下） */
+  elevated?: boolean;
 }
 
-/** 2面4線の待避線。lat は自線待避線の横位置（左が負、例 -4.2）。対向側は route.tracks の対向線から鏡像に +lat 側へ */
+/** 2面4線の待避線。lat は自線待避線の横位置（左が負、例 -9.2）。対向側は route.tracks の対向線から鏡像に +lat 側へ */
 export interface StationLoop { lat: number; turnoutLength: number; turnoutLimitKmh: number }
 
 /** 運行種別（プレイヤーが選ぶ） */
@@ -49,6 +54,8 @@ export interface ServiceSpec {
   timetable: Record<number, { arr: number; dep?: number }>;
   /** 線区最高速度 [km/h]（種別ごと。未指定なら route.lineLimit） */
   lineLimit?: number;
+  /** 2面4線駅で待避線（外側）に停車する。false なら本線側のホームに停車 */
+  useLoop?: boolean;
   /** プレイヤーが選べる車種（先頭が既定）。未指定なら kind 固定 */
   kindOptions?: TrainKind[];
   /** 選べる両数（未指定なら cars 固定） */
