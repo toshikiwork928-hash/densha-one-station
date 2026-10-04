@@ -68,6 +68,8 @@ export interface ServiceSpec {
 export type Sign =
   | { kind: 'limit'; s: number; kmh: number; lat?: number; size?: number; y?: number }
   | { kind: 'limitEnd'; s: number; lat?: number }
+  /** 速度制限予告標（制限の手前） */
+  | { kind: 'limitNotice'; s: number; kmh: number; lat?: number }
   | { kind: 'distance'; s: number; meters: number; lat?: number }
   | { kind: 'stopMarker'; s: number; cars: number; lat?: number };
 
@@ -103,6 +105,8 @@ export interface Route {
   trainLength: number;
   segments: Segment[];
   gradients?: Gradient[];
+  /** s = 0 の標高 [m]（上りは下りの終点側の標高から始まる） */
+  elevation0?: number;
   limits: SpeedLimit[];
   /** 停車順。stations[0] が始発 */
   stations: Station[];

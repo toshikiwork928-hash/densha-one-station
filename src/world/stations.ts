@@ -268,9 +268,8 @@ export function buildStations(ctx: GameContext): void {
     const sc = (sta.platform.from + sta.platform.to) / 2;
     const dy = sta.elevated ? T.groundY(sc) - T.trackY(sc) : 0;
     buildStation(ctx, sta, prev, next, { elevatedDy: dy });
-    if (sta.elevated) {
-      const L1 = Math.max(...ctx.route.tracks);
-      buildStation(ctx, sta, next, prev, { lat: L1, side: sta.platform.side === 'L' ? 'R' : 'L', minimal: true, elevatedDy: dy });
-    }
+    // 相対式ホーム: 対向線側にもホーム（上りの運転で使う）
+    const L1 = Math.max(...ctx.route.tracks);
+    if (L1 > 0) buildStation(ctx, sta, next, prev, { lat: L1, side: sta.platform.side === 'L' ? 'R' : 'L', minimal: true, elevatedDy: dy });
   });
 }

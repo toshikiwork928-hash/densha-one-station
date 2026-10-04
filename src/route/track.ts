@@ -48,7 +48,7 @@ export function buildTrack(route: Route): Track {
   // 勾配を積分した標高テーブル（区間端の標高）
   const grads = [...(route.gradients ?? [])].sort((a, b) => a.from - b.from);
   const elevation = (q: number): number => {
-    let y = 0;
+    let y = route.elevation0 ?? 0;
     for (const g of grads) {
       if (q <= g.from) break;
       y += (Math.min(q, g.to) - g.from) * g.permil / 1000;

@@ -1,7 +1,6 @@
 // 沿線景観: 遠景の山・終端の構造物（同期生成）と、読込素材（木・市街地のビル）の配置
 // 住宅・商店などの近景は town-jp.ts（手続き生成）
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { GameContext } from '../core/context';
 import { fallbackBox, fallbackTree, prepareModel, type LoadedAssets, type PreparedModel } from './assets';
 import { buildSceneryBatches, type SceneryItem } from './scenery-batch';
@@ -20,24 +19,67 @@ export interface SceneryModels {
 // 1単位あたりの実寸 [m]（素材キットごとの縮尺合わせ）
 export const KIT_SCALE: Record<keyof SceneryModels, number> = { city: 9, far: 9, mid: 2.6, trees: 3.4, bushes: 2.2 };
 
-/** 遠景の山（ctx.rng を消費するため生成順を変えないこと） */
+/** 遠景の山並み（ctx.rng を消費するため生成順を変えないこと）。
+ *  線路の左右に帯状の山並みを置く。稜線は重ねた正弦波＋乱数の峰で起伏を付け、手前ほど濃い緑・奥ほど霞んだ青灰色。 */
 export function buildBackdrop(ctx: GameContext): void {
-  const { scene, rng: rnd, track: { at }, route } = ctx;
-  const mMat = new THREE.MeshLambertMaterial({ color: 0x6e8a7a, flatShading: true });
-  const S0 = route.extent.from, S1 = route.extent.to;
-  const geos: THREE.BufferGeometry[] = [];
-  for (let s = S0 + 600, j = 0; s < S1 + 400; s += 420, j++) {
-    const g = new THREE.ConeGeometry(260 + rnd() * 300, 140 + rnd() * 180, 6);
-    const p = at(s, (j % 2 ? 1 : -1) * (1100 + rnd() * 500), 0);
-    geos.push(g.translate(p.x, 60, p.z));
+  const { scene, rng: rnd, track, route } = ctx;
+  const S0 = route.extent.from - 1500, S1 = route.extent.to + 1500;
+  // 曲線の内側で山並みが折り重ならないよう、線路を ±600m で平滑化した基準線から横へずらす
+  const STEP = 60, W = 10, raw: { x: number; z: number; c: number; sn: number }[] = [];
+  for (let s = S0 - W * STEP; s <= S1 + (W + 1) * STEP; s += STEP) { const t = track.trackAt(s); raw.push({ x: t.x, z: t.z, c: Math.cos(t.phi), sn: Math.sin(t.phi) }); }
+  const at = (s: number, lat: number, _y: number) => {
+    const k = Math.round((s - S0) / STEP) + W;
+    let x = 0, z = 0, c = 0, sn = 0;
+    for (let j = -W; j <= W; j++) { const r = raw[Math.max(0, Math.min(raw.length - 1, k + j))]; x += r.x; z += r.z; c += r.c; sn += r.sn; }
+    const n = 2 * W + 1, l = Math.hypot(c, sn) || 1;
+    return new THREE.Vector3(x / n + c / l * lat, 0, z / n + sn / l * lat);
+  };
+  const near = new THREE.Color(0x587a5c), far = new THREE.Color(0x9fb2bf), tmp = new THREE.Color();
+  const pos: number[] = [], col: number[] = [], idx: number[] = [];
+  // 峰（位置・高さ・幅）を乱数で決めておく（rng の消費量は従来と同程度）
+  const peaks: { s: number; h: number; w: number }[] = [];
+  for (let s = S0; s < S1; s += 420) peaks.push({ s: s + rnd() * 300, h: 90 + rnd() * 200, w: 300 + rnd() * 400 });
+  const ridge = (s: number, layer: number, side: number) => {
+    let h = 30 + 18 * Math.sin(s / 290 + layer * 1.7 + side) + 12 * Math.sin(s / 113 + layer * 3.1) + 5 * Math.sin(s / 41 + side * 2);
+    for (const p of peaks) { const d = (s - p.s - layer * 230 * side) / p.w; if (Math.abs(d) < 2.2) h += p.h * (layer ? .9 : .7) * Math.exp(-d * d * 2.2); }
+    return h * (1 + layer * .45);
+  };
+  // 3 層 × 左右。各層は線路から dist の位置に、ridge の高さの帯を作る（谷側は地面より下まで）
+  const layers = [{ d: 650, depth: 250 }, { d: 1000, depth: 350 }, { d: 1400, depth: 450 }];
+  for (const side of [-1, 1]) layers.forEach((L, li) => {
+    const base = pos.length / 3, cols = Math.ceil((S1 - S0) / 60) + 1;
+    tmp.copy(near).lerp(far, li / 2 * .85 + .1);
+    for (let k = 0; k < cols; k++) {
+      const s = S0 + k * 60, h = ridge(s, li, side);
+      // 断面: 手前の裾 → 中腹 → 稜線 → 奥の裾（4 点）
+      const prof: [number, number, number][] = [[L.d, -20, .78], [L.d + L.depth * .35, h * .62, .9], [L.d + L.depth * .55, h, 1], [L.d + L.depth, -20, .85]];
+      for (const [d, y, sh] of prof) {
+        const p = at(s, side * d, 0);
+        pos.push(p.x, y, p.z);
+        col.push(tmp.r * sh, tmp.g * sh, tmp.b * sh);
+      }
+      if (k > 0) for (let r = 0; r < 3; r++) {
+        const a = base + (k - 1) * 4 + r, b2 = a + 4;
+        if (side < 0) idx.push(a, b2, a + 1, a + 1, b2, b2 + 1); else idx.push(a, a + 1, b2, a + 1, b2 + 1, b2);
+      }
+    }
+  });
+  // 進行方向・後方の遠景（線路の延長上をふさぐ山並み）
+  for (const [s, dir] of [[S1, 1], [S0, -1]] as const) {
+    const base = pos.length / 3, n = 40;
+    tmp.copy(far);
+    for (let k = 0; k <= n; k++) {
+      const lat = -2600 + 5200 * k / n, h = 120 + 90 * Math.sin(k * .7 + dir) + 60 * Math.sin(k * 1.9) + rnd() * 40;
+      for (const [ds, y] of [[0, -20], [400, h]] as const) { const p = at(s + dir * (600 + ds), lat, 0); pos.push(p.x, y, p.z); col.push(tmp.r, tmp.g, tmp.b); }
+      if (k > 0) { const a = base + (k - 1) * 2; if (dir > 0) idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); else idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+    }
   }
-  // 進行方向の遠景
-  for (let j = 0; j < 5; j++) {
-    const g = new THREE.ConeGeometry(400 + rnd() * 300, 200 + rnd() * 200, 6);
-    const p = at(S1 + 1000 + rnd() * 600, (j - 2) * 700, 0); geos.push(g.translate(p.x, 80, p.z));
-  }
-  // 1メッシュへ結合（描画コール削減）
-  const m = new THREE.Mesh(mergeGeometries(geos), mMat); m.name = 'backdrop'; scene.add(m);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setIndex(idx); g.computeVertexNormals();
+  const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+  m.name = 'backdrop'; scene.add(m);
 }
 
 /** 車止め先の遠方構造物（終端を隠す） */

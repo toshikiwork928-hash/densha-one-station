@@ -150,9 +150,17 @@ export function fallbackBox(color: number): PreparedModel {
   const geo = new THREE.BoxGeometry(1, 1, 1); geo.translate(0, .5, 0);
   return { flat: merge([normalizePart(geo, null, new THREE.Color(color), false)]), textured: [], size: new THREE.Vector3(1, 1, 1) };
 }
+/** 素材が読めないときの木（幹＋細分した球の樹冠） */
 export function fallbackTree(): PreparedModel {
-  const geo = new THREE.ConeGeometry(.6, 2, 7); geo.translate(0, 1, 0);
-  return { flat: merge([normalizePart(geo, null, new THREE.Color(0x3f6b35), false)]), textured: [], size: new THREE.Vector3(1.2, 2, 1.2) };
+  const parts: THREE.BufferGeometry[] = [];
+  const trunk = new THREE.CylinderGeometry(.07, .1, .9, 6); trunk.translate(0, .45, 0);
+  parts.push(normalizePart(trunk, null, new THREE.Color(0x5a4636), false));
+  const blobs: [number, number, number, number, number][] = [[0, 1.35, 0, .62, 0x3f6630], [.32, 1.2, .1, .42, 0x4f7a3a], [-.28, 1.25, -.12, .44, 0x4a7336], [.05, 1.65, -.2, .4, 0x5a8540], [-.1, 1.55, .28, .38, 0x56803d]];
+  for (const [x, y, z, r, c] of blobs) {
+    const g = new THREE.IcosahedronGeometry(r, 1); g.translate(x, y, z);
+    parts.push(normalizePart(g, null, new THREE.Color(c), false));
+  }
+  return { flat: merge(parts), textured: [], size: new THREE.Vector3(1.4, 2, 1.4) };
 }
 
 export interface Placement { p: THREE.Vector3; yaw: number; k: number }

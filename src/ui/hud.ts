@@ -123,8 +123,12 @@ export function attachHud(ctx: GameContext): void {
     else { el.delay.textContent = running ? `(あと ${Math.ceil(remain)}秒)` : ''; el.delay.className = 'early'; }
     el.limit.textContent = String(lim);
     el.limitPanel.classList.toggle('over', vk > lim + OVERSPEED_MARGIN);
+    // 制限の補助表示: 制限中は解除（後部通過）までの距離、制限外は次の制限までの距離
     let nxt = '&nbsp;';
-    for (const L of route.limits) if (L.from > s && L.from - s < 900) { nxt = `${L.kmh} まで ${Math.round(L.from - s)}m`; break; }
+    const cur = route.limits.filter(L => s >= L.from && s < L.to && L.kmh <= route.lineLimit).sort((a, b) => a.kmh - b.kmh)[0];
+    const ahead = route.limits.find(L => L.from > s && L.from - s < 1200 && L.kmh < (cur?.kmh ?? route.lineLimit));
+    if (ahead && (!cur || ahead.from < cur.to)) nxt = `<b>この先 ${ahead.kmh}</b> あと ${Math.round(ahead.from - s)}m`;
+    else if (cur) nxt = `<b>${cur.kmh} 解除</b>まで ${Math.round(cur.to - s)}m`;
     el.nextLimit.innerHTML = nxt;
     // 通過駅が手前にあればそこまでの距離を補助表示
     const p = nextPass();

@@ -6,7 +6,7 @@ import type { GameContext } from './core/context';
 import { $ } from './core/dom';
 import { EventBus } from './core/events';
 import { createRng } from './core/rng';
-import { DEFAULT_ROUTE } from './route';
+import { DEFAULT_ROUTE, ROUTES } from './route';
 import { buildTrack } from './route/track';
 import { createTrainEnv } from './sim/train';
 import { createState } from './game/state';
@@ -24,7 +24,8 @@ import { attachKeyboard } from './input/keyboard';
 import { attachTouch } from './input/touch';
 import { attachGamepad } from './input/gamepad';
 
-const route = DEFAULT_ROUTE;
+const saved = loadSelection();
+const route = ROUTES[saved?.routeId ?? ''] ?? DEFAULT_ROUTE;
 const { renderer, scene, camera } = createRenderCore($<HTMLCanvasElement>('c'));
 const env = createEnvironment(scene);
 
@@ -32,7 +33,7 @@ const ctx: GameContext = {
   route,
   track: buildTrack(route),
   events: new EventBus(),
-  state: createState(route, loadSelection()),
+  state: createState(route, saved),
   trainEnv: createTrainEnv(),
   scene, camera, renderer, env,
   rng: createRng(12345),

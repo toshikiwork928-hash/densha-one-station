@@ -3,7 +3,8 @@
 // 汐見町と海浜公園は島式ホーム2面4線（普通は外側の待避線、急行・特急は本線）
 // stations の stopS は6両の停止位置、pass/scheduledArrival/dwell は急行の値（種別適用で route/service.ts が書き換える）
 import type { Route, Sign, SpeedLimit, StationLoop } from '../types';
-import { TT } from './shiokaze-timetable';
+import { reverseRoute } from '../reverse';
+import { TT, TT_UP } from './shiokaze-timetable';
 
 /** 距離標（6両停止位置基準）と 4両・6両の停止位置目標。待避線駅では標識が待避線側に寄る（world/signs.ts） */
 const approachSigns = (stopS: number): Sign[] => [
@@ -134,3 +135,6 @@ export const shiokaze: Route = {
     { kind: 'viaduct', from: 10600, to: 12450 },
   ],
 };
+
+/** 上り（岬口 → 桜ヶ丘）。下りのデータを反転して作る */
+export const shiokazeUp: Route = reverseRoute(shiokaze, { id: 'shiokaze-up', name: '汐風線 岬口 → 桜ヶ丘', timetable: TT_UP });

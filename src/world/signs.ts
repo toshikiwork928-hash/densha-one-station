@@ -28,6 +28,10 @@ function buildSign(ctx: GameContext, sg: Sign, lat0: number, parent?: THREE.Obje
     case 'limitEnd':
       addSign(ctx, textBoard([{ t: '制限' }, { t: '解除' }], '#fff', '#e8502a', 256, 256, 80), sg.s, lat0 + (sg.lat ?? -2.2), .9, .9, 3.0, 0, parent);
       break;
+    case 'limitNotice':
+      // 黄地に黒の数字、下に「予告」
+      addSign(ctx, textBoard([{ t: sg.kmh, size: 120 }, { t: '予告', size: 46 }], '#ffd21a', '#111', 256, 300), sg.s, lat0 + (sg.lat ?? -2.2), .85, 1.0, 3.0, 0, parent);
+      break;
     case 'distance':
       addSign(ctx, textBoard([{ t: sg.meters, size: 120 }], '#fff', '#111'), sg.s, lat0 + (sg.lat ?? -2.0), .7, .7, sg.meters >= 200 ? 2.2 : 2.9, 0, parent);
       break;
@@ -79,6 +83,10 @@ export function buildSigns(ctx: GameContext): void {
     buildSign(ctx, { kind: 'limit', s: route.startS + 60, kmh: route.lineLimit, size: .9 }, 0, group);
     for (const L of route.limits) {
       buildSign(ctx, { kind: 'limit', s: L.from, kmh: L.kmh }, track.pathLat(L.from), group);
+      // 予告標: 制限の 400m 手前（より厳しい制限の中や始発駅の手前には立てない）
+      const ns = L.from - 400;
+      const covered = route.limits.some(o => o !== L && o.kmh <= L.kmh && ns >= o.from && ns < o.to);
+      if (!covered && ns > route.startS + 80) buildSign(ctx, { kind: 'limitNotice', s: ns, kmh: L.kmh }, track.pathLat(ns), group);
       const inner = route.limits.some(o => o !== L && o.kmh <= L.kmh && L.to > o.from && L.to < o.to);
       if (!inner && L.to < last) buildSign(ctx, { kind: 'limitEnd', s: L.to }, track.pathLat(L.to), group);
     }

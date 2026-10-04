@@ -17,8 +17,27 @@ const WALLS = [0xe9e2cf, 0xf0efe9, 0xd9c9a8, 0xcfcfca, 0xb39673, 0xbfc6cc, 0xe3d
 const ROOFS = [0x3c3f45, 0x4a5561, 0x5e4436, 0x3b4c62, 0x8e5a42, 0x46564a, 0x555555, 0x6b6e73];
 const MANSION = [0x9c7b62, 0xd6c8ae, 0xe9e6dd, 0xa9a49c, 0xc9b49a, 0xbac0c4];
 const GLASS = 0x2b343d;
-const BLOB = basePart(new THREE.IcosahedronGeometry(.5, 0));
-const CONE = basePart(new THREE.ConeGeometry(.5, 1, 7, 1));
+/** 頂点を少し揺らした形状（同じ位置の頂点は同じだけ動かして割れを防ぐ） */
+function jitter(geo: THREE.BufferGeometry, amt: number, seed: number, keepBottom = false): THREE.BufferGeometry {
+  const g = geo.index ? geo.toNonIndexed() : geo, p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const h = (k: number) => { const v = Math.sin(x * 12.99 + y * 78.23 + z * 37.72 + seed * 11.3 + k * 4.1) * 43758.55; return (v - Math.floor(v)) * 2 - 1; };
+    if (keepBottom && y < -.49) continue;
+    p.setXYZ(i, x + h(1) * amt, y + h(2) * amt * .6, z + h(3) * amt);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+/** 広葉樹の葉の塊（細分した球を揺らす。3種） */
+const BLOBS = [0, 1, 2].map(k => basePart(jitter(new THREE.IcosahedronGeometry(.5, 1), .07, k)));
+/** 針葉樹（杉）の段（裾が垂れた円錐。3種） */
+const TIERS = [0, 1, 2].map(k => {
+  const g = new THREE.ConeGeometry(.5, 1, 11, 2, true);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) if (p.getY(i) < -.49) p.setY(i, -.5 - .08 * Math.sin(Math.atan2(p.getZ(i), p.getX(i)) * 5 + k)); // 裾のぎざぎざ
+  return basePart(jitter(g, .04, k + 5));
+});
 const TRUNK = basePart(new THREE.CylinderGeometry(.35, .5, 1, 5, 1, true));
 
 // ---- アトラス（看板・自販機・店内） ----
@@ -294,7 +313,7 @@ function bamboo(b: GeoBatch, rnd: Rng, r: number): void {
   }
   for (let i = 0; i < 7; i++) {
     const a = rnd() * 6.28, d = Math.sqrt(rnd()) * r * .8;
-    b.add('body', BLOB, M(Math.cos(a) * d, 8 + rnd() * 3.5, Math.sin(a) * d, rnd() * 3, r * .9 + rnd() * 2, 3.5 + rnd() * 2, r * .9 + rnd() * 2), [0x6f9a40, 0x7aa548, 0x648f3a][i % 3]);
+    b.add('body', BLOBS[i % 3], M(Math.cos(a) * d, 8 + rnd() * 3.5, Math.sin(a) * d, rnd() * 3, r * .9 + rnd() * 2, 3.5 + rnd() * 2, r * .9 + rnd() * 2), [0x6f9a40, 0x7aa548, 0x648f3a][i % 3]);
   }
 }
 
@@ -320,7 +339,7 @@ export function buildTown(ctx: GameContext): TownResult {
     fence: new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: .38, depthWrite: false, side: THREE.DoubleSide }),
   };
 
-  const platSide = (sd: number, s: number, m: number) => route.stations.some(st => (st.loop || st.platform.side === 'L' ? -1 : 1) === sd && s > st.platform.from - m && s < st.platform.to + m); // 島式2面4線は駅舎が左
+  const platSide = (_sd: number, s: number, m: number) => route.stations.some(st => s > st.platform.from - m && s < st.platform.to + m); // ホームは両側（相対式・島式）
   /** 2面4線駅の待避線区間（両側。対向側ホーム・分岐器・門型架線柱の分） */
   const loopNear = (s: number, m: number) => route.stations.some(st => { const z = loopZone(st); return !!z && s > z.inFrom - m && s < z.outTo + m; });
   /** 待避線駅は駅舎が待避線の分だけ外へずれる */
@@ -357,12 +376,26 @@ export function buildTown(ctx: GameContext): TownResult {
   // 低ポリの木（山林・屋敷林・河畔林。素材の木より軽い）: 針葉樹（杉）と広葉樹
   const ptree = (s: number, lat: number, y: number, k: number, conifer = rnd() < .55) => {
     const t = track.trackAt(s), b = chunks.at(s); b.parent = null;
-    const x = t.x + t.rx * lat, z = t.z + t.rz * lat, h = (conifer ? 11 : 8) * k;
-    b.add('body', TRUNK, M(x, y + h * .2, z, 0, .45 * k, h * .4, .45 * k), 0x5a4636);
+    const x = t.x + t.rx * lat, z = t.z + t.rz * lat, h = (conifer ? 11 : 8) * k * (.85 + rnd() * .3);
+    b.add('body', TRUNK, M(x, y + h * .2, z, 0, .4 * k, h * .4, .4 * k), 0x5a4636);
     if (conifer) {
-      b.add('body', CONE, M(x, y + h * .62, z, rnd() * 3, 3.2 * k, h * .8, 3.2 * k), [0x2f4f30, 0x36573a, 0x2a4a2e][Math.floor(rnd() * 3)]);
+      // 段を重ねた樹冠（下ほど広く暗い）
+      const pal = [[0x223d25, 0x2b4a2d, 0x335834, 0x3b623b], [0x263f22, 0x2f4b2a, 0x385732, 0x41633a]][Math.floor(rnd() * 2)];
+      const n = 4, top = h, base = h * .28;
+      for (let i = 0; i < n; i++) {
+        const f = i / (n - 1), w = (3.6 - 2.4 * f) * k, th = (top - base) * .42, cy = base + (top - base - th) * f + th / 2;
+        b.add('body', TIERS[Math.floor(rnd() * 3)], M(x, y + cy, z, rnd() * 6, w, th, w), pal[i]);
+      }
     } else {
-      for (let i = 0; i < 2; i++) b.add('body', BLOB, M(x + (rnd() - .5) * 2 * k, y + h * (.55 + i * .2), z + (rnd() - .5) * 2 * k, rnd() * 3, 5 * k, 3.6 * k, 5 * k), [0x4f7a3a, 0x5a8a40, 0x456f35][Math.floor(rnd() * 3)]);
+      // 樹冠: 内側の暗い塊＋外側の明るい塊 5〜7 個
+      const pal = [[0x3c5f2e, 0x4d7537, 0x5a8540], [0x3a5a30, 0x4a7038, 0x58803f], [0x45602c, 0x557533, 0x67873c]][Math.floor(rnd() * 3)];
+      const cy = y + h * .66, R = 2.6 * k;
+      b.add('body', BLOBS[0], M(x, cy, z, rnd() * 6, R * 1.9, R * 1.5, R * 1.9), pal[0]);
+      const m = 5 + Math.floor(rnd() * 3);
+      for (let i = 0; i < m; i++) {
+        const a = i / m * Math.PI * 2 + rnd() * .6, r = R * (.55 + rnd() * .25), up = (rnd() - .3) * R * .7, sz = R * (.9 + rnd() * .45);
+        b.add('body', BLOBS[Math.floor(rnd() * 3)], M(x + Math.cos(a) * r, cy + up, z + Math.sin(a) * r, rnd() * 6, sz, sz * .85, sz), pal[1 + (up > 0 ? 1 : 0)]);
+      }
     }
   };
 

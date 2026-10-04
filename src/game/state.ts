@@ -20,6 +20,8 @@ export type VehicleSel = Partial<Record<ServiceId, { kind: TrainKind; cars: numb
 export interface Selection {
   stageId: string; mode: GameMode; /** 運行種別（route.services が無い路線では無視） */ service: ServiceId;
   vehicles: VehicleSel;
+  /** 路線（方向）。切替はページの再読込で反映（main.ts が起動時に読む） */
+  routeId?: string;
 }
 
 /** 待避中に通過していく後続列車（game/overtake.ts が動かし、world/overtaking.ts が描画） */

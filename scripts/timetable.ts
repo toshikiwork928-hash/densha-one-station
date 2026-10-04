@@ -1,17 +1,17 @@
 // 時刻表の生成: 種別ごとに自動運転（最速走行）で各駅の到着・通過時刻を求め、+5% を 5 秒単位に切り上げる
 // 実行: npm run timetable（src/route/routes/shiokaze-timetable.ts を書き換える）
 import { writeFileSync } from 'node:fs';
-import { shiokaze as route } from '../src/route/routes/shiokaze';
+import { shiokaze, shiokazeUp } from '../src/route/routes/shiokaze';
 import { applyService } from '../src/route/service';
 import { buildTrack } from '../src/route/track';
-import type { ServiceId } from '../src/route/types';
+import type { Route, ServiceId } from '../src/route/types';
 import { TRAIN_PERF, stepTrain, type TrainState } from '../src/sim/train';
 
 /** 停車時間 [s]（普通の待避駅は追い越し待ち込み） */
 const DWELL = 25, WAIT_DWELL = 75;
 const MARGIN = 1.05, DT = 1 / 30;
 
-function run(id: ServiceId) {
+function run(route: Route, id: ServiceId) {
   const svc = applyService(route, id)!;
   const track = buildTrack(route), perf = TRAIN_PERF[svc.kind];
   const env = { adhesion: 1, gradePermil: 0, perf };
@@ -57,28 +57,37 @@ function run(id: ServiceId) {
 }
 
 const up = (x: number) => Math.ceil(x * MARGIN / 5) * 5;
-const res: Record<string, string> = {};
-for (const id of ['local', 'express', 'limited'] as ServiceId[]) {
-  const raw = run(id);
-  // 駅間の走行時間に余裕を足し、停車時間はそのまま
-  let prevRaw = 0, prevOut = 0;
-  const tt: string[] = [];
-  for (const k of Object.keys(raw).map(Number).sort((a, b) => a - b)) {
-    const r = raw[k];
-    const arr = k === 0 ? 0 : prevOut + up(r.arr - prevRaw);
-    const dep = r.dep != null ? arr + (r.dep - r.arr) : undefined;
-    tt.push(`${k}: { arr: ${arr}${dep != null ? `, dep: ${dep}` : ''} }`);
-    prevRaw = r.dep ?? r.arr; prevOut = dep ?? arr;
-    console.log(id, k, route.stations[k].name, r.arr.toFixed(1), '→', arr, dep ?? '');
+function table(route: Route): Record<string, string> {
+  const res: Record<string, string> = {};
+  for (const id of ['local', 'express', 'limited'] as ServiceId[]) {
+    const raw = run(route, id);
+    // 駅間の走行時間に余裕を足し、停車時間はそのまま
+    let prevRaw = 0, prevOut = 0;
+    const tt: string[] = [];
+    for (const k of Object.keys(raw).map(Number).sort((a, b) => a - b)) {
+      const r = raw[k];
+      const arr = k === 0 ? 0 : prevOut + up(r.arr - prevRaw);
+      const dep = r.dep != null ? arr + (r.dep - r.arr) : undefined;
+      tt.push(`${k}: { arr: ${arr}${dep != null ? `, dep: ${dep}` : ''} }`);
+      prevRaw = r.dep ?? r.arr; prevOut = dep ?? arr;
+      console.log(route.id, id, k, route.stations[k].name, r.arr.toFixed(1), '→', arr, dep ?? '');
+    }
+    res[id] = `{ ${tt.join(', ')} }`;
   }
-  res[id] = `{ ${tt.join(', ')} }`;
+  return res;
 }
+const dn = table(shiokaze), upT = table(shiokazeUp);
+const body = (r: Record<string, string>) => `{
+  local: ${r.local},
+  express: ${r.express},
+  limited: ${r.limited},
+}`;
 writeFileSync('src/route/routes/shiokaze-timetable.ts', `// 汐風線の時刻表（scripts/timetable.ts が生成。手で直さない）
 import type { ServiceId, ServiceSpec } from '../types';
 
-export const TT: Record<ServiceId, ServiceSpec['timetable']> = {
-  local: ${res.local},
-  express: ${res.express},
-  limited: ${res.limited},
-};
+/** 下り（桜ヶ丘 → 岬口） */
+export const TT: Record<ServiceId, ServiceSpec['timetable']> = ${body(dn)};
+
+/** 上り（岬口 → 桜ヶ丘） */
+export const TT_UP: Record<ServiceId, ServiceSpec['timetable']> = ${body(upT)};
 `);

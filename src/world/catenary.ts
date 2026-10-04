@@ -255,8 +255,8 @@ export function buildCatenary(ctx: GameContext): void {
       pl = L0 + z.lat - 3.3; pr = L1 - z.lat + 3.3;
     }
     if (kind === 'station') {
-      const x = route.stations.find(q => s > q.platform.from - 10 && s < q.platform.to + 10)!;
-      if (x.platform.side === 'L') pl = L0 - 7.4; else pr = L1 + 7.4;
+      // 相対式ホーム（両側）の外
+      pl = L0 - 7.4; pr = L1 + 7.4;
     }
     return { s, i, kind, stg, mw: CW + (kind === 'tunnel' ? SYS_T : SYS), pl, pr };
   });

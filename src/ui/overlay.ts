@@ -2,7 +2,8 @@
 import { notchName } from '../core/config';
 import type { GameContext } from '../core/context';
 import { $, fmtClock } from '../core/dom';
-import { addHistory, getBest, getHistory, resetRecords, submitScore } from '../game/ranking';
+import { addHistory, getBest, getHistory, resetRecords, saveSelection, submitScore } from '../game/ranking';
+import { ROUTE_DIRS } from '../route';
 import type { GameResult } from '../game/scoring';
 import { safetyDeductions } from '../game/scoring';
 import { MODE_LABEL, findStage, stagesOf, type GameMode } from '../game/state';
@@ -69,6 +70,7 @@ export function attachOverlay(ctx: GameContext): void {
     <div class="route"><span>${first.name}</span><span class="bar"></span><span>${last.name}</span></div>
     <div class="tabs" role="tablist">${TABS.map(([k, n]) => `<button type="button" role="tab" data-tab="${k}">${n}</button>`).join('')}</div>
     <div class="tabPane" data-pane="stage">
+      <div class="selLbl">方向</div><div class="sel" id="selDir">${ROUTE_DIRS.map(d => `<button data-dir="${d.id}" class="${d.id === route.id ? 'on' : ''}">${d.label}<small>${d.desc}</small></button>`).join('')}</div>
       ${svcs ? `<div class="selLbl">種別（Tab）</div><div class="sel" id="selService">${svcs}</div>` : ''}
       <div class="selLbl">ステージ（← →）</div><div class="sel" id="selStage">${stages}</div>
       <div class="selLbl">モード（↑ ↓）</div><div class="sel" id="selMode">${modes}</div>
@@ -104,6 +106,13 @@ export function attachOverlay(ctx: GameContext): void {
     card.querySelectorAll<HTMLButtonElement>('[data-service]').forEach(b => b.onclick = () => {
       const list = route.services ?? [], cur = list.findIndex(v => v.id === st.sel.service), to = list.findIndex(v => v.id === b.dataset.service);
       ctx.actions.selectService(to - cur);
+    });
+    card.querySelectorAll<HTMLButtonElement>('[data-dir]').forEach(b => b.onclick = () => {
+      if (b.dataset.dir === route.id) return;
+      // 方向が変わると線路・駅・景観を作り直すので再読込（種別・車両・モードは引き継ぐ）
+      saveSelection({ ...st.sel, stageId: '', routeId: b.dataset.dir });
+      card.innerHTML = '<p class="brief" style="text-align:center">路線を読み込み中…</p>';
+      location.reload();
     });
     card.querySelectorAll<HTMLButtonElement>('[data-kind]').forEach(b => b.onclick = () => ctx.actions.selectVehicle({ kind: b.dataset.kind as TrainKind }));
     card.querySelectorAll<HTMLButtonElement>('[data-cars]').forEach(b => b.onclick = () => ctx.actions.selectVehicle({ cars: Number(b.dataset.cars) }));

@@ -60,7 +60,7 @@ export function createNightLights(ctx: GameContext): NightLights {
     // [蛍光灯の横位置, 照らす床の横位置[]]。島式ホームは中央に蛍光灯、床は両側
     const sides: [number, number[]][] = sta.loop
       ? [[lp / 2, [lp / 2 - 1.5, lp / 2 + 1.5]], [L1 - lp / 2, [L1 - lp / 2 - 1.5, L1 - lp / 2 + 1.5]]]
-      : sta.elevated ? [[-4.2, [-3.6]], [L1 + 4.2, [L1 + 3.6]]] : [[sta.platform.side === 'L' ? -4.2 : 4.2, [sta.platform.side === 'L' ? -3.6 : 3.6]]];
+      : [[-4.2, [-3.6]], [L1 + 4.2, [L1 + 3.6]]]; // 相対式: 両側
     const rl = len * .6, sc = (s0 + s1) / 2;
     sides.forEach(([lat, floors], k) => {
       for (let z = -rl / 2 + 3; z <= rl / 2 - 3; z += 8) {
