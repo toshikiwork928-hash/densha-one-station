@@ -1,5 +1,32 @@
 // 列車の運動モデル。ノッチ → 目標加速度、ブレーキ遅れ、走行抵抗
 import { NOTCH_EB } from '../core/config';
+import type { TrainKind } from '../route/types';
+
+/** 車種ごとの性能（加速度は P5 の値） */
+export interface TrainPerf {
+  /** 起動加速度 [m/s²] */
+  a0: number;
+  /** 定トルク域の上限速度 [m/s]（これより上は a0·(vBase/v)^k） */
+  vBase: number;
+  /** 高速域の加速度の落ち方（1 = 定出力、大きいほど高速で弱い） */
+  k: number;
+  /** 常用最大（B8）の減速度 [m/s²] */
+  bMax: number;
+  /** 非常ブレーキの減速度 [m/s²] */
+  eb: number;
+  /** 設計最高速度 [m/s]（これ以上は力行しても加速しない） */
+  vMax: number;
+}
+
+const kmh = (x: number) => x / 3.6;
+/** 通勤形（新・VVVF）: 3.0km/h/s、高速まで素直 / 通勤形（旧・抵抗制御）: 2.5km/h/s、高速で弱い / 特急形: 2.5km/h/s、定出力域が広く 110km/h 運転が楽 */
+export const TRAIN_PERF: Record<TrainKind, TrainPerf> = {
+  'commuter-new': { a0: kmh(3.0), vBase: kmh(40), k: 1, bMax: 1.2, eb: 1.45, vMax: kmh(110) },
+  'commuter-old': { a0: kmh(2.5), vBase: kmh(35), k: 1.25, bMax: 1.1, eb: 1.4, vMax: kmh(110) },
+  limited: { a0: kmh(2.5), vBase: kmh(55), k: 1, bMax: 1.15, eb: 1.45, vMax: kmh(120) },
+};
+/** 種別なし路線の従来性能 */
+export const DEFAULT_PERF: TrainPerf = { a0: .92, vBase: 9.7, k: 1, bMax: 1.15, eb: 1.45, vMax: kmh(120) };
 
 export interface TrainState {
   /** 先頭位置 [m] */
@@ -17,6 +44,8 @@ export interface TrainEnv {
   adhesion: number;
   /** 現在位置の勾配 [‰]（正 = 上り）。ゲームループが毎 tick 更新 */
   gradePermil: number;
+  /** 車両性能（運行種別の車種。game/loop.ts が設定） */
+  perf?: TrainPerf;
 }
 
 export const createTrainEnv = (): TrainEnv => ({ adhesion: 1, gradePermil: 0 });
@@ -25,10 +54,12 @@ const G = 9.81;
 
 /** 1 ステップ進める。戻り値: 今回停止した瞬間なら true */
 export function stepTrain(tr: TrainState, env: TrainEnv, dt: number): boolean {
-  const v = tr.v, n = tr.notch;
+  const v = tr.v, n = tr.notch, P = env.perf ?? DEFAULT_PERF;
   let target = 0;
-  if (n > 0) { const amax = v < 9.7 ? .92 : .92 * 9.7 / v; target = amax * n / 5; }
-  else if (n < 0) target = n === NOTCH_EB ? -1.45 : -1.15 * (-n) / 8;
+  if (n > 0) {
+    const amax = v >= P.vMax ? 0 : v < P.vBase ? P.a0 : P.a0 * Math.pow(P.vBase / v, P.k);
+    target = amax * n / 5;
+  } else if (n < 0) target = n === NOTCH_EB ? -P.eb : -P.bMax * (-n) / 8;
   // 粘着低下時は加減速度の上限を下げる（簡易）
   if (env.adhesion < 1) target *= env.adhesion;
   const tau = n < 0 ? .75 : .5; // 空気ブレーキの立ち上がり遅れ

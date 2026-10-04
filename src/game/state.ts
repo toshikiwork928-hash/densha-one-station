@@ -1,7 +1,8 @@
 // ゲーム状態（1プレイ分）
 import { NOTCH_INITIAL } from '../core/config';
 import type { SignalAspect } from '../core/events';
-import type { Route } from '../route/types';
+import { applyService } from '../route/service';
+import type { Route, ServiceId } from '../route/types';
 import type { TrainState } from '../sim/train';
 import type { PassJudgement, StopJudgement } from './scoring';
 
@@ -14,7 +15,27 @@ export const MODE_LABEL: Record<GameMode, string> = { normal: '通常', recovery
 /** ステージ = 停車駅間（全線通しは from = 始発, to = 終着） */
 export interface Stage { id: string; from: number; to: number; label: string }
 
-export interface Selection { stageId: string; mode: GameMode }
+export interface Selection { stageId: string; mode: GameMode; /** 運行種別（route.services が無い路線では無視） */ service: ServiceId }
+
+/** 待避中に通過していく後続列車（game/overtake.ts が動かし、world/overtaking.ts が描画） */
+export interface OvertakeState {
+  /** 待避する駅 index */
+  station: number;
+  /** 通過列車の種別 */
+  passedBy: ServiceId;
+  /** 出発信号（route.signals の index）。通過列車が抜けるまで停止現示 */
+  depSignal: number;
+  /** wait = 出現待ち, run = 走行中, done = 通過済み */
+  phase: 'wait' | 'run' | 'done';
+  /** 出現する時刻 [s]（st.t 基準） */
+  spawnT: number;
+  /** 先頭位置 [m]・速度 [m/s]・編成長 [m] */
+  head: number;
+  v: number;
+  len: number;
+  /** 出口分岐器を後部が抜けた（出発信号を開けてよい） */
+  cleared: boolean;
+}
 
 export interface AtsState {
   /** normal = 正常, warn = 警報中（確認待ち）, brake = 非常制動中 */
@@ -63,8 +84,10 @@ export interface GameState {
   endIndex: number;
   /** 開始時の遅れ [s]（遅延回復モード） */
   lateStart: number;
-  /** ドア状態 */
-  doors: 'open' | 'closed';
+  /** ドア状態（closing = 戸閉め中。閉まり切るまで発車できない） */
+  doors: 'open' | 'closing' | 'closed';
+  /** 戸閉め中の残り時間 [s] */
+  doorCloseT: number;
   /** 各信号の表示現示（route.signals と同順。自列車・先行列車の在線を反映） */
   signals: SignalAspect[];
   /** 次に通過する信号の index（無ければ -1） */
@@ -75,6 +98,8 @@ export interface GameState {
   precedingS: number;
   ats: AtsState;
   penalties: Penalties;
+  /** 待避（各停のみ）。無ければ null */
+  overtake: OvertakeState | null;
 }
 
 /** 停車駅（通過駅を除く）の index 列 */
@@ -116,8 +141,11 @@ export function createState(route: Route): GameState {
 }
 
 export function resetState(st: GameState, route: Route): void {
-  const sel: Selection = st.sel ?? { stageId: stagesOf(route)[0]?.id ?? 'all', mode: 'normal' };
+  const sel: Selection = st.sel ?? { stageId: '', mode: 'normal', service: route.services?.find(x => x.id === 'express')?.id ?? route.services?.[0]?.id ?? 'express' };
+  applyService(route, sel.service); // 停車駅・時刻・編成長を種別に合わせてから区間を決める
+  if (!sel.stageId) sel.stageId = stagesOf(route)[0]?.id ?? 'all';
   const stage = findStage(route, sel.stageId);
+  if (stage) sel.stageId = stage.id; // 種別により存在しない区間（例: 特急の全線通し）は先頭区間へ
   const from = stage?.from ?? 0, end = stage?.to ?? route.stations.length - 1;
   const s0 = from === 0 ? route.startS : route.stations[from].stopS;
   const late = stage ? lateStartFor(stage, sel.mode) : 0;
@@ -127,10 +155,11 @@ export function resetState(st: GameState, route: Route): void {
     t: departureTime(route, from) + late, target: nextStopIndex(route, from), overspeed: 0, eb: false,
     stopTimer: 0, notchAtStop: 0, lastJoint: Math.floor(s0 / 25),
     overspeedActive: false, beepT: 0, dwellT: 0, flags: {}, stops: [], passes: [],
-    sel, fromIndex: from, endIndex: end, lateStart: late, doors: 'closed',
+    sel, fromIndex: from, endIndex: end, lateStart: late, doors: 'closed', doorCloseT: 0,
     signals: (route.signals ?? []).map(() => 'G'), nextSignal: -1, sigLimit: Infinity, precedingS: 0,
     ats: { state: 'normal', timer: 0, reason: '' },
     penalties: { atsWarn: 0, atsBrake: 0, redPass: 0, wrongStop: 0 },
+    overtake: null,
   } satisfies GameState);
 }
 

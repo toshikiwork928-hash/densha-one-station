@@ -1,5 +1,5 @@
 // 停止判定と採点
-import type { Route } from '../route/types';
+import type { Route, ServiceId } from '../route/types';
 import type { GameMode, GameState, Penalties } from './state';
 
 export interface StopJudgement {
@@ -45,6 +45,8 @@ export interface GameResult {
   penalties: Penalties;
   mode: GameMode;
   stageId: string;
+  /** 運行種別 */
+  service: ServiceId;
   /** 各配点の満点 */
   max: { stop: number; time: number; safe: number };
 }
@@ -103,7 +105,7 @@ export function scoreGame(st: GameState): GameResult {
   return {
     kind, rank, stopPts, timePts, safePts, total: Math.round(stopPts + timePts + safePts),
     overspeed: st.overspeed, eb: st.eb, last, stops,
-    passes: st.passes, penalties: { ...st.penalties }, mode: st.sel.mode, stageId: st.sel.stageId,
+    passes: st.passes, penalties: { ...st.penalties }, mode: st.sel.mode, stageId: st.sel.stageId, service: st.sel.service,
     max: { stop: R.stop, time: R.time, safe: R.safe },
   };
 }

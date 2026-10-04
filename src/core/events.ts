@@ -1,5 +1,5 @@
 // 型付きイベントバス。モジュール間は直接呼び出しではなくここで疎結合にする
-import type { Station } from '../route/types';
+import type { ServiceSpec, Station } from '../route/types';
 import type { GameResult, StopJudgement } from '../game/scoring';
 import type { GameStateName } from '../game/state';
 import type { TrainState } from '../sim/train';
@@ -49,6 +49,8 @@ export interface EventMap {
   /** [A] ドア開閉（停車駅の dwell 中） */
   doorOpen: { index: number; station: Station };
   doorClose: { index: number; station: Station };
+  /** [G] ドアが閉まり切った（戸閉灯点灯。これ以降に力行で発車できる） */
+  doorsClosed: { index: number; station: Station };
   /** [A] 信号現示の変化（自列車が次に見る信号） */
   signalAspect: { id: string; s: number; aspect: SignalAspect };
   /** [A] ATS 動作（warn = 警報ベル, brake = 非常ブレーキ作動, release = 復帰） */
@@ -63,6 +65,10 @@ export interface EventMap {
   crossing: { id: string; s: number; active: boolean; distance: number };
   /** [C] トンネル出入り */
   tunnel: { inside: boolean };
+  /** [G] 運行種別の変更（タイトルでの選択時。起動時は route に適用済みで発火しない場合あり → ctx.service を参照） */
+  serviceChange: { service: ServiceSpec };
+  /** [G] 待避中に後続列車が本線を通過（0..1 の近さ。風切り音用。通過中は毎フレーム） */
+  overtakePass: { proximity: number };
 }
 
 export type SignalAspect = 'R' | 'Y' | 'YG' | 'G';

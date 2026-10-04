@@ -90,6 +90,12 @@ export function createCab(ctx: GameContext): void {
   // 行路表
   const card = new THREE.Mesh(new THREE.PlaneGeometry(.2, .28), new THREE.MeshLambertMaterial({ map: cardTex(ctx), emissive: 0xffffff, emissiveIntensity: .1 }));
   card.position.set(.45, 2.56, -.95); card.rotation.x = -1.05; root.add(card);
+  const redrawCard = () => { // 種別・時間帯で時刻・通過駅が変わる
+    const m = card.material as THREE.MeshLambertMaterial;
+    m.map?.dispose(); m.map = cardTex(ctx); m.needsUpdate = true;
+  };
+  events.on('serviceChange', redrawCard);
+  events.on('reset', redrawCard);
   gaugeMats.push(card.material as THREE.MeshLambertMaterial);
 
   // ワンハンドルマスコン（手前に引くと力行、奥へ押すとブレーキ）
@@ -110,7 +116,8 @@ export function createCab(ctx: GameContext): void {
   events.on('notch', e => setNotch(e.notch));
   events.on('reset', () => setNotch(ctx.state.train.notch));
   events.on('doorOpen', () => doorMat.color.setHex(0x3a2a1a));
-  events.on('doorClose', () => doorMat.color.setHex(0xff9a2a));
+  events.on('doorsClosed', () => doorMat.color.setHex(0xff9a2a)); // 閉まり切ってから戸閉灯
+  events.on('reset', () => doorMat.color.setHex(0xff9a2a));
   onLight(ctx, (n, t) => { const f = Math.max(n, t); for (const m of gaugeMats) m.emissiveIntensity = .25 + f * .55; });
 
   for (const o of [root]) o.traverse(x => { x.userData.noShadow = true; });
@@ -125,9 +132,9 @@ export function createCab(ctx: GameContext): void {
     // 縦長画面では HTML の速度計と重なるので 3D 計器は隠す（卓のみ表示）
     panel.visible = ctx.camera.aspect >= 1;
     const { s, v, notch } = ctx.state.train;
-    pa.copy(track.at(s + 4, 0, 0)); pb.copy(track.at(s - 4, 0, 0));
+    pa.copy(track.pathAt(s + 4, 0, 0)); pb.copy(track.pathAt(s - 4, 0, 0)); // 待避線では横にずれる
     placeCar(root, pa, pb);
-    root.position.copy(track.at(s, 0, 0));
+    root.position.copy(track.pathAt(s, 0, 0));
     leverA += (leverT - leverA) * Math.min(1, dt * 14);
     lever.rotation.x = leverA;
     const kmh = v * 3.6;

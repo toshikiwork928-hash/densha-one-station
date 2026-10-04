@@ -1,7 +1,8 @@
 // 閉そく信号と ATS。先行列車（仮想）の在線から現示を決め、通過時に速度照査する
 import type { GameContext } from '../core/context';
 import type { SignalAspect } from '../core/events';
-import { ASPECT_LABEL, ASPECT_LIMIT, PRECEDING_LENGTH, aspectOf, buildPrecedingKeys, precedingHead } from './preceding';
+import { loopZone, type LoopZone } from '../route/service';
+import { ASPECT_LABEL, ASPECT_LIMIT, PRECEDING_LENGTH, aspectOf, buildPrecedingKeys, precedingHead, type PrecedingPlan } from './preceding';
 
 const ATS_ACK_TIME = 5; // 警報から確認までの猶予 [s]
 const ATS_ACK_NOTCH = -4; // 確認に必要なブレーキ段（B4 以上）
@@ -14,24 +15,49 @@ export interface SignalSystem {
   /** ATS 確認扱い。戻り値 = 受け付けたか */
   ack(): boolean;
   reset(): void;
+  /** 先行列車が待避線上にいるか（描画用。いれば駅の待避線区間） */
+  precedingLoop(): LoopZone | null;
 }
+
+const RANK: Record<SignalAspect, number> = { R: 0, Y: 1, YG: 2, G: 3 };
+const restrict = (a: SignalAspect, cap: SignalAspect | undefined): SignalAspect => cap && RANK[cap] < RANK[a] ? cap : a;
 
 export function createSignalSystem(ctx: GameContext, forceEB: () => void): SignalSystem {
   const { route, events } = ctx, st = ctx.state;
   const sigs = route.signals ?? [];
   const sigS = sigs.map(g => g.s);
-  const keys = buildPrecedingKeys(route);
+  let plan: PrecedingPlan = buildPrecedingKeys(route, st.sel.service);
+  /** 場内信号の現示上限（停車する2面4線駅は分岐側へ進むので Y） */
+  let caps: (SignalAspect | undefined)[] = [];
+  /** 先行列車の待避抑止（自列車が通過する待避線駅で、自列車が通過するまで先行を待避線に止める） */
+  let holds: { zone: LoopZone; depT: number; passT: number }[] = [];
+  /** 先行が待避線上にいる駅（先行が停車する待避線駅すべて） */
+  let precZones: LoopZone[] = [];
+  let precDelay = 0;
   let lastEmit = '';
   let passed = -1; // 直前に通過した信号
   const redWarned = new Set<number>();
 
   const banner = (text: string, sec = 3) => events.emit('banner', { text, sec });
-  const precOnly = (i: number): SignalAspect => aspectOf(sigS, i, [[st.precedingS, PRECEDING_LENGTH]]);
+  /** 先行列車が待避線上（本線の閉そくを占有しない）か */
+  const precOnLoop = () => precZones.find(z => st.precedingS >= z.inFrom + PRECEDING_LENGTH && st.precedingS <= z.outFrom) ?? null;
+  const precTrains = (): [number, number][] => precOnLoop() ? [] : [[st.precedingS, PRECEDING_LENGTH]];
+  /** 上限（場内）と待避の抑止（出発）を反映 */
+  const adjust = (i: number, a: SignalAspect): SignalAspect => {
+    const o = st.overtake;
+    if (o && !o.cleared && o.depSignal === i) return 'R';
+    return restrict(a, caps[i]);
+  };
+  const precOnly = (i: number): SignalAspect => adjust(i, aspectOf(sigS, i, precTrains()));
 
   function refreshAspects() {
-    st.precedingS = precedingHead(keys, st.t);
-    const trains: [number, number][] = [[st.precedingS, PRECEDING_LENGTH], [st.train.s, route.trainLength]];
-    for (let i = 0; i < sigS.length; i++) st.signals[i] = aspectOf(sigS, i, trains);
+    // 自列車が通過する待避線駅では、自列車が抜けるまで先行を待避線に止めておく
+    for (const h of holds) {
+      if (st.train.s < h.zone.outTo && st.t - precDelay > h.depT) precDelay = st.t - h.depT;
+    }
+    st.precedingS = precedingHead(plan.keys, st.t - precDelay);
+    const trains: [number, number][] = [...precTrains(), [st.train.s, route.trainLength]];
+    for (let i = 0; i < sigS.length; i++) st.signals[i] = adjust(i, aspectOf(sigS, i, trains));
     // R（冒進後）は ATS が扱うので速度超過判定には使わない
     const pa = passed >= 0 ? precOnly(passed) : 'G';
     st.sigLimit = pa === 'R' ? Infinity : ASPECT_LIMIT[pa];
@@ -108,7 +134,29 @@ export function createSignalSystem(ctx: GameContext, forceEB: () => void): Signa
       }
       return false;
     },
+    precedingLoop: () => precOnLoop(),
     reset() {
+      // 種別ごとに先行列車の計画・場内信号の上限・待避抑止を作り直す
+      plan = buildPrecedingKeys(route, st.sel.service);
+      precDelay = 0;
+      caps = sigS.map(() => undefined); holds = []; precZones = [];
+      const local = route.services?.find(x => x.id === 'local');
+      route.stations.forEach((sta, k) => {
+        const z = loopZone(sta);
+        if (!z) return;
+        if (!sta.pass) {
+          let home = -1;
+          for (let i = 0; i < sigS.length; i++) if (sigS[i] < z.inFrom) home = i;
+          if (home >= 0) caps[home] = 'Y';
+        }
+        const precStops = local ? local.stops.includes(k) : true;
+        if (precStops) precZones.push(z);
+        if (sta.pass && precStops && plan.depT[k] != null) {
+          holds.push({ zone: z, depT: plan.depT[k], passT: sta.scheduledArrival });
+          // 待避駅より先から始めるステージでは、定刻どおり待避した後の位置にしておく
+          if (st.train.s >= z.outTo) precDelay = Math.max(precDelay, sta.scheduledArrival + 15 - plan.depT[k]);
+        }
+      });
       lastEmit = ''; redWarned.clear();
       passed = -1;
       for (let i = sigS.length - 1; i >= 0; i--) if (sigS[i] <= st.train.s) { passed = i; break; }

@@ -1,11 +1,14 @@
 // ゲーム進行: 状態遷移・走行ステップ・停止判定。演出（音・HUD）はイベント経由
 import {
-  ANNOUNCE_DIST, JOINT_INTERVAL, LIMIT_NOTICE_DIST, NEAR_DIST, NOTCH_EB, NOTCH_MAX, NOTCH_MIN,
+  ANNOUNCE_DIST, DOOR_CLOSE_TIME, ORIGIN_DWELL, START_CLOCK, JOINT_INTERVAL, LIMIT_NOTICE_DIST, NEAR_DIST, NOTCH_EB, NOTCH_MAX, NOTCH_MIN,
   OVERRUN_FAIL, OVERSPEED_MARGIN, STOP_CONFIRM, STOP_ZONE,
 } from '../core/config';
 import type { GameActions, GameContext } from '../core/context';
 import type { CameraMode } from '../core/events';
-import { stepTrain } from '../sim/train';
+import { DEFAULT_PERF, TRAIN_PERF, stepTrain } from '../sim/train';
+import { serviceOf } from '../route/service';
+import type { ServiceId } from '../route/types';
+import { createOvertake } from './overtake';
 import { createReplay } from './replay';
 import { judgeStop, scoreGame } from './scoring';
 import { createSignalSystem } from './signals';
@@ -42,11 +45,24 @@ export function createGame(ctx: GameContext): Game {
 
   const signals = createSignalSystem(ctx, () => setNotch(NOTCH_EB, true));
   const replay = createReplay(ctx, setCamera);
+  const overtake = createOvertake(ctx);
+
+  /** 種別の反映（route は resetState が書き換え済み）。変わったら描画側へ通知 */
+  let appliedService: ServiceId | null = null;
+  function syncService() {
+    ctx.service = serviceOf(route, st.sel.service);
+    ctx.trainEnv.perf = ctx.service ? TRAIN_PERF[ctx.service.kind] : DEFAULT_PERF;
+    if (ctx.service && ctx.service.id !== appliedService) {
+      appliedService = ctx.service.id;
+      events.emit('serviceChange', { service: ctx.service });
+    }
+  }
 
   function reset() {
     replay.stop();
     resetState(st, route);
     signals.reset();
+    syncService();
     events.emit('reset');
   }
 
@@ -67,10 +83,20 @@ export function createGame(ctx: GameContext): Game {
     events.emit('start');
     if (st.state === 'result') reset();
     if (ctx.cameraMode === 'replay') setCamera('cab');
-    setState('run');
+    // 始発駅はドアを開けて停車中から。発車メロディ → 戸閉め → 閉まり切ったら力行で発車
+    const from = st.fromIndex, sta = route.stations[from];
+    st.target = from;
+    // 待避駅から始めるステージは定刻に着いた状態から（後続列車の通過を待つ）
+    const waits = !!ctx.service?.waits?.some(w => w.station === from);
+    const dwell = waits ? Math.max(ORIGIN_DWELL, departureTime(route, from) - DOOR_CLOSE_TIME - sta.scheduledArrival) : ORIGIN_DWELL;
+    st.t -= dwell + DOOR_CLOSE_TIME;
+    st.dwellT = dwell;
+    st.doors = 'open';
+    setState('dwell');
+    events.emit('doorOpen', { index: from, station: sta });
+    if (waits) overtake.onArrive(from);
     const late = st.lateStart > 0 ? `（${st.lateStart}秒遅れ。回復運転せよ）` : '';
-    banner(`出発進行！ ブレーキを緩めて力行${late}`, 3.5);
-    events.emit('depart', { index: st.fromIndex, station: route.stations[st.fromIndex] });
+    banner(`${sta.name} 発車待ち。戸閉め後、出発信号を確認して力行${late}`, 4);
   }
 
   function finish() {
@@ -86,30 +112,41 @@ export function createGame(ctx: GameContext): Game {
     const final = kind === 'overrun' || isFinalStop(route, index, st);
     events.emit('arrive', { index, station, judgement, final });
     if (final) { finish(); return; }
-    // 途中駅: ドア開 → 定刻（遅着なら最低停車時間）で戸閉め → 力行で発車
-    st.dwellT = Math.max(MIN_DWELL, departureTime(route, index) - st.t);
+    // 途中駅: ドア開 → 定刻に閉まり切るよう戸閉め（遅着なら最低停車時間）→ 閉まり切ったら力行で発車
+    st.dwellT = Math.max(MIN_DWELL, departureTime(route, index) - DOOR_CLOSE_TIME - st.t);
     st.stopTimer = 0;
     st.doors = 'open';
     setState('dwell');
     events.emit('doorOpen', { index, station });
+    overtake.onArrive(index);
   }
 
   function depart() {
     const from = st.target;
     st.target = nextStopIndex(route, from);
     setState('run');
-    banner('出発進行！', 2);
+    banner(from === st.fromIndex && st.stops.length === 0 && st.lateStart > 0 ? '出発進行！ 回復運転せよ' : '出発進行！', 2);
     events.emit('depart', { index: from, station: route.stations[from] });
   }
 
   function updateDwell(dt: number) {
     st.t += dt;
+    overtake.update(dt);
     signals.update(dt, false);
     const sta = route.stations[st.target];
     if (st.doors === 'open') {
       if ((st.dwellT -= dt) > 0) return;
-      st.doors = 'closed';
+      st.doors = 'closing';
+      st.doorCloseT = DOOR_CLOSE_TIME;
       events.emit('doorClose', { index: st.target, station: sta });
+      return;
+    }
+    if (st.doors === 'closing') {
+      // 戸閉め中は力行しても動かない
+      if (st.train.notch > 0 && !st.flags['closing' + st.target]) { st.flags['closing' + st.target] = true; banner('戸閉め中。戸閉灯の点灯を待て', 2); }
+      if ((st.doorCloseT -= dt) > 0) return;
+      st.doors = 'closed';
+      events.emit('doorsClosed', { index: st.target, station: sta });
       banner('戸閉め よし。出発信号を確認して力行で発車', 3);
       return;
     }
@@ -152,6 +189,7 @@ export function createGame(ctx: GameContext): Game {
       events.emit('stop', { s: tr.s, notch: n });
     }
     st.t += dt;
+    overtake.update(dt);
     signals.update(dt, true);
 
     // 速度超過（線路の制限と信号現示の制限の低い方）
@@ -209,17 +247,30 @@ export function createGame(ctx: GameContext): Game {
     } else st.stopTimer = 0;
   }
 
-  function select(stageDelta: number, modeDelta: number) {
+  function select(stageDelta: number, modeDelta: number, serviceDelta = 0) {
     if (st.state !== 'title') return;
     const stages = stagesOf(route);
     const si = Math.max(0, stages.findIndex(s => s.id === st.sel.stageId));
     const mi = Math.max(0, MODES.indexOf(st.sel.mode));
-    st.sel = {
-      stageId: stages[(si + stageDelta + stages.length) % stages.length].id,
-      mode: MODES[(mi + modeDelta + MODES.length) % MODES.length],
-    };
+    const svcs = route.services ?? [];
+    let service = st.sel.service, stageId = stages[(si + stageDelta + stages.length) % stages.length].id;
+    if (serviceDelta && svcs.length) {
+      const k = Math.max(0, svcs.findIndex(x => x.id === service));
+      service = svcs[(k + serviceDelta + svcs.length) % svcs.length].id;
+      if (stageId !== 'all') stageId = ''; // 種別が変わると停車駅間が変わるので先頭区間へ（全線通しは維持）
+    }
+    st.sel = { stageId, mode: MODES[(mi + modeDelta + MODES.length) % MODES.length], service };
     reset();
   }
+
+  /** 時間帯に合わせて始発時刻を変える（タイトル・結果画面のときのみ。走行中は時計を飛ばさない） */
+  function syncClock(e?: { timeOfDay: keyof typeof START_CLOCK }) {
+    const c = START_CLOCK[e?.timeOfDay ?? ctx.envState.timeOfDay] ?? START_CLOCK.noon; // 環境側より先に呼ばれるので payload を優先
+    if (c === route.startClock || (st.state !== 'title' && st.state !== 'result')) return;
+    route.startClock = c;
+    if (st.state === 'title') events.emit('reset'); // HUD・時刻表・行路表を描き直す
+  }
+  events.on('envChange', syncClock);
 
   const actions: GameActions = {
     setNotch,
@@ -248,9 +299,12 @@ export function createGame(ctx: GameContext): Game {
     },
     selectStage: d => select(d, 0),
     selectMode: d => select(0, d),
+    selectService: d => select(0, 0, d),
   };
   ctx.actions = actions;
   signals.reset();
+  syncService();
+  syncClock();
 
   const game: Game = {
     actions,

@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import type { Route } from '../route/types';
 import type { Track } from '../route/track';
+import { loopZone } from '../route/service';
 
 export type StructureKind = 'tunnel' | 'viaduct' | 'bridge';
 type Structure = NonNullable<Route['structures']>[number];
@@ -85,7 +86,11 @@ function makeTerrain(route: Route, track: Track): Terrain {
     },
     isCity: (s) => route.scenery.cityZones.some(z => s > z.from && s < z.to),
     nearCrossing: (s, m = 4) => crossings.some(c => Math.abs(s - c.s) < (c.roadWidth ?? 6) / 2 + m),
-    nearStation: (s, m = 0) => route.stations.some(st => s > st.platform.from - m && s < st.platform.to + m),
+    // 2面4線駅は分岐器を含む待避線区間全体
+    nearStation: (s, m = 0) => route.stations.some(st => {
+      const z = loopZone(st);
+      return s > Math.min(st.platform.from, z?.inFrom ?? Infinity) - m && s < Math.max(st.platform.to, z?.outTo ?? -Infinity) + m;
+    }),
     curvature: (s) => {
       const a = track.trackAt(s - 2).phi, b = track.trackAt(s + 2).phi;
       return (b - a) / 4;

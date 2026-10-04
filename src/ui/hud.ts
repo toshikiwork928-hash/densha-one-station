@@ -4,6 +4,7 @@ import type { GameContext } from '../core/context';
 import { $, fmtClock } from '../core/dom';
 import { ASPECT_LABEL, ASPECT_LIMIT } from '../game/preceding';
 import { departureTime } from '../game/state';
+import { serviceOf } from '../route/service';
 import { drawMeter } from './meter';
 
 const fmtHM = (sec: number) => fmtClock(sec);
@@ -16,11 +17,16 @@ export function attachHud(ctx: GameContext): void {
     nextLimit: $('nextLimit'), dist: $('dist'), nextSta: $('nextSta'), banner: $('banner'), notches: $('notches'),
   };
   const distLbl = $('distPanel').querySelector<HTMLElement>('.lbl');
+  // 「定刻 … 着」の「着」を停車中は「発」に切り替える
+  const schedTail = el.sched.nextSibling;
+  /** 停車中（始発・途中駅）は発車時刻が基準 */
+  const dwelling = () => st.state === 'dwell' && st.target >= 0 && st.target !== st.endIndex;
 
   // 追加パネル（信号・ATS・戸閉・時刻表）。index.html は触らずここで生成
   const side = document.createElement('div');
   side.id = 'sidePanel';
   side.innerHTML = `
+    <div class="panel sp-svc" id="svcPanel"></div>
     <div class="panel sp-sig"><div class="lbl">次の信号</div>
       <div class="sigRow"><div class="sigLamps"><i class="l-g"></i><i class="l-y1"></i><i class="l-r"></i><i class="l-y2"></i></div>
       <div><div id="sigTxt">-</div><div class="sub" id="sigDist">&nbsp;</div></div></div>
@@ -32,8 +38,14 @@ export function attachHud(ctx: GameContext): void {
   $('hud').appendChild(side);
   const sx = {
     lamps: side.querySelector<HTMLElement>('.sigLamps')!, sigTxt: $('sigTxt'), sigDist: $('sigDist'), ats: $('atsLine'),
-    door: $('doorLamp'), doorTxt: $('doorTxt'), tt: $<HTMLTableElement>('ttTable'), replay: $('replayTag'),
+    door: $('doorLamp'), doorTxt: $('doorTxt'), tt: $<HTMLTableElement>('ttTable'), replay: $('replayTag'), svc: $('svcPanel'),
   };
+  /** 種別表示（各停・急行・特急、両数） */
+  function renderService() {
+    const v = route.services ? serviceOf(route, st.sel.service) : undefined;
+    sx.svc.hidden = !v;
+    if (v) sx.svc.innerHTML = `<span class="svcBadge svc-${v.id}">${v.name}</span> ${route.stations[route.stations.length - 1].name}行 <span class="sub">${v.cars}両</span>`;
+  }
 
   // 表示対象の駅（次の停車駅。終了後は最後に判定した駅）
   const targetIndex = () => st.target >= 0 ? st.target : route.stations.length - 1;
@@ -42,9 +54,13 @@ export function attachHud(ctx: GameContext): void {
 
   function renderTarget() {
     const sta = route.stations[targetIndex()];
-    el.sched.textContent = fmtClock(route.startClock + sta.scheduledArrival);
+    const dep = dwelling();
+    el.sched.textContent = fmtClock(route.startClock + (dep ? departureTime(route, targetIndex()) : sta.scheduledArrival));
+    if (schedTail && schedTail.nodeType === Node.TEXT_NODE) schedTail.textContent = dep ? ' 発 ' : ' 着 ';
     const p = nextPass();
-    el.nextSta.textContent = `次は ${sta.name}` + (p >= 0 ? `（${route.stations[p].name} 通過）` : '');
+    const v = route.services ? serviceOf(route, st.sel.service) : undefined;
+    el.nextSta.textContent = (v ? `${v.name} ` : '') + (st.state === 'dwell' ? `${sta.name} 停車中` : `次は ${sta.name}` + (p >= 0 ? `（${route.stations[p].name} 通過）` : ''));
+    renderService();
     renderTimetable();
   }
 
@@ -87,10 +103,12 @@ export function attachHud(ctx: GameContext): void {
     sx.ats.textContent = ats.state === 'normal' ? (st.sigLimit < Infinity ? `ATS 正常（信号制限 ${st.sigLimit}）` : 'ATS 正常')
       : ats.state === 'warn' ? `ATS 警報 ${Math.max(0, ats.timer).toFixed(1)}s — B4以上＋確認(A)`
         : `ATS 非常制動 — 停止後 確認(A)で復帰`;
-    const open = st.doors === 'open';
-    sx.door.classList.toggle('on', !open);
-    sx.door.textContent = open ? 'ドア開' : '戸閉';
-    sx.doorTxt.textContent = st.state === 'dwell' ? (open ? ` 戸閉めまで ${Math.ceil(st.dwellT)}秒` : ' 力行で発車') : '';
+    const open = st.doors === 'open', closing = st.doors === 'closing';
+    sx.door.classList.toggle('on', st.doors === 'closed');
+    sx.door.textContent = open ? 'ドア開' : closing ? '戸閉め中' : '戸閉';
+    const ot = st.overtake, waiting = st.state === 'dwell' && !!ot && !ot.cleared && ot.station === st.target;
+    sx.doorTxt.textContent = st.state === 'dwell' ? (open ? ` 戸閉めまで ${Math.ceil(st.dwellT)}秒` : closing ? ' 発車できません' : waiting ? ' 通過待ち' : ' 力行で発車') : '';
+    if (waiting && !open) sx.doorTxt.textContent = ` ${serviceOf(route, ot.passedBy)?.name ?? ''}の通過待ち`;
     sx.replay.classList.toggle('show', ctx.cameraMode === 'replay');
   }
 
@@ -100,7 +118,7 @@ export function attachHud(ctx: GameContext): void {
     const sta = route.stations[targetIndex()];
     el.clock.textContent = fmtClock(now);
     const running = st.state === 'run' || st.state === 'dwell';
-    const remain = sta.scheduledArrival - st.t;
+    const remain = (dwelling() ? departureTime(route, targetIndex()) : sta.scheduledArrival) - st.t;
     if (running && remain < 0) { el.delay.textContent = `(遅れ ${Math.floor(-remain)}秒)`; el.delay.className = 'late'; }
     else { el.delay.textContent = running ? `(あと ${Math.ceil(remain)}秒)` : ''; el.delay.className = 'early'; }
     el.limit.textContent = String(lim);
@@ -114,7 +132,7 @@ export function attachHud(ctx: GameContext): void {
     el.dist.textContent = d > 100 ? `${Math.round(d)} m` : d >= 0 ? `${d.toFixed(2)} m` : `+${(-d).toFixed(2)} m`;
     el.dist.classList.toggle('near', d <= 100);
     if (distLbl) distLbl.textContent = p >= 0 ? `停止位置まで（${route.stations[p].name}通過まで ${Math.max(0, Math.round(route.stations[p].stopS - s))}m）` : '停止位置まで';
-    drawMeter(mctx, vk, lim);
+    drawMeter(mctx, vk, lim, route.lineLimit > 100 ? 140 : 120, route.lineLimit);
     updateSide();
   }
 
@@ -125,7 +143,7 @@ export function attachHud(ctx: GameContext): void {
   events.on('reset', () => { renderNotches(); renderTarget(); });
   events.on('depart', renderTarget);
   events.on('arrive', renderTimetable);
-  events.on('stateChange', renderTimetable);
+  events.on('stateChange', renderTarget);
   events.on('banner', e => showBanner(e.text, e.sec));
   events.on('frame', ({ dt }) => {
     if (bannerTimer > 0 && (bannerTimer -= dt) <= 0) el.banner.classList.remove('show');

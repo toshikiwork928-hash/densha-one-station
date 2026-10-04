@@ -1,6 +1,6 @@
 // ゲームパッド（Gamepad API, standard mapping 想定）→ GameActions。frame ごとにポーリング
 // 十字上下/RB・LB = ノッチ±1, A = 開始・ATS確認, B = 非常(EB)・結果画面でタイトルへ, X = ノッチオフ, Y = 視点,
-// Start = 開始, Back = リプレイ, 十字左右 = ステージ選択, L3 = 1軸レバーモード切替（左スティック上下をマスコン位置に対応）
+// Start = 開始, Back = リプレイ, 十字左右 = ステージ選択, LB/RB = 種別選択（タイトル）, L3 = 1軸レバーモード切替（左スティック上下をマスコン位置に対応）
 import { NOTCH_MAX } from '../core/config';
 import type { GameContext } from '../core/context';
 
@@ -44,6 +44,8 @@ export function attachGamepad(ctx: GameContext): void {
       if (hit(B.RIGHT)) a.selectStage(1);
       if (hit(B.UP)) a.selectMode(-1);
       if (hit(B.DOWN)) a.selectMode(1);
+      if (hit(B.LB)) a.selectService(-1);
+      if (hit(B.RB)) a.selectService(1);
       if (hit(B.BACK)) a.toggleReplay();
       if (hit(B.B)) a.toTitle();
       return;

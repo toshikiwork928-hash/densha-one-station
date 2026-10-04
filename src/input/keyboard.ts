@@ -7,7 +7,7 @@ export function attachKeyboard(actions: GameActions, target: Window = window): (
     // 入力欄（他モジュールの設定 UI など）では無視
     const el = e.target as HTMLElement | null;
     if (el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA')) return;
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(k)) e.preventDefault();
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Tab'].includes(k)) e.preventDefault();
     if (e.repeat) return;
     if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return; // 修飾キー付きは他モジュールのショートカット
     if (k === 'KeyV') { actions.cycleCamera(); return; }
@@ -17,6 +17,7 @@ export function attachKeyboard(actions: GameActions, target: Window = window): (
       else if (k === 'ArrowRight') actions.selectStage(1);
       else if (k === 'ArrowUp') actions.selectMode(-1);
       else if (k === 'ArrowDown') actions.selectMode(1);
+      else if (k === 'Tab' || k === 'KeyK') actions.selectService(1); // 種別（各停 → 急行 → 特急）
       else if (k === 'KeyR') actions.toggleReplay();
       else if (k === 'Escape' || k === 'KeyT') actions.toTitle();
       return;

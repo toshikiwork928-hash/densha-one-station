@@ -13,6 +13,7 @@ import { buildCrossings } from './crossings';
 import { buildTown } from './town-jp';
 import { createCab } from './cab';
 import { createPlayerTrain, type PlayerTrain } from './player-train';
+import { createOvertaking } from './overtaking';
 
 export interface World {
   oncoming: OncomingSystem;
@@ -35,6 +36,7 @@ export function buildWorld(ctx: GameContext): World {
   const oncoming = createOncoming(ctx);
   buildCrossings(ctx, oncoming);
   const player = createPlayerTrain(ctx);
+  createOvertaking(ctx); // [G] 待避の通過列車・待避線の先行各停
   createCab(ctx);
 
   return {

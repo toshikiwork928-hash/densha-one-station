@@ -1,5 +1,5 @@
 // サウンド統括: イベントを購読して各音源モジュールを鳴らす。AudioContext は最初のユーザー操作で生成
-// 構成: engine（バス・残響）/ vvvf（主回路）/ running（走行音）/ brakes（空気）/ station（駅）/ alarms（警報・警笛・踏切）
+// 構成: engine（バス・残響）/ vvvf・resistance（主回路。種別で切替）/ running（走行音）/ brakes（空気）/ station（駅）/ alarms（警報・警笛・踏切）
 //       ambience（天候・すれ違い）/ announce（車内放送 = Web Speech）/ settings（音量保存・UI）
 import { JOINT_INTERVAL } from '../core/config';
 import type { GameContext } from '../core/context';
@@ -7,6 +7,7 @@ import type { EventBus } from '../core/events';
 import type { Station } from '../route/types';
 import { createCore, type AudioCore } from './engine';
 import { createVvvf, type Vvvf } from './vvvf';
+import { createResistance } from './resistance';
 import { createRunning, type Running } from './running';
 import { createBrakes, type Brakes } from './brakes';
 import { createStation, type StationSfx } from './station';
@@ -16,7 +17,7 @@ import { createAnnouncer } from './announce';
 import { createSettings, renderSettingsUi, type SettingsStore } from './settings';
 
 interface Parts {
-  core: AudioCore; vvvf: Vvvf; running: Running; brakes: Brakes; station: StationSfx; alarms: Alarms; ambience: Ambience;
+  core: AudioCore; vvvf: Vvvf; resistance: Vvvf; running: Running; brakes: Brakes; station: StationSfx; alarms: Alarms; ambience: Ambience;
 }
 
 export interface Sfx {
@@ -41,6 +42,7 @@ export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
   const announcer = createAnnouncer();
   let ac: AudioContext | null = null, p: Parts | null = null;
   let doorsOpen = false, fromDwell = false, dwellMelody = false, hornStop: (() => void) | null = null;
+  let lastIdle: Vvvf | null = null;
 
   function applySettings() {
     const s = settings.value;
@@ -66,6 +68,7 @@ export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
       p = {
         core, brakes,
         vvvf: createVvvf(core),
+        resistance: createResistance(core),
         running: createRunning(core, () => ctx.route),
         station: createStation(core, brakes),
         alarms: createAlarms(core),
@@ -83,7 +86,7 @@ export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
     announcer.cancel();
     hornStop?.(); hornStop = null;
     if (!p) return;
-    p.vvvf.silence(); p.running.silence(); p.brakes.silence(); p.station.silence(); p.alarms.silence(); p.ambience.silence();
+    p.vvvf.silence(); p.resistance.silence(); p.running.silence(); p.brakes.silence(); p.station.silence(); p.alarms.silence(); p.ambience.silence();
   }
 
   /** 車内放送: チャイム → 音声 */
@@ -131,7 +134,7 @@ export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
   });
   events.on('result', () => {
     if (!p) return;
-    p.vvvf.silence(); p.alarms.atsBell(false); p.alarms.atsBuzzer(false);
+    p.vvvf.silence(); p.resistance.silence(); p.alarms.atsBell(false); p.alarms.atsBuzzer(false);
     p.core.tone(p.core.voice, 988, .6, .06); p.core.tone(p.core.voice, 784, .9, .06, p.core.now() + .35);
   });
 
@@ -143,6 +146,7 @@ export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
   });
   events.on('oncomingHorn', e => p?.alarms.horn(1.3, { far: Math.max(0, Math.min(1, e.distance / 700)), pitch: 1.03 }));
   events.on('oncomingPass', e => p?.ambience.pass(e.proximity));
+  events.on('overtakePass', e => p?.ambience.pass(e.proximity)); // [G] 待避中の通過列車
   events.on('envChange', e => p?.ambience.setEnv(e));
   events.on('crossing', e => p?.alarms.crossing(e.id, e.active, e.distance, ctx.state.train.v));
   events.on('tunnel', e => p?.running.setTunnel(e.inside));
@@ -158,7 +162,10 @@ export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
     const tr = ctx.state.train, st = e.state;
     if (st === 'title') return;
     const live = st === 'run' || st === 'dwell';
-    p.vvvf.update(live ? tr.v : 0, live ? tr.notch : 0);
+    // 主回路音: 旧型通勤車（commuter-old）は抵抗制御、それ以外（未選択含む）は VVVF
+    const [drive, idle] = ctx.service?.kind === 'commuter-old' ? [p.resistance, p.vvvf] : [p.vvvf, p.resistance];
+    if (idle !== lastIdle) { idle.silence(); lastIdle = idle; }
+    drive.update(live ? tr.v : 0, live ? tr.notch : 0);
     p.running.update(tr.v, tr.s);
     p.brakes.update(e.dt, tr.v, tr.notch, live);
     p.alarms.update(e.dt);

@@ -1,8 +1,11 @@
-// 自列車の外観（運転台視点以外で表示）
+// 自列車の外観（運転台視点以外で表示）。運行種別ごとに車種・両数を組み替え、2面4線駅では待避線の経路に沿う
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import { onLight } from './batch';
-import { createEmuKit, placeCar, type CarKind } from './emu';
+import { placeCar } from './emu';
+import { CAR_LEN, createTrainSet, setTrainNight, type TrainCar } from './train-models';
+
+export { formation } from './train-models';
 
 export interface PlayerTrain {
   readonly group: THREE.Group;
@@ -10,39 +13,46 @@ export interface PlayerTrain {
   readonly cars: number;
 }
 
-const CAR_LEN = 20;
-
-/** n 両編成の車種並び（両端 = 先頭車、所々にパンタ付き） */
-export function formation(n: number): CarKind[] {
-  return Array.from({ length: n }, (_, i): CarKind => i === 0 || i === n - 1 ? 'head' : i % 3 === 2 ? 'pan' : 'mid');
-}
-
 export function createPlayerTrain(ctx: GameContext): PlayerTrain {
   const { scene, track, route } = ctx;
-  const n = Math.max(2, Math.round(route.trainLength / CAR_LEN));
-  const last = route.stations[route.stations.length - 1]?.name ?? '';
-  const kit = createEmuKit({ carLen: CAR_LEN, dest: last, renderer: ctx.renderer });
   const group = new THREE.Group(); group.name = 'playerTrain'; scene.add(group);
-  const cars = formation(n).map((k, i) => {
-    const c = kit.makeCar(k, i === 0 ? 'front' : i === n - 1 ? 'rear' : 'mid');
-    group.add(c); return c;
-  });
+  let cars: TrainCar[] = [];
+  let built = '';
+
+  /** 種別に合わせて編成を作り直す（車種・両数・種別表示） */
+  function build() {
+    const svc = ctx.service;
+    const n = svc?.cars ?? Math.max(2, Math.round(route.trainLength / CAR_LEN));
+    const kind = svc?.kind ?? 'commuter-new';
+    const key = `${kind}:${n}:${svc?.name ?? ''}`;
+    if (key === built) return;
+    built = key;
+    for (const c of cars) group.remove(c.object);
+    const last = route.stations[route.stations.length - 1]?.name ?? '';
+    cars = createTrainSet(kind, n, ctx.renderer, { dest: last, label: svc?.name });
+    for (const c of cars) group.add(c.object);
+  }
+  build();
+  ctx.events.on('serviceChange', build);
+  ctx.events.on('reset', build);
 
   const bogie = CAR_LEN / 2 - .25 - 2.6;
   // 線路を照らす前照灯の光源は環境担当（env/night-lights.ts）。ここは灯具の発光・窓明かりのみ
-  onLight(ctx, (n, t) => kit.setNight(Math.max(n, t)));
+  onLight(ctx, (n, t) => setTrainNight(Math.max(n, t)));
 
   const p1 = new THREE.Vector3(), p2 = new THREE.Vector3();
   ctx.events.on('frame', () => {
     const s = ctx.state.train.s;
     group.visible = ctx.cameraMode !== 'cab';
-    if (group.visible) {
-      cars.forEach((c, i) => {
-        const sc = s - CAR_LEN / 2 - i * CAR_LEN;
-        p1.copy(track.at(sc + bogie, 0, .38)); p2.copy(track.at(sc - bogie, 0, .38));
-        placeCar(c, p1, p2);
-      });
+    if (!group.visible) return;
+    let sc = s;
+    for (const c of cars) {
+      sc -= c.length / 2;
+      const a = sc + bogie, b = sc - bogie;
+      p1.copy(track.pathAt(a, 0, .38)); p2.copy(track.pathAt(b, 0, .38));
+      placeCar(c.object, p1, p2);
+      sc -= c.length / 2;
     }
   });
-  return { group, cars: n };
+  return { group, get cars() { return cars.length; } };
 }

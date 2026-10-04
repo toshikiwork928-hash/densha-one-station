@@ -1,6 +1,7 @@
 // カメラ: 運転台視点（走行揺れ付き）/ 外部視点（後方追従・側面）/ リプレイ（沿線カメラの切替演出）
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
+import { loopZone } from '../route/service';
 
 export interface CabCamera {
   update(time: number): void;
@@ -40,7 +41,7 @@ export function createCabCamera(ctx: GameContext): CabCamera {
   function nextShot(s: number, v: number, time: number): Shot {
     const L = route.trainLength;
     const sta = nearStation(s);
-    if (sta && v > 1) return { kind: 'platform', s: sta.stopS + 12, lat: -4.2, h: 2.4, t0: time, fov: 40 };
+    if (sta && v > 1) return { kind: 'platform', s: sta.stopS + 12, lat: -4.2 + (loopZone(sta)?.lat ?? 0), h: 2.4, t0: time, fov: 40 };
     const kind = SHOT_ORDER[shotN++ % SHOT_ORDER.length];
     const ahead = Math.max(120, v * 7);
     const side = shotN % 2 ? -1 : 1;
@@ -54,7 +55,8 @@ export function createCabCamera(ctx: GameContext): CabCamera {
   }
 
   function updateReplay(s: number, v: number, time: number) {
-    const L = route.trainLength, at = ctx.track.at;
+    // 列車に追従するショットは自列車の走行線（待避線）基準
+    const L = route.trainLength, at = ctx.track.at, pat = ctx.track.pathAt;
     const dur = time - (shot?.t0 ?? 0);
     const fixedPassed = shot && (shot.kind === 'trackside' || shot.kind === 'low' || shot.kind === 'platform') && s - L > shot.s + 10;
     const moveDone = shot && (shot.kind === 'chase' || shot.kind === 'heli') && dur > 7;
@@ -64,17 +66,17 @@ export function createCabCamera(ctx: GameContext): CabCamera {
     const mid = s - L * .35;
     switch (shot.kind) {
       case 'trackside': case 'low': case 'platform':
-        camPos.copy(at(shot.s, shot.lat, shot.h));
-        camLook.copy(at(Math.min(s - 10, shot.s + 30), 0, 2));
+        camPos.copy(shot.kind === 'low' ? pat(shot.s, shot.lat, shot.h) : at(shot.s, shot.lat, shot.h));
+        camLook.copy(pat(Math.min(s - 10, shot.s + 30), 0, 2));
         break;
       case 'chase':
-        camPos.copy(at(s - L - 28, shot.lat, shot.h));
-        camLook.copy(at(s + 40, 0, 1.5));
+        camPos.copy(pat(s - L - 28, shot.lat, shot.h));
+        camLook.copy(pat(s + 40, 0, 1.5));
         break;
       case 'heli': {
         const a = dur * .12;
-        camPos.copy(at(mid + Math.cos(a) * 60, shot.lat + Math.sin(a) * 20, shot.h));
-        camLook.copy(at(mid, 0, 1));
+        camPos.copy(pat(mid + Math.cos(a) * 60, shot.lat + Math.sin(a) * 20, shot.h));
+        camLook.copy(pat(mid, 0, 1));
         break;
       }
     }
@@ -82,7 +84,8 @@ export function createCabCamera(ctx: GameContext): CabCamera {
 
   const cam: CabCamera = {
     update(time) {
-      const { s, v } = ctx.state.train, at = ctx.track.at, mode = ctx.cameraMode;
+      // 自列車の走行線（2面4線駅では待避線）に沿う
+      const { s, v } = ctx.state.train, at = ctx.track.pathAt, mode = ctx.cameraMode;
       const L = route.trainLength;
       if (mode === 'cab') {
         const shake = Math.min(1, v / 22);

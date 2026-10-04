@@ -53,20 +53,26 @@ export function createNightLights(ctx: GameContext): NightLights {
   const platSpots: { sc: number; pos: THREE.Vector3[] }[] = [];
 
   // 駅ホーム: 屋根下に蛍光灯列、光源は駅ごとに2灯
+  // 2面4線駅はホームが待避線側（lat0 だけずれる）で、対向側の外にもホーム
   for (const sta of route.stations) {
     const s0 = sta.platform.from, s1 = sta.platform.to, len = s1 - s0;
-    const sx = sta.platform.side === 'L' ? -1 : 1, lat = sx * 4.2;
+    const sx0 = sta.platform.side === 'L' ? -1 : 1;
+    const L1 = Math.max(...route.tracks), lp = sta.loop?.lat ?? 0;
+    const sides: [number, number][] = sta.loop ? [[sx0, lp], [-sx0, L1 - lp]] : [[sx0, 0]];
     const rl = len * .6, sc = (s0 + s1) / 2;
-    for (let z = -rl / 2 + 3; z <= rl / 2 - 3; z += 8) {
-      bulbs.push({ s: sc + z, lat, y: 4.1, w: .18, d: 1.6 });
-      pools.push({ s: sc + z, lat: sx * 3.6, y: 1.13, r: 7 });
-    }
-    platSpots.push({ sc, pos: [-.22, .22].map(k => track.at(sc + rl * k, lat, 3.9)) });
+    sides.forEach(([sx, lat0], k) => {
+      const lat = lat0 + sx * 4.2;
+      for (let z = -rl / 2 + 3; z <= rl / 2 - 3; z += 8) {
+        bulbs.push({ s: sc + z, lat, y: 4.1, w: .18, d: 1.6 });
+        pools.push({ s: sc + z, lat: lat0 + sx * 3.6, y: 1.13, r: 7 });
+      }
+      if (k === 0) platSpots.push({ sc, pos: [-.22, .22].map(q => track.at(sc + rl * q, lat, 3.9)) });
+    });
   }
   // 沿線の街灯（左側の地上区間のみ。ホーム・トンネル・高架・橋梁・踏切・築堤は除く）。y は地面基準の絶対高さ
   const T = getTerrain(ctx);
   const posts: { s: number; lat: number; g: number }[] = [];
-  const inPlatform = (s: number) => route.stations.some(st => s > st.platform.from - 15 && s < st.platform.to + 15);
+  const inPlatform = (s: number) => T.nearStation(s, 15); // 待避線駅は分岐器区間も除く
   for (let s = route.extent.from + 30; s < route.extent.to; s += 75) {
     if (inPlatform(s) || T.structureAt(s, 30) || T.nearCrossing(s, 8)) continue;
     const g = T.terrainY(s, -6.4);
@@ -117,8 +123,8 @@ export function createNightLights(ctx: GameContext): NightLights {
     update(lamps, h) {
       const tr = ctx.state.train;
       head.intensity = 45 * h;
-      head.position.copy(track.at(tr.s + .5, 0, 1.6));
-      head.target.position.copy(track.at(tr.s + 70, 0, 0));
+      head.position.copy(track.pathAt(tr.s + .5, 0, 1.6)); // 待避線では走行線に沿う
+      head.target.position.copy(track.pathAt(tr.s + 70, 0, 0));
       head.target.updateMatrixWorld();
       let best = platSpots[0], bd = Infinity;
       for (const p of platSpots) { const d = Math.abs(p.sc - tr.s - 60); if (d < bd) { bd = d; best = p; } }

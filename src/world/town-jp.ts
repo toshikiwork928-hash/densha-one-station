@@ -6,6 +6,7 @@ import type { GameContext } from '../core/context';
 import { createRng, type Rng } from '../core/rng';
 import { ChunkedBatch, GeoBatch, M, P, basePart, onLight } from './batch';
 import { cullByDistance } from './cull';
+import { loopZone } from '../route/service';
 import { getTerrain, hash } from './terrain';
 
 /** 木を置く位置（素材読込後に scenery.ts が配置） */
@@ -320,6 +321,10 @@ export function buildTown(ctx: GameContext): TownResult {
   };
 
   const platSide = (sd: number, s: number, m: number) => route.stations.some(st => (st.platform.side === 'L' ? -1 : 1) === sd && s > st.platform.from - m && s < st.platform.to + m);
+  /** 2面4線駅の待避線区間（両側。対向側ホーム・分岐器・門型架線柱の分） */
+  const loopNear = (s: number, m: number) => route.stations.some(st => { const z = loopZone(st); return !!z && s > z.inFrom - m && s < z.outTo + m; });
+  /** 待避線駅は駅舎が待避線の分だけ外へずれる */
+  const stationDepth = (s: number) => route.stations.some(st => st.loop && s > st.platform.from - 25 && s < st.platform.to + 25) ? 40 : 32;
   const tunnelNear = (s: number, m: number) => T.structureAt(s, m)?.kind === 'tunnel';
   const zone = (s: number): 'city' | 'suburb' | 'rural' => {
     if (T.isCity(s)) return 'city';
@@ -331,7 +336,7 @@ export function buildTown(ctx: GameContext): TownResult {
   const lotFree = (sd: number, a: number, b: number, d: number) => {
     for (let s = a; s <= b; s += 3) {
       if (T.nearCrossing(s, 4) || tunnelNear(s, 80) || T.groundY(s) < -.3) return false;
-      if (d < 32 && platSide(sd, s, 25)) return false;
+      if (d < stationDepth(s) && platSide(sd, s, 25)) return false;
     }
     return true;
   };
@@ -379,7 +384,7 @@ export function buildTown(ctx: GameContext): TownResult {
 
   for (const sd of [-1, 1]) {
     // ---- 線路沿いの道路・電柱・電線・柵 ----
-    const roadOk = (s: number) => !tunnelNear(s, 30) && T.groundY(s) > -.3 && !platSide(sd, s, 20) && !T.nearCrossing(s, -1);
+    const roadOk = (s: number) => !tunnelNear(s, 30) && T.groundY(s) > -.3 && !platSide(sd, s, 20) && !loopNear(s, 20) && !T.nearCrossing(s, -1);
     const dA = 10.5, dB = 15.5, la = latOf(sd, dA), lb = latOf(sd, dB);
     for (let s = S0; s < S1; s += 40) {
       const e = Math.min(S1, s + 40);

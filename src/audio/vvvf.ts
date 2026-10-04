@@ -130,7 +130,9 @@ export function createVvvf(core: AudioCore, dest: AudioNode = core.run): Vvvf {
     // 全体音量: トルク依存。高速域（定出力域）では電流が減って少し静かに
     const speedShape = .55 + .45 * Math.min(1, kmh / 30);
     const fieldWeak = kmh > 75 ? Math.max(.6, 1 - (kmh - 75) / 80) : 1;
-    const vol = on ? .085 * Math.pow(tq, .55) * speedShape * fieldWeak : 0;
+    // 起動直後（非同期域の低速）はうるさく感じるので 35% から 20km/h までに滑らかに 100% へ
+    const lt = Math.min(1, kmh / 20), lowFade = .35 + .65 * lt * lt * (3 - 2 * lt);
+    const vol = on ? .085 * Math.pow(tq, .55) * speedShape * fieldWeak * lowFade : 0;
     // ゲート ON は速く、OFF は少し余韻
     out.gain.setTargetAtTime(vol, now, on && !active ? .03 : on ? .06 : .09);
     active = on;

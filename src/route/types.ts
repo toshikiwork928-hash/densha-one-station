@@ -26,6 +26,31 @@ export interface Station {
   pass?: boolean;
   /** 停止位置目標の両数表示 */
   stopMarkerCars?: number;
+  /** 2面4線駅: 外側に待避線（ホームは待避線側）。停車列車は分岐器で待避線へ入り、通過列車は本線を通る */
+  loop?: StationLoop;
+}
+
+/** 2面4線の待避線。lat は自線待避線の横位置（左が負、例 -4.2）。対向側は route.tracks の対向線から鏡像に +lat 側へ */
+export interface StationLoop { lat: number; turnoutLength: number; turnoutLimitKmh: number }
+
+/** 運行種別（プレイヤーが選ぶ） */
+export type ServiceId = 'local' | 'express' | 'limited';
+/** 車両の見た目の種類（world/train-models.ts が生成） */
+export type TrainKind = 'commuter-new' | 'commuter-old' | 'limited';
+export interface ServiceSpec {
+  id: ServiceId;
+  /** 表示名（各停 / 急行 / 特急） */
+  name: string;
+  cars: number;
+  kind: TrainKind;
+  /** 停車駅（stations の index）。それ以外は通過 */
+  stops: number[];
+  /** 停車駅ごとの定刻到着・発車 [s]（stations の index をキー） */
+  timetable: Record<number, { arr: number; dep?: number }>;
+  /** 線区最高速度 [km/h]（種別ごと。未指定なら route.lineLimit） */
+  lineLimit?: number;
+  /** 待避（この駅で後続の通過列車を待つ）: 駅 index と、通過していく列車の種別 */
+  waits?: { station: number; passedBy: ServiceId }[];
 }
 
 /** 線路脇の標識。lat は左が負 */
@@ -47,6 +72,11 @@ export interface OncomingSpec {
   kmh: number;
   /** 走行線の横位置 */
   lat: number;
+  /** 車両の種類（未指定なら world/oncoming.ts が順に 各停/急行/特急 を割り当て） */
+  kind?: TrainKind;
+  /** 種別表示（各停/急行/特急）と行先 */
+  label?: string;
+  dest?: string;
 }
 
 export interface Route {
@@ -76,6 +106,8 @@ export interface Route {
   /** 沿線景観のヒント */
   scenery: { cityZones: { from: number; to: number }[]; endBlockS?: number };
   oncoming: OncomingSpec[];
+  /** 運行種別（未指定なら従来どおり stations の pass/scheduledArrival を使う） */
+  services?: ServiceSpec[];
   /** [A] 閉そく信号（自線左側）。aspect は A のロジックが決める */
   signals?: { id: string; s: number }[];
   /** [C] 踏切（中心位置 s） */

@@ -6,6 +6,12 @@ import { getBest, submitScore } from '../game/ranking';
 import type { GameResult } from '../game/scoring';
 import { safetyDeductions } from '../game/scoring';
 import { MODE_LABEL, findStage, stagesOf, type GameMode } from '../game/state';
+import { serviceOf } from '../route/service';
+import type { ServiceSpec } from '../route/types';
+
+/** 種別の説明（停車駅・編成） */
+const svcDesc = (route: GameContext['route'], v: ServiceSpec) =>
+  `${v.cars}両・${v.stops.length === route.stations.length ? '各駅に停車' : v.stops.length === 2 ? '途中駅すべて通過' : `${route.stations.filter((_, i) => !v.stops.includes(i)).map(x => x.name).join('・')} 通過`}`;
 
 const MODE_DESC: Record<GameMode, string> = {
   normal: '停止位置・定時・安全で採点',
@@ -43,7 +49,11 @@ export function attachOverlay(ctx: GameContext): void {
       stops.length ? `途中停車 ${stops.join('・')}` : '',
       passes.length ? `<b>${passes.join('・')} は通過</b>` : '',
     ].filter(Boolean).join('、');
-    const best = getBest(route.id, stage.id, st.sel.mode);
+    const best = getBest(route.id, stage.id, st.sel.mode, st.sel.service);
+    const svc = serviceOf(route, st.sel.service);
+    const svcs = (route.services ?? []).map(v => `<button data-service="${v.id}" class="svc-${v.id} ${v.id === svc?.id ? 'on' : ''}">${v.name}<small>${svcDesc(route, v)}</small></button>`).join('');
+    const wait = svc?.waits?.filter(w => w.station > stage.from && w.station < stage.to)
+      .map(w => `<b>${route.stations[w.station].name}で${serviceOf(route, w.passedBy)?.name ?? ''}の通過待ち</b>（出発信号が進行になってから発車）`).join('、') ?? '';
     const stages = stagesOf(route).map(s => `<button data-stage="${s.id}" class="${s.id === stage.id ? 'on' : ''}">${s.id === 'all' ? '全線通し' : s.label}${s.id === 'all' ? `<small>${route.stations[s.from].name} → ${route.stations[s.to].name}</small>` : ''}</button>`).join('');
     const modes = (Object.keys(MODE_LABEL) as GameMode[]).map(m => `<button data-mode="${m}" class="${m === st.sel.mode ? 'on' : ''}">${MODE_LABEL[m]}<small>${MODE_DESC[m]}</small></button>`).join('');
     overlay.classList.remove('hidden');
@@ -52,9 +62,10 @@ export function attachOverlay(ctx: GameContext): void {
     <div class="route"><span>${first.name}</span><span class="bar"></span><span>${last.name}</span></div>
     <div class="tabs" role="tablist">${TABS.map(([k, n]) => `<button type="button" role="tab" data-tab="${k}">${n}</button>`).join('')}</div>
     <div class="tabPane" data-pane="stage">
+      ${svcs ? `<div class="selLbl">種別（Tab）</div><div class="sel" id="selService">${svcs}</div>` : ''}
       <div class="selLbl">ステージ（← →）</div><div class="sel" id="selStage">${stages}</div>
       <div class="selLbl">モード（↑ ↓）</div><div class="sel" id="selMode">${modes}</div>
-      <p class="brief">${first.name}を定刻に発車し、${last.name}の<b>停止位置ピッタリ</b>に<b>定刻どおり</b>止めよう。${notes ? notes + '。' : ''}信号（YG 65 / Y 45 / R 停止）に従うこと。</p>
+      <p class="brief">${first.name}を定刻に発車し、${last.name}の<b>停止位置ピッタリ</b>に<b>定刻どおり</b>止めよう。${notes ? notes + '。' : ''}${wait ? wait + '。' : ''}信号（YG 65 / Y 45 / R 停止）に従うこと。</p>
       <div class="best">${best ? `自己ベスト ${best.total}点（${best.rank}）${best.date}` : '自己ベスト なし'}</div>
     </div>
     <div class="tabPane" data-pane="env" hidden></div>
@@ -62,6 +73,7 @@ export function attachOverlay(ctx: GameContext): void {
     <div class="tabPane" data-pane="keys" hidden>
       <table class="keys">
         <tr><td><kbd>↑</kbd> <kbd>W</kbd> / <kbd>↓</kbd> <kbd>S</kbd></td><td>力行側 / ブレーキ側へ1段</td></tr>
+        <tr><td><kbd>Tab</kbd> / <kbd>← →</kbd> / <kbd>↑ ↓</kbd></td><td>タイトルで 種別 / ステージ / モード</td></tr>
         <tr><td><kbd>N</kbd> / <kbd>Space</kbd></td><td>ノッチオフ / 非常ブレーキ（減点）</td></tr>
         <tr><td><kbd>A</kbd></td><td>ATS 確認（B4 以上で）</td></tr>
         <tr><td><kbd>H</kbd> / <kbd>V</kbd></td><td>警笛（長押し） / 視点切替</td></tr>
@@ -79,6 +91,10 @@ export function attachOverlay(ctx: GameContext): void {
     card.querySelectorAll<HTMLButtonElement>('[data-stage]').forEach(b => b.onclick = () => {
       const list = stagesOf(route), cur = list.findIndex(s => s.id === st.sel.stageId), to = list.findIndex(s => s.id === b.dataset.stage);
       ctx.actions.selectStage(to - cur);
+    });
+    card.querySelectorAll<HTMLButtonElement>('[data-service]').forEach(b => b.onclick = () => {
+      const list = route.services ?? [], cur = list.findIndex(v => v.id === st.sel.service), to = list.findIndex(v => v.id === b.dataset.service);
+      ctx.actions.selectService(to - cur);
     });
     card.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach(b => b.onclick = () => {
       const list = Object.keys(MODE_LABEL), cur = list.indexOf(st.sel.mode), to = list.indexOf(b.dataset.mode!);
@@ -112,10 +128,11 @@ export function attachOverlay(ctx: GameContext): void {
       ...r.passes.map(p => ({ i: p.index, html: `<tr><td>${route.stations[p.index].name}</td><td>${p.wrongStop ? '<span style="color:#ff7a6a">誤停車</span>' : '通過'}</td><td>${sgn(p.delay)}秒</td><td>-</td></tr>` })),
     ].sort((a, b) => a.i - b.i).map(x => x.html).join('');
     const ded = safetyDeductions(st).map(d => `${d.label} -${Math.round(d.pts)}`).join(' / ') || 'なし';
-    const best = getBest(route.id, r.stageId, r.mode);
+    const best = getBest(route.id, r.stageId, r.mode, r.service);
+    const svcName = route.services ? `${serviceOf(route, r.service)?.name ?? ''}・` : '';
     overlay.classList.remove('hidden');
     card.innerHTML = `
-    <h1>${r.kind === 'overrun' ? '失格' : `${sta.name} 到着`}<small>${stage.id === 'all' ? '全線通し' : stage.label}・${MODE_LABEL[r.mode]}モード</small></h1>
+    <h1>${r.kind === 'overrun' ? '失格' : `${sta.name} 到着`}<small>${svcName}${stage.id === 'all' ? '全線通し' : stage.label}・${MODE_LABEL[r.mode]}モード</small></h1>
     <div class="rank ${r.rank}">${r.rank}</div>${note}
     <table class="res">
       <tr><td>停止位置誤差</td><td>${errTxt}</td></tr>
@@ -143,9 +160,9 @@ export function attachOverlay(ctx: GameContext): void {
   });
   events.on('assetsReady', () => { if (st.state === 'title') showTitle(); });
   events.on('reset', () => { if (st.state === 'title') showTitle(); });
-  events.on('stateChange', ({ to }) => { if (to === 'run') overlay.classList.add('hidden'); });
+  events.on('stateChange', ({ to }) => { if (to === 'run' || to === 'dwell') overlay.classList.add('hidden'); });
   events.on('result', r => {
-    const rec = r.kind === 'stop' ? submitScore(route.id, r.stageId, r.mode, r.total, r.rank) : { isNew: false };
+    const rec = r.kind === 'stop' ? submitScore(route.id, r.stageId, r.mode, r.total, r.rank, r.service) : { isNew: false };
     lastRecord = { isNew: rec.isNew };
     showResult(r);
   });

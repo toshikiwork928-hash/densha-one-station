@@ -31,6 +31,8 @@ export interface GameActions {
   /** [A] タイトルでステージ/モード選択（delta で前後へ） */
   selectStage(delta: number): void;
   selectMode(delta: number): void;
+  /** タイトルで運行種別選択（各停・急行・特急） */
+  selectService(delta: number): void;
 }
 
 export interface GameContext {
@@ -53,6 +55,8 @@ export interface GameContext {
   /** [B] 連続的な明るさ係数（環境モジュールが毎フレーム更新。時間帯の切替に追従して滑らかに変化）
    *  night: 0 = 昼 .. 1 = 夜（窓明かり・看板・灯具の点灯度）、tunnel: 0..1 自列車がトンネル内 */
   light: { night: number; tunnel: number };
+  /** 選択中の運行種別（未選択・旧路線では undefined）。音や車両外観の切替に使う */
+  service?: import('../route/types').ServiceSpec;
   /** [A] 現在のカメラモード */
   cameraMode: CameraMode;
   /** game/loop.ts が設定 */

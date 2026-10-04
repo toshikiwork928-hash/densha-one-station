@@ -1,6 +1,7 @@
 // 線形データから trackAt(s) を生成する。曲線・勾配は任意個数に対応
 import * as THREE from 'three';
 import type { Route } from './types';
+import { playerPathLat } from './service';
 
 export interface TrackPoint {
   x: number;
@@ -24,6 +25,10 @@ export interface Track {
   limitAt(s: number): number;
   /** 線形の総延長 */
   length: number;
+  /** 自列車の走行位置の横ずれ（2面4線駅の待避線。種別により変わる） */
+  pathLat(s: number): number;
+  /** 自列車の走行線基準の座標（lat は走行線からの相対） */
+  pathAt(s: number, lat: number, y: number): THREE.Vector3;
 }
 
 interface Piece { s0: number; s1: number; x0: number; z0: number; phi0: number; seg: Route['segments'][number] }
@@ -67,9 +72,11 @@ export function buildTrack(route: Route): Track {
     return { x: p.x, y: elevation(q), z: p.z, phi: p.phi, rx: Math.cos(p.phi), rz: Math.sin(p.phi) };
   }
 
+  // 重なる制限は低い方（route.limits は種別適用で書き換わる）
   const limitAt = (q: number): number => {
-    for (const L of route.limits) if (q >= L.from && q < L.to) return L.kmh;
-    return route.lineLimit;
+    let v = route.lineLimit;
+    for (const L of route.limits) if (q >= L.from && q < L.to && L.kmh < v) v = L.kmh;
+    return v;
   };
   const gradeAt = (q: number): number => {
     for (const g of grads) if (q >= g.from && q < g.to) return g.permil;
@@ -79,7 +86,9 @@ export function buildTrack(route: Route): Track {
     const t = trackAt(q);
     return new THREE.Vector3(t.x + t.rx * lat, y + t.y, t.z + t.rz * lat);
   };
-  return { trackAt, at, gradeAt, limitAt, length: total };
+  const pathLat = (q: number) => playerPathLat(route, q);
+  const pathAt = (q: number, lat: number, y: number) => at(q, lat + pathLat(q), y);
+  return { trackAt, at, gradeAt, limitAt, length: total, pathLat, pathAt };
 }
 
 function evalPiece(p: Piece, q: number): { x: number; z: number; phi: number } {

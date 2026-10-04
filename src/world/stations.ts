@@ -35,14 +35,17 @@ function nameTex(sta: Station, prevName: string, nextName: string): THREE.Canvas
   });
 }
 
-export function buildStation(ctx: GameContext, sta: Station, prevName: string, nextName: string): THREE.Group {
+/** lat = ホームに面する線路の横位置（2面4線駅は待避線）、side = ホームの側、minimal = 駅舎・駅前広場を作らない（対向側ホーム） */
+export interface StationBuildOpts { lat?: number; side?: 'L' | 'R'; minimal?: boolean }
+
+export function buildStation(ctx: GameContext, sta: Station, prevName: string, nextName: string, opt: StationBuildOpts = {}): THREE.Group {
   const { rng: rnd, track } = ctx;
   const s0 = sta.platform.from, s1 = sta.platform.to;
   const len = s1 - s0, sc = (s0 + s1) / 2, t = track.trackAt(sc);
   // 右側ホームは左右反転（x と向きを反転）
-  const sx = sta.platform.side === 'L' ? 1 : -1;
+  const sx = (opt.side ?? sta.platform.side) === 'L' ? 1 : -1;
   const X = (x: number) => sx * x; // ホーム側を負とする横位置
-  const grp = new THREE.Group(); grp.position.copy(track.at(sc, 0, 0)); grp.rotation.y = -t.phi; ctx.scene.add(grp);
+  const grp = new THREE.Group(); grp.position.copy(track.at(sc, opt.lat ?? 0, 0)); grp.rotation.y = -t.phi; ctx.scene.add(grp);
   const plat = new THREE.Mesh(new THREE.BoxGeometry(5, 1.1, len), platMat); plat.position.set(X(-(1.6 + 2.5)), .55, 0); grp.add(plat);
   const b = new GeoBatch();
   const box = (x: number, y: number, z: number, w: number, h: number, d: number, col: number) => b.add('body', P.box, M(X(x), y, z, 0, w, h, d), col);
@@ -77,7 +80,7 @@ export function buildStation(ctx: GameContext, sta: Station, prevName: string, n
   const signs: number[] = [-len * .3, 0, len * .3];
   for (const z of signs) for (const dz of [-1.5, 1.5]) box(-4.0, 1.9, z + dz, .08, 1.6, .08, 0x777d84);
   // 人（ホーム上、停車駅のみ多め）
-  const n = sta.pass ? 6 : 22;
+  const n = opt.minimal ? 10 : sta.pass && !sta.loop ? 6 : 22;
   for (let k = 0; k < n; k++) {
     const z = (rnd() - .5) * len * .8, x = -(3.0 + rnd() * 2.8);
     b.parent = new THREE.Matrix4().makeTranslation(0, 1.1, 0);
@@ -87,6 +90,7 @@ export function buildStation(ctx: GameContext, sta: Station, prevName: string, n
 
   // 駅舎・駅前広場（ホーム裏、中央付近）
   const bw = 26, bd = 10, bx = -(7.2 + bd / 2);
+  if (!opt.minimal) {
   b.add('body', P.plane, M(X(-21), .04, 0, 0, 28, len * .9, 1, -Math.PI / 2), 0x6a6c70); // 広場の舗装
   for (let z = -len * .3; z < len * .3; z += 3) box(-28, .06, z, 4.5, .02, .1, 0xeeeeee); // 駐車枠
   b.add('body', P.boxB, M(X(bx), 0, 0, 0, bd, 7.5, bw), 0xe8e4da);
@@ -106,6 +110,11 @@ export function buildStation(ctx: GameContext, sta: Station, prevName: string, n
   // 駐輪場
   box(-12, 2.1, -len * .3, 3, .06, 14, 0x9aa4ae);
   for (let z = -len * .3 - 6; z < -len * .3 + 6; z += .6) box(-12, .5, z, 1.6, .9, .05, [0x333333, 0x9a2a2a, 0x2a4a8a, 0xcccccc][Math.floor(rnd() * 4)]);
+  } else {
+    // 対向側ホーム: 跨線橋の階段口（簡易）
+    box(-4.6, 2.3, len * .18, 2.2, 2.4, 9, 0xd8d4ca);
+    box(-4.6, 3.6, len * .18, 2.6, .2, 9.6, 0x6b7680);
+  }
   b.build({ body: bodyMat }, grp);
 
   // 駅名標（ホーム）・駅舎の看板
@@ -121,10 +130,12 @@ export function buildStation(ctx: GameContext, sta: Station, prevName: string, n
   });
   const bsMat = new THREE.MeshLambertMaterial({ map: bTex, emissive: 0xffffff, emissiveMap: bTex, emissiveIntensity: .05 });
   // 駅舎の正面看板（広場側）と線路側
+  if (!opt.minimal) {
   const front = new THREE.Mesh(new THREE.PlaneGeometry(9, 1.7), bsMat);
   front.position.set(X(bx - bd / 2 - .05), 6.4, 0); front.rotation.y = -sx * Math.PI / 2; grp.add(front);
   const back = new THREE.Mesh(new THREE.PlaneGeometry(9, 1.7), bsMat);
   back.position.set(X(bx + bd / 2 + .05), 6.4, 0); back.rotation.y = sx * Math.PI / 2; grp.add(back);
+  }
 
   onLight(ctx, f => { signMat.emissiveIntensity = bsMat.emissiveIntensity = .05 + f * .75; });
   return grp;
@@ -135,6 +146,12 @@ export function buildStations(ctx: GameContext): void {
   st.forEach((sta, i) => {
     const prev = st[i - 1]?.name ?? ctx.route.prevName ?? '';
     const next = st[i + 1]?.name ?? ctx.route.nextName ?? '';
-    buildStation(ctx, sta, prev, next);
+    const lat = sta.loop?.lat ?? 0;
+    buildStation(ctx, sta, prev, next, { lat });
+    // 2面4線: 対向線の外側（待避線）にもホーム。駅名標の前後は逆向き
+    if (sta.loop) {
+      const L1 = Math.max(...ctx.route.tracks);
+      buildStation(ctx, sta, next, prev, { lat: L1 - lat, side: sta.platform.side === 'L' ? 'R' : 'L', minimal: true });
+    }
   });
 }
