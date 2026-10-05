@@ -24,7 +24,8 @@ const LAYERS = [
   { base: .009, amp: .085, f: 9, ridged: .16, seed: 51 },
 ];
 
-export function createRidgeTexture(): THREE.DataTexture {
+/** scale = 稜線の高さの倍率（山岳線は近く高い山並み） */
+export function createRidgeTexture(scale = 1): THREE.DataTexture {
   const data = new Uint16Array(W * 4);
   LAYERS.forEach((L, li) => {
     const nz = makeNoise(L.seed * 7919 + 13);
@@ -40,7 +41,7 @@ export function createRidgeTexture(): THREE.DataTexture {
       n /= tot;
       // 緩やかな起伏: 中央付近を持ち上げ、谷を広めに
       const sh = Math.pow(Math.min(1, Math.max(0, (n - .30) / .42)), 1.2);
-      data[x * 4 + li] = THREE.DataUtils.toHalfFloat(L.base + L.amp * sh);
+      data[x * 4 + li] = THREE.DataUtils.toHalfFloat((L.base + L.amp * sh) * scale);
     }
   });
   const tex = new THREE.DataTexture(data, W, 1, THREE.RGBAFormat, THREE.HalfFloatType);

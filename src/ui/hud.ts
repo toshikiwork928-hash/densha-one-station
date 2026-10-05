@@ -108,6 +108,9 @@ export function attachHud(ctx: GameContext): void {
     sx.door.textContent = open ? 'ドア開' : closing ? '戸閉め中' : '戸閉';
     const ot = st.overtake, waiting = st.state === 'dwell' && !!ot && !ot.cleared && ot.station === st.target;
     sx.doorTxt.textContent = st.state === 'dwell' ? (open ? ` 戸閉めまで ${Math.ceil(st.dwellT)}秒` : closing ? ' 発車できません' : waiting ? ' 通過待ち' : ' 力行で発車') : '';
+    // 単線の交換駅: 対向列車が着くまで行き違い待ち
+    const mt = st.meet;
+    if (st.state === 'dwell' && !open && !closing && mt && mt.station === st.target && !mt.arrived) sx.doorTxt.textContent = ' 対向列車の行き違い待ち';
     if (waiting && !open) { const p = serviceOf(route, ot.passedBy); sx.doorTxt.textContent = ` ${p?.name ?? ''}の${p?.stops.includes(ot.station) ? '待ち合わせ' : '通過待ち'}`; }
     sx.replay.classList.toggle('show', ctx.cameraMode === 'replay');
   }

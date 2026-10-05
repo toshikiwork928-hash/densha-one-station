@@ -4,6 +4,9 @@ import type { GameContext } from '../core/context';
 import { GeoBatch, M, P } from './batch';
 import { extrudeAlong } from './track-mesh';
 import { TUNNEL_CENTER, TUNNEL_HALF, TUNNEL_WALL_H, getTerrain, gridAlong } from './terrain';
+import { BAND_CULL, isMountain } from './mountain-terrain';
+import { cullByDistance } from './cull';
+import { buildMountainSpan, buildRockSheds } from './mountain-structures';
 
 const concrete = new THREE.MeshLambertMaterial({ color: 0xc4c0b6, side: THREE.DoubleSide });
 
@@ -37,12 +40,20 @@ export function buildStructures(ctx: GameContext): void {
   const lining = new THREE.MeshLambertMaterial({ color: 0x5d5a55, side: THREE.DoubleSide });
   const lampMat = new THREE.MeshBasicMaterial({ color: 0xffe2b0, toneMapped: false });
   const lamps: THREE.Matrix4[] = [];
+  const MT = isMountain(T) ? T : null;
 
   for (const st of list) {
     if (st.kind === 'tunnel') {
+      // 山岳線は地面の帯を距離カリングするので、覆工・床・トラフはトンネル区間の帯と同じ包含球・距離で一体に消す
+      //（帯だけ消えて覆工が谷に浮いて見えないように）
+      const tg = new THREE.Group(); scene.add(tg);
+      if (MT) {
+        const own = MT.bands.filter(b => b.inside && b.a < st.to && b.b > st.from).map(b => b.mesh);
+        if (own.length) cullByDistance(ctx, tg, BAND_CULL, own);
+      }
       // 覆工（内壁）と床
-      scene.add(extrudeAlong(track, archProfile(), st.from, st.to, 5, lining));
-      scene.add(extrudeAlong(track, [[TUNNEL_CENTER - TUNNEL_HALF, .005], [TUNNEL_CENTER + TUNNEL_HALF, .005]], st.from, st.to, 10, lining));
+      tg.add(extrudeAlong(track, archProfile(), st.from, st.to, 5, lining));
+      tg.add(extrudeAlong(track, [[TUNNEL_CENTER - TUNNEL_HALF, .005], [TUNNEL_CENTER + TUNNEL_HALF, .005]], st.from, st.to, 10, lining));
       // 照明（左右の壁、交互）
       for (let s = st.from + 10; s < st.to; s += 18) {
         const t = track.trackAt(s), side = Math.round((s - st.from) / 18) % 2 ? -1 : 1;
@@ -50,9 +61,15 @@ export function buildStructures(ctx: GameContext): void {
         lamps.push(new THREE.Matrix4().compose(p, new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -t.phi, 0)), new THREE.Vector3(.12, .14, 1.2)));
       }
       // 坑口（両端）
-      for (const [s, back] of [[st.from, true], [st.to, false]] as const) buildPortal(ctx, s, back, T.terrainY.bind(T));
+      for (const [s, back] of [[st.from, true], [st.to, false]] as const) {
+        // 山岳線: 尾根が広いので断面を広く取り、下端は坑口の外の地表に合わせる（谷側の段差もふさぐ）
+        if (MT) buildPortal(ctx, s, back, (q, l) => MT.sample(q, l), 400, (q, l) => MT.sample(q, l, undefined, false), 0x3d5a36);
+        else buildPortal(ctx, s, back, T.terrainY.bind(T));
+      }
       // ケーブルトラフ
-      for (const side of [-1, 1]) scene.add(extrudeAlong(track, [[TUNNEL_CENTER + side * (TUNNEL_HALF - .5), .0], [TUNNEL_CENTER + side * (TUNNEL_HALF - .5), .45], [TUNNEL_CENTER + side * (TUNNEL_HALF - .05), .45]], st.from, st.to, 10, concrete));
+      for (const side of [-1, 1]) tg.add(extrudeAlong(track, [[TUNNEL_CENTER + side * (TUNNEL_HALF - .5), .0], [TUNNEL_CENTER + side * (TUNNEL_HALF - .5), .45], [TUNNEL_CENTER + side * (TUNNEL_HALF - .05), .45]], st.from, st.to, 10, concrete));
+    } else if (MT) {
+      buildMountainSpan(ctx, MT, st, batch);
     } else {
       const bridge = st.kind === 'bridge';
       // 床版・地覆・高欄
@@ -91,12 +108,13 @@ export function buildStructures(ctx: GameContext): void {
       }
     }
   }
-  batch.build({ concrete, steel: new THREE.MeshLambertMaterial({ color: 0x5f7488 }) }, scene);
+  batch.build({ concrete, steel: new THREE.MeshLambertMaterial({ color: 0x5f7488 }), mbody: new THREE.MeshLambertMaterial({ vertexColors: true }) }, scene);
   if (lamps.length) {
     const im = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lampMat, lamps.length);
     lamps.forEach((m, i) => im.setMatrixAt(i, m)); im.computeBoundingSphere(); im.userData.noShadow = true; scene.add(im);
   }
 
+  if (MT) buildRockSheds(ctx, MT);
   // トンネル出入り判定（カメラ位置基準）
   const tunnels = list.filter(s => s.kind === 'tunnel');
   if (!tunnels.length) return;
@@ -134,18 +152,22 @@ function pier(b: GeoBatch, ctx: GameContext, s: number, beamDepth: number, river
 }
 
 /** 坑口: 山の断面（アーチ穴あき）＋コンクリート面壁 */
-function buildPortal(ctx: GameContext, s: number, back: boolean, terrainY: (s: number, lat: number) => number): void {
+function buildPortal(ctx: GameContext, s: number, back: boolean, terrainY: (s: number, lat: number) => number,
+  range = 150, bottomY?: (s: number, lat: number) => number, capColor = 0x55703f): void {
   const { track, scene } = ctx, t = track.trackAt(s), base = t.y;
   const sx = back ? 1 : -1; // 前向き坑口は x を反転して作る
   const arch = archProfile().map(([l, y]) => new THREE.Vector2(sx * l, y));
   // 山の断面
   const outer: THREE.Vector2[] = [];
-  for (let l = -150; l <= 154; l += 8) outer.push(new THREE.Vector2(sx * (l + TUNNEL_CENTER - 2), Math.max(.5, terrainY(s, l + TUNNEL_CENTER - 2) - base)));
-  outer.push(new THREE.Vector2(sx * 152, -.5), new THREE.Vector2(-sx * 150, -.5));
+  for (let l = -range; l <= range + 4; l += 8) outer.push(new THREE.Vector2(sx * (l + TUNNEL_CENTER - 2), Math.max(.5, terrainY(s, l + TUNNEL_CENTER - 2) - base)));
+  if (bottomY) {
+    // 下端: 坑口の外の地表（尾根を除く）に沿わせる
+    for (let l = range + 4; l >= -range; l -= 8) outer.push(new THREE.Vector2(sx * (l + TUNNEL_CENTER - 2), Math.min(-.5, bottomY(s, l + TUNNEL_CENTER - 2) - base - .3)));
+  } else outer.push(new THREE.Vector2(sx * 152, -.5), new THREE.Vector2(-sx * 150, -.5));
   const shape = new THREE.Shape(back ? outer : outer.reverse());
   const hole = new THREE.Path(back ? [...arch].reverse() : arch);
   shape.holes.push(hole);
-  const capMat = new THREE.MeshLambertMaterial({ color: 0x55703f, side: THREE.DoubleSide });
+  const capMat = new THREE.MeshLambertMaterial({ color: capColor, side: THREE.DoubleSide });
   const cap = new THREE.Mesh(new THREE.ShapeGeometry(shape), capMat);
   const grp = new THREE.Group(); grp.position.copy(track.at(s, 0, 0)); grp.rotation.y = -t.phi + (back ? 0 : Math.PI); scene.add(grp);
   grp.add(cap);

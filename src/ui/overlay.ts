@@ -2,8 +2,9 @@
 import { notchName } from '../core/config';
 import type { GameContext } from '../core/context';
 import { $, fmtClock } from '../core/dom';
-import { addHistory, getBest, getHistory, resetRecords, saveSelection, submitScore } from '../game/ranking';
-import { ROUTE_DIRS } from '../route';
+import { addHistory, getBest, getHistory, resetRecords, saveSelection, selectionForLine, submitScore } from '../game/ranking';
+import { LINES, ROUTES, type LineEntry } from '../route';
+import { lineOfRoute } from './lines';
 import type { GameResult } from '../game/scoring';
 import { safetyDeductions } from '../game/scoring';
 import { MODE_LABEL, findStage, stagesOf, type GameMode } from '../game/state';
@@ -19,6 +20,7 @@ const svcDesc = (route: GameContext['route'], v: ServiceSpec) =>
 const KIND_INFO: Record<TrainKind, { name: string; desc: string }> = {
   'commuter-new': { name: '8300系（新型通勤車）', desc: 'ステンレス・すそ絞り車体・VVVF。加速 3.0km/h/s' },
   'commuter-old': { name: '7100系（旧型通勤車）', desc: '鋼製・直線車体・抵抗制御。加速 2.5km/h/s、高速域は弱め' },
+  'commuter-2300': { name: '2300系（山岳線用）', desc: '18m 車体・2両ユニット・VVVF。急勾配・急曲線向け' },
   limited: { name: '50000系（特急車）', desc: '流線形の先頭・定出力域が広く高速が得意' },
 };
 
@@ -32,6 +34,7 @@ const MODE_DESC: Record<GameMode, string> = {
 
 export function attachOverlay(ctx: GameContext): void {
   const { route, events } = ctx, st = ctx.state;
+  const line = lineOfRoute(route.id);
   const overlay = $('overlay'), card = $('card');
   let lastResult: GameResult | null = null;
   let lastRecord: { isNew: boolean; prevTotal?: number } = { isNew: false };
@@ -58,6 +61,20 @@ export function attachOverlay(ctx: GameContext): void {
     }
   }
 
+  /** 路線の切替: 今の選択を路線ごとに保存し、切替先の前回の選択（無ければ既定）で再読込（線路・駅・景観を作り直す） */
+  function switchLine(to: LineEntry) {
+    saveSelection({ ...st.sel, routeId: route.id });
+    const prevSel = selectionForLine(to.id);
+    const routeId = prevSel?.routeId && to.dirs.some(d => d.id === prevSel.routeId) ? prevSel.routeId : to.dirs[0].id;
+    const r = ROUTES[routeId];
+    saveSelection(prevSel ? { ...prevSel, routeId } : {
+      stageId: '', mode: st.sel.mode, vehicles: {}, routeId,
+      service: r?.services?.find(v => v.id === 'express')?.id ?? r?.services?.[0]?.id ?? 'local',
+    });
+    card.innerHTML = `<p class="brief" style="text-align:center">${to.name}を読み込み中…</p>`;
+    location.reload();
+  }
+
   function showTitle() {
     const ready = ctx.assetsReady;
     const stage = findStage(route, st.sel.stageId);
@@ -79,11 +96,12 @@ export function attachOverlay(ctx: GameContext): void {
     const modes = (Object.keys(MODE_LABEL) as GameMode[]).map(m => `<button data-mode="${m}" class="${m === st.sel.mode ? 'on' : ''}">${MODE_LABEL[m]}<small>${MODE_DESC[m]}</small></button>`).join('');
     overlay.classList.remove('hidden');
     card.innerHTML = `
-    <h1>汐風線 運転シミュレーター<small>運転台視点の電車運転ゲーム / Three.js</small></h1>
+    <h1>${line.name} 運転シミュレーター<small>運転台視点の電車運転ゲーム / Three.js</small></h1>
+    <div class="lines" role="radiogroup" aria-label="路線">${LINES.map(l => `<button type="button" role="radio" aria-checked="${l.id === line.id}" data-line="${l.id}" class="line-${l.theme} ${l.id === line.id ? 'on' : ''}"><b>${l.name}</b><small>${l.desc}</small></button>`).join('')}</div>
     <div class="route"><span>${first.name}</span><span class="bar"></span><span>${last.name}</span></div>
     <div class="tabs" role="tablist">${TABS.map(([k, n]) => `<button type="button" role="tab" data-tab="${k}">${n}</button>`).join('')}</div>
     <div class="tabPane" data-pane="stage">
-      <div class="selLbl">方向</div><div class="sel" id="selDir">${ROUTE_DIRS.map(d => `<button data-dir="${d.id}" class="${d.id === route.id ? 'on' : ''}">${d.label}<small>${d.desc}</small></button>`).join('')}</div>
+      <div class="selLbl">方向</div><div class="sel" id="selDir">${line.dirs.map(d => `<button data-dir="${d.id}" class="${d.id === route.id ? 'on' : ''}">${d.label}<small>${d.desc}</small></button>`).join('')}</div>
       ${svcs ? `<div class="selLbl">種別（Tab）</div><div class="sel" id="selService">${svcs}</div>` : ''}
       <div class="selLbl">ステージ（← →）</div><div class="sel" id="selStage">${stages}</div>
       <div class="selLbl">モード（↑ ↓）</div><div class="sel" id="selMode">${modes}</div>
@@ -119,6 +137,10 @@ export function attachOverlay(ctx: GameContext): void {
     card.querySelectorAll<HTMLButtonElement>('[data-service]').forEach(b => b.onclick = () => {
       const list = route.services ?? [], cur = list.findIndex(v => v.id === st.sel.service), to = list.findIndex(v => v.id === b.dataset.service);
       ctx.actions.selectService(to - cur);
+    });
+    card.querySelectorAll<HTMLButtonElement>('[data-line]').forEach(b => b.onclick = () => {
+      const to = LINES.find(l => l.id === b.dataset.line);
+      if (to && to.id !== line.id) switchLine(to);
     });
     card.querySelectorAll<HTMLButtonElement>('[data-dir]').forEach(b => b.onclick = () => {
       if (b.dataset.dir === route.id) return;

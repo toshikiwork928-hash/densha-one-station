@@ -8,6 +8,8 @@ import { ChunkedBatch, GeoBatch, M, P, basePart, onLight } from './batch';
 import { cullByDistance } from './cull';
 import { loopZone } from '../route/service';
 import { getTerrain, hash } from './terrain';
+import { isMountain } from './mountain-terrain';
+import { buildMountainScenery } from './mountain-scenery';
 
 /** 木を置く位置（素材読込後に scenery.ts が配置） */
 export interface TreeSpot { s: number; lat: number; y: number; k: number; small?: boolean }
@@ -107,7 +109,7 @@ function buildAtlas(): Atlas {
 }
 
 // ---- 部品ヘルパ（ローカル座標: 正面 = -Z、幅 = X、底面 = y0） ----
-class Kit {
+export class Kit {
   constructor(public b: GeoBatch, public rnd: Rng, public atlas: Atlas) {}
   pick<T>(a: readonly T[]): T { return a[Math.floor(this.rnd() * a.length)]; }
   box(x: number, y: number, z: number, w: number, h: number, d: number, col: number, ry = 0) { this.b.add('body', P.box, M(x, y, z, ry, w, h, d), col); }
@@ -337,6 +339,10 @@ export function buildTown(ctx: GameContext): TownResult {
   const S0 = route.extent.from, S1 = route.extent.to;
   const L0 = Math.min(...route.tracks), L1 = Math.max(...route.tracks);
   const latOf = (sd: number, d: number) => sd < 0 ? L0 - d : L1 + d;
+  // 山岳線: 町並み・田畑・道路は平地（川沿いの町・平野）で、地面が線路と同じ高さの所だけ
+  const MT = isMountain(T) ? T : null;
+  const flatOk = (s: number) => !MT || MT.flat(s) > .97;
+  const levelAt = (s: number, lat: number) => !MT || Math.abs(MT.terrainY(s, lat) - MT.groundY(s)) < .9;
   const wires = new Map<number, number[]>();
   /** 建物の占有区間（田畑との重なり防止） */
   const occ: { sd: number; a: number; b: number; d: number }[] = [];
@@ -364,6 +370,7 @@ export function buildTown(ctx: GameContext): TownResult {
   /** 区画が使えるか（踏切道路・トンネル・川・ホーム側駅前を避ける） */
   const lotFree = (sd: number, a: number, b: number, d: number) => {
     for (let s = a; s <= b; s += 3) {
+      if (!flatOk(s) || !levelAt(s, latOf(sd, d)) || !levelAt(s, latOf(sd, d + 14))) return false;
       if (T.nearCrossing(s, 4) || tunnelNear(s, 80) || T.groundY(s) < -.3) return false;
       if (d < stationDepth(s) && platSide(sd, s, 25)) return false;
     }
@@ -427,7 +434,7 @@ export function buildTown(ctx: GameContext): TownResult {
 
   for (const sd of [-1, 1]) {
     // ---- 線路沿いの道路・電柱・電線・柵 ----
-    const roadOk = (s: number) => !tunnelNear(s, 30) && T.groundY(s) > -.3 && !platSide(sd, s, 20) && !loopNear(s, 20) && !T.nearCrossing(s, -1);
+    const roadOk = (s: number) => !tunnelNear(s, 30) && T.groundY(s) > -.3 && !platSide(sd, s, 20) && !loopNear(s, 20) && !T.nearCrossing(s, -1) && flatOk(s) && levelAt(s, latOf(sd, 13)) && levelAt(s, latOf(sd, 16.5));
     const dA = 10.5, dB = 15.5, la = latOf(sd, dA), lb = latOf(sd, dB);
     for (let s = S0; s < S1; s += 40) {
       const e = Math.min(S1, s + 40);
@@ -466,7 +473,7 @@ export function buildTown(ctx: GameContext): TownResult {
     }
     // 線路の柵（駅・踏切・構造物以外）
     for (let s = S0; s < S1; s += 6) {
-      if (T.structureAt(s, 10) || T.nearStation(s, 15) || T.nearCrossing(s, 3) || T.trackY(s) - T.groundY(s) > 1) continue;
+      if (T.structureAt(s, 10) || T.nearStation(s, 15) || T.nearCrossing(s, 3) || T.trackY(s) - T.groundY(s) > 1 || !flatOk(s) || !levelAt(s, latOf(sd, 7.8))) continue;
       const t = track.trackAt(s), lat = latOf(sd, 7.8), g = T.groundY(s), b = chunks.at(s); b.parent = null;
       b.add('body', P.box, M(t.x + t.rx * lat, g + .75, t.z + t.rz * lat, -t.phi, .08, 1.5, .08), 0x5f7a66);
       b.add('fence', P.box, M(t.x + t.rx * lat, g + .95, t.z + t.rz * lat, -t.phi, .03, 1.0, 6), 0x7f9a86);
@@ -542,8 +549,8 @@ export function buildTown(ctx: GameContext): TownResult {
     }
   }
 
-  // トンネル上の山林
-  for (const st of route.structures ?? []) {
+  // トンネル上の山林（山岳線は mountain-scenery.ts）
+  for (const st of MT ? [] : route.structures ?? []) {
     if (st.kind !== 'tunnel') continue;
     for (let s = st.from - 40; s < st.to + 40; s += 7) for (const sd of [-1, 1]) for (let d = 9; d < 150; d += 9 + rnd() * 8) {
       if (rnd() < .3) continue;
@@ -554,7 +561,7 @@ export function buildTown(ctx: GameContext): TownResult {
     }
   }
   // 川沿いの木・竹
-  for (const st of route.structures ?? []) {
+  for (const st of MT ? [] : route.structures ?? []) {
     if (st.kind !== 'bridge') continue;
     for (const sd of [-1, 1]) for (let i = 0; i < 26; i++) {
       const s = st.from + rnd() * (st.to - st.from), y = T.groundY(s);
@@ -563,6 +570,8 @@ export function buildTown(ctx: GameContext): TownResult {
     }
   }
 
+  // 山岳線の山林・谷川・構造物まわり・山の集落
+  if (MT) buildMountainScenery(ctx, MT, { chunks, trees, kit: (b, r) => new Kit(b, r, atlas), house, farmhouse });
   const group = new THREE.Group(); group.name = 'town'; scene.add(group);
   // 遠方のチャンクは距離で非表示（家屋は 1.6km 先でほぼ点、電線は 900m 先で見えない）
   for (const g of chunks.build(mats, group)) cullByDistance(ctx, g, 1600);

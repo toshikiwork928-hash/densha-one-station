@@ -8,6 +8,7 @@ import type { CameraMode } from '../core/events';
 import { DEFAULT_PERF, TRAIN_PERF, stepTrain } from '../sim/train';
 import { serviceOf } from '../route/service';
 import { createOvertake } from './overtake';
+import { createMeet } from './meet';
 import { createReplay } from './replay';
 import { judgeStop, scoreGame } from './scoring';
 import { createSignalSystem } from './signals';
@@ -43,7 +44,8 @@ export function createGame(ctx: GameContext): Game {
     events.emit('cameraMode', { mode });
   }
 
-  const signals = createSignalSystem(ctx, () => setNotch(NOTCH_EB, true));
+  const meet = createMeet(ctx);
+  const signals = createSignalSystem(ctx, () => setNotch(NOTCH_EB, true), meet);
   const replay = createReplay(ctx, setCamera);
   const overtake = createOvertake(ctx);
 
@@ -88,16 +90,17 @@ export function createGame(ctx: GameContext): Game {
     const from = st.fromIndex, sta = route.stations[from];
     st.target = from;
     // 待避駅から始めるステージは定刻に着いた状態から（後続列車の通過を待つ）
-    const waits = !!ctx.service?.waits?.some(w => w.station === from);
+    const waits = !!ctx.service?.waits?.some(w => w.station === from) || !!route.meets?.some(m => m.station === from);
     const dwell = waits ? Math.max(ORIGIN_DWELL, departureTime(route, from) - DOOR_CLOSE_TIME - sta.scheduledArrival) : ORIGIN_DWELL;
     st.t -= dwell + DOOR_CLOSE_TIME;
     st.dwellT = dwell;
     st.doors = 'open';
     setState('dwell');
     events.emit('doorOpen', { index: from, station: sta });
-    if (waits) overtake.onArrive(from);
+    // 待ち合わせ・行き違いの案内は「発車待ち」案内に上書きされないよう1つにまとめる
+    const waitMsg = waits ? [overtake.onArrive(from, true), meet.onArrive(from, true)].filter(Boolean).join(' ') : '';
     const late = st.lateStart > 0 ? `（${st.lateStart}秒遅れ。回復運転せよ）` : '';
-    banner(`${sta.name} 発車待ち。戸閉め後、出発信号を確認して力行${late}`, 4);
+    banner(waitMsg ? `発車待ち。${waitMsg}${late}` : `${sta.name} 発車待ち。戸閉め後、出発信号を確認して力行${late}`, waitMsg ? 5 : 4);
   }
 
   function finish() {
@@ -120,6 +123,7 @@ export function createGame(ctx: GameContext): Game {
     setState('dwell');
     events.emit('doorOpen', { index, station });
     overtake.onArrive(index);
+    meet.onArrive(index);
   }
 
   function depart() {
@@ -133,6 +137,7 @@ export function createGame(ctx: GameContext): Game {
   function updateDwell(dt: number) {
     st.t += dt;
     overtake.update(dt);
+    meet.update(dt);
     signals.update(dt, false);
     const sta = route.stations[st.target];
     if (st.doors === 'open') {
@@ -191,6 +196,7 @@ export function createGame(ctx: GameContext): Game {
     }
     st.t += dt;
     overtake.update(dt);
+    meet.update(dt);
     signals.update(dt, true);
 
     // 速度超過（線路の制限と信号現示の制限の低い方）

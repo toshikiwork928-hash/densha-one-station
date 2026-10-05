@@ -5,7 +5,7 @@
 // 300m チャンクごとに「構造物 1 メッシュ＋電線 1 LineSegments」へ結合し、距離カリングする
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
-import { islandOffset, islandZones, loopShape } from '../route/service';
+import { bayZone, islandOffset, islandZones, loopShape, trackLines } from '../route/service';
 import { basePart, ChunkedBatch, P, type BasePart, type GeoBatch } from './batch';
 import { cullByDistance } from './cull';
 import { getTerrain, hash, TUNNEL_CENTER, TUNNEL_HALF, TUNNEL_WALL_H } from './terrain';
@@ -205,6 +205,9 @@ export function buildCatenary(ctx: GameContext): void {
     ...islandZones(route).map(z => ({ inFrom: z.inFrom, outTo: z.outTo, lat: -z.spread })),
   ];
   const structs = route.structures ?? [];
+  // 単線の駅の右の線・副線（本線は route.tracks の 0）
+  const extraLines = route.singleTrack ? trackLines(route).filter(l => l.kind !== 'main') : [];
+  const bays = route.stations.flatMap(st => { const b = bayZone(st); return b ? [{ from: b.from, to: b.to, platFrom: st.platform.from, platTo: st.platform.to, width: st.island!.bay!.platformWidth }] : []; });
 
   // ---------- 支持点の位置（踏切・信号・標識・駅舎・構造物の端を避ける） ----------
   const avoid = (s: number): boolean => {
@@ -262,6 +265,16 @@ export function buildCatenary(ctx: GameContext): void {
       // 相対式ホーム（両側）の外
       pl = L0 - 7.4; pr = L1 + 7.4;
     }
+    if (route.singleTrack && kind !== 'station') {
+      // 単線: 駅の右の線・副線（とその片面ホーム）の外側に立てる
+      for (const l of extraLines) if (s >= l.from - 12 && s <= l.to + 12) {
+        const lat = l.lat(Math.min(l.to, Math.max(l.from, s)));
+        let edge = 3.3;
+        const bz = l.kind === 'bay' ? bays.find(b => s >= b.from && s <= b.to) : undefined;
+        if (bz && s >= bz.platFrom - 5 && s <= bz.platTo + 5) edge = 1.7 + bz.width + .6;
+        if (lat > 0) pr = Math.max(pr, lat + edge); else pl = Math.min(pl, lat - edge);
+      }
+    }
     return { s, i, kind, stg, mw: CW + (kind === 'tunnel' ? SYS_T : SYS), pl, pr };
   });
   const supIdx = (s: number) => sups.findIndex(p => p.s >= s);
@@ -302,6 +315,20 @@ export function buildCatenary(ctx: GameContext): void {
       lat: (s) => o.lat(s) + dir * .45 * (1 - sh(s)),
       off: (s) => ({ dl: 0, dy: .22 * (1 - Math.min(1, sh(s) * 2)) }),
       s0: a, s1: bS, anchors: [{ at: 's0', side: dir }, { at: 's1', side: dir }],
+    });
+  }
+
+  // 単線の駅の右の線・副線: 分かれる手前は本線の架線の 0.45m 外側を並走（交差部は少し高く）
+  for (const l of extraLines) {
+    const i0 = supIdx(l.from), i1 = supIdx(l.to);
+    const a = i0 < 0 ? -1 : i0, b = i1 < 0 ? sups.length - 1 : i1 - 1;
+    if (a < 0 || b <= a) continue;
+    const dir = l.lat((l.from + l.to) / 2) > 0 ? 1 : -1;
+    const near = (s: number) => Math.max(0, 1 - Math.abs(l.lat(s) - islandOffset(route, 0, s, l.kind === 'passing' ? -1 : (dir as -1 | 1))) / 3);
+    runs.push({
+      lat: (s) => l.lat(s) + dir * .45 * near(s),
+      off: (s) => ({ dl: 0, dy: .22 * near(s) }),
+      s0: sups[a].s, s1: sups[b].s, anchors: [{ at: 's0', side: dir }, { at: 's1', side: dir }],
     });
   }
 

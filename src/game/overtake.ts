@@ -2,7 +2,7 @@
 // 優等列車は普通の停車の約10秒後に着き、出口分岐器を抜けて見えなくなるまで出発信号は停止現示（game/signals.ts が st.overtake を見る）。
 // 優等列車は普通が駅に近づく間に後方から追い付く形で現れる（普通が停まる前に本線ホームを通り過ぎないよう間隔を保つ）
 import type { GameContext } from '../core/context';
-import { CAR_LEN, loopZone, serviceOf, stopOffset } from '../route/service';
+import { carLenOf, loopZone, serviceOf, stopOffset } from '../route/service';
 import type { Route, ServiceSpec } from '../route/types';
 
 /** 通過列車の速度 [km/h] */
@@ -35,7 +35,7 @@ export interface Passer {
 export function planPasser(route: Route, index: number, passer: ServiceSpec, localCars: number): Passer | null {
   const sta = route.stations[index], z = loopZone(sta);
   if (!z) return null;
-  const v = PASS_KMH / 3.6, len = passer.cars * CAR_LEN;
+  const v = PASS_KMH / 3.6, len = passer.cars * carLenOf(passer.kind);
   if (!passer.stops.includes(index)) {
     const back = SPAWN_BACK, dist = z.outTo + CLEAR_DIST + len - (sta.stopS - back);
     return { v, len, stopAt: null, back, tArrive: back / v, tClear: dist / v };
@@ -57,7 +57,8 @@ export function waitDwell(route: Route, index: number, passer: ServiceSpec, loca
 
 export interface Overtake {
   /** 停車駅で停止確定したとき */
-  onArrive(index: number): void;
+  /** 待避駅に着いた。待ち合わせの案内文を返す（quiet なら案内を出さない） */
+  onArrive(index: number, quiet?: boolean): string | null;
   update(dt: number): void;
 }
 
@@ -104,17 +105,19 @@ export function createOvertake(ctx: GameContext): Overtake {
   }
 
   return {
-    onArrive(index) {
+    onArrive(index, quiet) {
       const svc = serviceOf(route, st.sel.service);
       const w = svc?.waits?.find(x => x.station === index);
-      if (!svc || !w || !route.services) return;
+      if (!svc || !w || !route.services) return null;
       const sta = route.stations[index], passer = serviceOf(route, w.passedBy)!;
       if (!st.overtake || st.overtake.station !== index) spawn(index, ARRIVE_GAP);
       const o = st.overtake;
-      if (!o) return;
+      if (!o) return null;
       o.localStopped = true;
       const stops = passer.stops.includes(index);
-      banner(stops ? `${sta.name}で後続の${passer.name}を待ち合わせ。出発信号が進行になるまで待て` : `${sta.name}で後続の${passer.name}の通過を待ちます。出発信号が進行になるまで待て`, 4);
+      const text = stops ? `${sta.name}で後続の${passer.name}を待ち合わせ。出発信号が進行になるまで待て` : `${sta.name}で後続の${passer.name}の通過を待ちます。出発信号が進行になるまで待て`;
+      if (!quiet) banner(text, 4);
+      return text;
     },
     update(dt) {
       approach();

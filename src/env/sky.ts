@@ -189,18 +189,20 @@ void main() {
 
 /** 山 4 層（奥 → 手前）の地の色。奥ほど青く、手前ほど緑〜濃い青緑 */
 const MTN_ALB = [0x5f86bd, 0x437898, 0x2c6d5a, 0x215834].map(h => new THREE.Color(h));
+/** 山岳線: 手前の山腹（地形）の奥に見える遠い山並みなので、どの層も霞んだ青灰色 */
+const MTN_ALB_MOUNTAIN = [0x7f9cc2, 0x7393b4, 0x6889a8, 0x5f809c].map(h => new THREE.Color(h));
 const tmpA = new THREE.Color(), tmpS = new THREE.Color();
 
-export function createSkyDome(scene: THREE.Scene, octaves: number): SkyDome {
+export function createSkyDome(scene: THREE.Scene, octaves: number, theme: 'coast' | 'mountain' = 'coast'): SkyDome {
   const atlas = createCumulusAtlas(); // 積雲スプライトはフレームに分割して生成し、できあがったら雲を浮かべる
   let cumulusFade = 0;
   const uniforms = {
     uZenith: { value: new THREE.Color() }, uHorizon: { value: new THREE.Color() }, uFog: { value: new THREE.Color() },
     uSunDir: { value: new THREE.Vector3(0, 1, 0) }, uSunColor: { value: new THREE.Color() },
     uCloudLit: { value: new THREE.Color() }, uCloudShade: { value: new THREE.Color() },
-    uMtnAlb: { value: MTN_ALB }, uAmb: { value: new THREE.Color() }, uSunLit: { value: new THREE.Color() },
+    uMtnAlb: { value: theme === 'mountain' ? MTN_ALB_MOUNTAIN : MTN_ALB }, uAmb: { value: new THREE.Color() }, uSunLit: { value: new THREE.Color() },
     uCumu: { value: atlas.texture }, uCumulus: { value: 0 }, uCirrus: { value: 0 }, uStratus: { value: 0 },
-    uSunH: { value: new THREE.Vector2(0, -1) }, uRidge: { value: createRidgeTexture() },
+    uSunH: { value: new THREE.Vector2(0, -1) }, uRidge: { value: createRidgeTexture(theme === 'mountain' ? 1.6 : 1) },
     uMtnVis: { value: 1 }, uSunLow: { value: 0 }, uSnow: { value: 0 },
     uSunSize: { value: .04 }, uSunDisc: { value: 1 }, uCover: { value: .3 }, uStars: { value: 0 }, uTime: { value: 0 }, uDim: { value: 0 },
   };

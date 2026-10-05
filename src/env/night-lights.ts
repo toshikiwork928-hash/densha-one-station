@@ -79,6 +79,7 @@ export function createNightLights(ctx: GameContext): NightLights {
   const inPlatform = (s: number) => T.nearStation(s, 15); // 待避線駅は分岐器区間も除く
   for (let s = route.extent.from + 30; s < route.extent.to; s += 75) {
     if (inPlatform(s) || T.structureAt(s, 30) || T.nearCrossing(s, 8)) continue;
+    if (route.theme === 'mountain' && !T.isCity(s)) continue; // 山岳線: 街灯は町の中だけ
     const g = T.terrainY(s, -6.4);
     if (Math.abs(T.trackY(s) - g) > 1.5) continue;
     posts.push({ s, lat: -6.4, g });

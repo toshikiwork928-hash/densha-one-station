@@ -6,7 +6,6 @@ import type { GameContext } from './core/context';
 import { $ } from './core/dom';
 import { EventBus } from './core/events';
 import { createRng } from './core/rng';
-import { DEFAULT_ROUTE, ROUTES } from './route';
 import { buildTrack } from './route/track';
 import { createTrainEnv } from './sim/train';
 import { createState } from './game/state';
@@ -21,12 +20,14 @@ import { buildWorld } from './world';
 import { attachSfx } from './audio/sfx';
 import { attachHud } from './ui/hud';
 import { attachOverlay } from './ui/overlay';
+import { lineOfRoute, resolveRoute } from './ui/lines';
 import { attachKeyboard } from './input/keyboard';
 import { attachTouch } from './input/touch';
 import { attachGamepad } from './input/gamepad';
 
 const saved = loadSelection();
-const route = ROUTES[saved?.routeId ?? ''] ?? DEFAULT_ROUTE;
+const route = resolveRoute(saved?.routeId);
+document.title = `${lineOfRoute(route.id).name} 運転シミュレーター`;
 const { renderer, scene, camera } = createRenderCore($<HTMLCanvasElement>('c'));
 const env = createEnvironment(scene);
 
@@ -44,6 +45,7 @@ const ctx: GameContext = {
   cameraMode: 'cab',
   actions: undefined as unknown as GameContext['actions'], // createGame で設定
 };
+ctx.state.sel.routeId = route.id; // 選択の保存（路線ごと）に使う
 
 const world = buildWorld(ctx);
 const game = createGame(ctx);

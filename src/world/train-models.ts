@@ -1,10 +1,12 @@
-// 車両モデルの窓口。種別ごとの外観を手続き生成する（通勤形 新・旧、特急形）
+// 車両モデルの窓口。種別ごとの外観を手続き生成する（通勤形 新・旧、特急形、山岳線用 2300系）
 // 1両 = 材質別に結合したメッシュ数個。ジオメトリ・材質・テクスチャは種別ごとに共有し、行先 LED のみ編成ごと
 import * as THREE from 'three';
 import type { TrainKind } from '../route/types';
 import { envMap, glowTexture, ledDestTexture, ledTexture, ledTypeTexture, type CarKind, type CarParts, type SheetMaps } from './trains/common';
 import { buildCommuterCar, paintCommuterFace, paintCommuterSide, HW, YTOP } from './trains/commuter';
 import { buildLimitedCar, paintLimitedSide, HW_L } from './trains/limited';
+import { build2300Car, paint2300Face, paint2300Side } from './trains/c2300';
+import { CAR_LEN, carLenOf } from '../route/service';
 
 /** 1両分の生成結果。原点 = 車体中心・レール面高さ、前 = -Z */
 export interface TrainCar {
@@ -31,21 +33,26 @@ export const TRAIN_KINDS: Record<TrainKind, { label: string; service: string }> 
   'commuter-new': { label: '通勤形（ステンレス・黒顔）', service: '普通' },
   'commuter-old': { label: '通勤形（鋼製・貫通扉）', service: '急行' },
   limited: { label: '特急形', service: '特急' },
+  'commuter-2300': { label: '山岳線用（18m・2扉・2両ユニット）', service: '各停' },
 };
 
-export const CAR_LEN = 20;
-const LB = CAR_LEN - .5; // 車体長（連結面間隔 0.5m）
+export { CAR_LEN, carLenOf };
+/** 車体長（連結面間隔 0.5m）。2300系は 18m 車 */
+const lbOf = (kind: TrainKind) => carLenOf(kind) - .5;
+/** 台車中心の車体中心からの距離 [m]（common.addUnderfloor と同じ: 車体端から 2.6m） */
+export const bogieOffset = (carLen: number): number => carLen / 2 - .25 - 2.6;
 
 /** n 両ユニットの車種並び（両端 = 運転台付きの先頭車、所々にパンタ付き） */
 export function formation(n: number): CarKind[] {
   return Array.from({ length: n }, (_, i): CarKind => i === 0 || i === n - 1 ? 'head' : i % 3 === 2 ? 'pan' : 'mid');
 }
 
-/** 既定のユニット分け（通勤形は 4両 + 端数、特急形は1ユニット） */
+/** 既定のユニット分け（通勤形は 4両 + 端数、2300系は 2両ずつ、特急形は1ユニット） */
 export function defaultUnits(kind: TrainKind, n: number): number[] {
-  if (kind === 'limited' || n <= 4) return [Math.max(1, n)];
+  const u = kind === 'commuter-2300' ? 2 : 4;
+  if (kind === 'limited' || n <= u) return [Math.max(1, n)];
   const out: number[] = []; let r = n;
-  while (r > 4) { out.push(4); r -= 4; }
+  while (r > u) { out.push(u); r -= u; }
   out.push(r);
   return out;
 }
@@ -85,6 +92,7 @@ function kindKit(kind: TrainKind, renderer: THREE.WebGLRenderer): KindKit {
   if (k) return k;
   const env = envMap(renderer), geos = new Map<CarKind, CarParts>();
   shared.off ??= new THREE.MeshStandardMaterial({ color: 0x8a8f95, roughness: .2, metalness: .5, envMap: env });
+  const LB = lbOf(kind);
   const glass = new THREE.MeshStandardMaterial({ color: 0x0c0f13, roughness: .06, metalness: .3, envMap: env, envMapIntensity: 1.2, emissive: 0xfff1d6, emissiveIntensity: 0 });
   if (kind === 'limited') {
     const paint = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: .22, metalness: .5, clearcoat: 1, clearcoatRoughness: .07, envMap: env, envMapIntensity: 1.2, side: THREE.DoubleSide });
@@ -93,6 +101,15 @@ function kindKit(kind: TrainKind, renderer: THREE.WebGLRenderer): KindKit {
       side: { head: sheetMat(paintLimitedSide(LB, true), env, true, 1.2), mid: sheetMat(paintLimitedSide(LB, false), env, true, 1.2) },
       paint, glass, base: { env: 1.2, paintEnv: 1.2 },
       openMats: [], open: h => openMat(k!, h, () => sheetMat(paintLimitedSide(LB, h, true), env, true, 1.2)),
+    };
+  } else if (kind === 'commuter-2300') {
+    const paint = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .5, metalness: .35, envMap: env, envMapIntensity: .6 });
+    k = {
+      geo: c => geos.get(c) ?? (geos.set(c, build2300Car(c, LB)), geos.get(c)!),
+      side: { head: sheetMat(paint2300Side(LB, true), env, false, .9), mid: sheetMat(paint2300Side(LB, false), env, false, .9) },
+      face: sheetMat(paint2300Face(), env, false, .9),
+      paint, glass, base: { env: .9, paintEnv: .6 },
+      openMats: [], open: h => openMat(k!, h, () => sheetMat(paint2300Side(LB, h, true), env, false, .9)),
     };
   } else {
     const v = kind === 'commuter-new' ? 'new' : 'old', envI = v === 'new' ? .9 : .6;
@@ -181,7 +198,7 @@ export const createTrainSet: CreateTrainSet = (kind, cars, renderer, opts = {}) 
   const kit = kindKit(kind, renderer), label = opts.label ?? TRAIN_KINDS[kind].service, dest = opts.dest ?? '海浜公園';
   // 前面の表示器: 8300系（commuter-new）は左に種別・右に行先の2面、それ以外は1面に種別と行先
   const led = kind === 'commuter-new' ? ledMatPart('type', label, dest) : ledMat(label, dest), led2 = kind === 'commuter-new' ? ledMatPart('dest', label, dest) : undefined;
-  const units = opts.units?.length ? opts.units : defaultUnits(kind, Math.max(1, cars));
+  const units = opts.units?.length ? opts.units : defaultUnits(kind, Math.max(1, cars)), len = carLenOf(kind);
   const out: TrainCar[] = [];
   units.forEach((m, u) => {
     const first = u === 0, last = u === units.length - 1;
@@ -189,7 +206,7 @@ export const createTrainSet: CreateTrainSet = (kind, cars, renderer, opts = {}) 
       const lastCar = i === m - 1;
       const role: Role = i === 0 ? (first ? 'front' : 'jointFront') : lastCar ? (last ? 'rear' : 'jointRear') : 'mid';
       const c = makeCar(kit, m === 1 ? 'head' : k, role, led, led2);
-      out.push({ object: c.car, length: CAR_LEN, setDoors: c.setDoors });
+      out.push({ object: c.car, length: len, setDoors: c.setDoors });
     });
   });
   return out;

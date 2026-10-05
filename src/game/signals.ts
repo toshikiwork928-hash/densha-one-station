@@ -1,7 +1,8 @@
 // 閉そく信号と ATS。先行列車（仮想）の在線から現示を決め、通過時に速度照査する
 import type { GameContext } from '../core/context';
 import type { SignalAspect } from '../core/events';
-import { loopZone, type LoopZone } from '../route/service';
+import { islandZone, loopZone, type LoopZone } from '../route/service';
+import type { Meet } from './meet';
 import { ASPECT_LABEL, ASPECT_LIMIT, PRECEDING_LENGTH, aspectOf, buildPrecedingKeys, precedingHead, type PrecedingPlan } from './preceding';
 
 const ATS_ACK_TIME = 5; // 警報から確認までの猶予 [s]
@@ -22,7 +23,7 @@ export interface SignalSystem {
 const RANK: Record<SignalAspect, number> = { R: 0, Y: 1, YG: 2, G: 3 };
 const restrict = (a: SignalAspect, cap: SignalAspect | undefined): SignalAspect => cap && RANK[cap] < RANK[a] ? cap : a;
 
-export function createSignalSystem(ctx: GameContext, forceEB: () => void): SignalSystem {
+export function createSignalSystem(ctx: GameContext, forceEB: () => void, meet?: Meet): SignalSystem {
   const { route, events } = ctx, st = ctx.state;
   const sigs = route.signals ?? [];
   const sigS = sigs.map(g => g.s);
@@ -43,11 +44,17 @@ export function createSignalSystem(ctx: GameContext, forceEB: () => void): Signa
   const banner = (text: string, sec = 3) => events.emit('banner', { text, sec });
   /** 先行列車が待避線上（本線の閉そくを占有しない）か */
   const precOnLoop = () => precZones.find(z => st.precedingS >= z.inFrom + PRECEDING_LENGTH && st.precedingS <= z.outFrom) ?? null;
-  const precTrains = (): [number, number][] => precOnLoop() ? [] : [[st.precedingS, PRECEDING_LENGTH]];
+  /** 単線は先行列車なし（行き違いの対向列車が単線上にいる間は、その閉そくを占有） */
+  const single = !!route.singleTrack;
+  const precTrains = (): [number, number][] => {
+    if (single) { const o = meet?.occupying(); return o ? [o] : []; }
+    return precOnLoop() ? [] : [[st.precedingS, PRECEDING_LENGTH]];
+  };
   /** 上限（場内）と待避の抑止（出発）を反映 */
   const adjust = (i: number, a: SignalAspect): SignalAspect => {
     const o = st.overtake;
     if (o && !o.cleared && o.localStopped && o.depSignal === i) return 'R';
+    if (meet && meet.heldSignal() === i) return 'R'; // 交換駅: 対向列車の到着まで出発信号は停止
     return restrict(a, caps[i]);
   };
   const precOnly = (i: number): SignalAspect => adjust(i, aspectOf(sigS, i, precTrains()));
@@ -122,7 +129,10 @@ export function createSignalSystem(ctx: GameContext, forceEB: () => void): Signa
       if (!moving) return;
       // 停止現示への接近
       const n = st.nextSignal;
-      if (n >= 0 && st.signals[n] === 'R' && sigS[n] - s < RED_APPROACH && st.train.v > 0 && !redWarned.has(n)) {
+      // 単線: 停車駅の出発信号（停止位置の先）は、手前で止まるので警報しない
+      const tgt = st.target >= 0 ? route.stations[st.target] : null;
+      const beyondStop = single && !!tgt && tgt.stopS < sigS[n] && sigS[n] - tgt.stopS < 200;
+      if (n >= 0 && st.signals[n] === 'R' && sigS[n] - s < RED_APPROACH && st.train.v > 0 && !redWarned.has(n) && !beyondStop) {
         redWarned.add(n);
         warn('停止信号接近');
       }
@@ -146,6 +156,14 @@ export function createSignalSystem(ctx: GameContext, forceEB: () => void): Signa
       precDelay = 0;
       caps = sigS.map(() => undefined); holds = []; precZones = [];
       const local = route.services?.find(x => x.id === 'local');
+      // 単線の交換駅・頭端駅（分岐器で左の線へ入る）: 場内信号は注意（Y）まで
+      if (single) route.stations.forEach((sta, k) => {
+        const iz = islandZone(sta);
+        if (!iz || k === 0 || sta.pass) return;
+        let home = -1;
+        for (let i = 0; i < sigS.length; i++) if (sigS[i] < iz.inFrom) home = i;
+        if (home >= 0) caps[home] = 'Y';
+      });
       route.stations.forEach((sta, k) => {
         const z = loopZone(sta);
         if (!z) return;

@@ -36,18 +36,32 @@ export interface Station {
   enterLoop?: boolean;
   /** 高架駅（ホームは高架上、駅舎は高架下） */
   elevated?: boolean;
+  /** 頭端式（行き止まり）の終端駅。線路はホームの先（下りなら platform.to 側、route.extent の端）で車止めに終わる */
+  headEnd?: boolean;
 }
 
 /** 2面4線の待避線。lat は自線待避線の横位置（左が負、例 -9.2）。対向側は route.tracks の対向線から鏡像に +lat 側へ */
 export interface StationLoop { lat: number; turnoutLength: number; turnoutLimitKmh: number }
 
-/** 島式1面2線駅の線形。spread = 各線がホーム側へ外へ膨らむ量 [m]（ホーム幅 = 線間 + 2×spread − 3.4）、length = S字（ホーム端の 70m 手前・先から）の長さ [m] */
-export interface StationIsland { spread: number; length: number }
+/** 島式1面2線駅の線形。spread = 各線がホーム側へ外へ膨らむ量 [m]（ホーム幅 = 線間 + 2×spread − 3.4）、length = S字（ホーム端の 70m 手前・先から）の長さ [m]。
+ *  単線（route.singleTrack）では1本の線路が駅の前後の分岐器（両開き）で左右へ分かれ、自列車は左（-spread）、対向列車は右（+spread）を通る＝交換設備（ホーム幅 = 2×spread − 3.4） */
+export interface StationIsland {
+  spread: number; length: number;
+  /** 分岐器（S字）の制限 [km/h]。指定時は S字の始まりから後部が抜けるまで制限（単線の交換駅・頭端駅） */
+  turnoutLimitKmh?: number;
+  /** 単線の駅の副線（3線目）: 島式ホームの線路の外側に並ぶ行き止まりの線路と片面ホーム。lat = ホーム区間での線路中心の横位置（例 +8.4。符号の側の島式の線へ分岐器で合流）、
+   *  bumper = 車止めの側（behind = 進行方向の手前、ahead = 先）、platformWidth = 外側の片面ホームの幅（ホーム端は線路中心から 1.7m）。形状は route/service.ts の bayZone */
+  bay?: { lat: number; bumper: 'behind' | 'ahead'; platformWidth: number };
+}
+
+/** 単線の交換駅での行き違い（対向列車）。station = 交換駅の index（その向きの route.stations）。自列車はこの駅で対向列車の到着を待って発車する（game/meet.ts） */
+export interface MeetSpec { station: number; kind: TrainKind; cars: number; /** 巡航速度 [km/h] */ kmh: number; label?: string; dest?: string }
 
 /** 運行種別（プレイヤーが選ぶ） */
 export type ServiceId = 'local' | 'express' | 'limited';
 /** 車両の見た目の種類（world/train-models.ts が生成） */
-export type TrainKind = 'commuter-new' | 'commuter-old' | 'limited';
+/** commuter-2300 = 山岳線用の 2300系（18m 車体・2両ユニット） */
+export type TrainKind = 'commuter-new' | 'commuter-old' | 'limited' | 'commuter-2300';
 export interface ServiceSpec {
   id: ServiceId;
   /** 表示名（普通 / 急行 / 特急） */
@@ -115,6 +129,12 @@ export interface OncomingStop {
 export interface Route {
   id: string;
   name: string;
+  /** 路線（線区）の識別子。同じ線区の下り・上りで共通（例 'shiokaze'、'mountain'）。メニューの路線選択に使う */
+  lineId?: string;
+  /** 沿線の景観テーマ（既定 'coast' = 汐風線の街並み・海沿い、'mountain' = 山岳線） */
+  theme?: 'coast' | 'mountain';
+  /** 単線区間（駅の交換設備以外は1線）。true なら route.tracks は自線のみ、行き違いは駅の交換設備で行う */
+  singleTrack?: boolean;
   /** 線区最高速度 [km/h] */
   lineLimit: number;
   /** 出発時の先頭位置 [m] */
@@ -141,6 +161,10 @@ export interface Route {
   /** 沿線景観のヒント */
   scenery: { cityZones: { from: number; to: number }[]; endBlockS?: number };
   oncoming: OncomingSpec[];
+  /** 単線の交換駅での行き違い（game/meet.ts が対向列車を動かし、world/oncoming.ts が描く） */
+  meets?: MeetSpec[];
+  /** 停止位置目標 stopS の基準両数（既定 6）。短い編成は (基準 − 両数) × 1両の長さ / 2 だけ手前に止まる */
+  stopBaseCars?: number;
   /** 運行種別（未指定なら従来どおり stations の pass/scheduledArrival を使う） */
   services?: ServiceSpec[];
   /** [A] 閉そく信号（自線左側）。aspect は A のロジックが決める */

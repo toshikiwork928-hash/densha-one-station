@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { GameContext } from '../core/context';
 import type { ServiceSpec, TrainKind } from '../route/types';
-import { CAR_LEN, createTrainSet } from '../world/train-models';
+import { createTrainSet } from '../world/train-models';
 
 export function createVehiclePreview(ctx: GameContext) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -36,8 +36,10 @@ export function createVehiclePreview(ctx: GameContext) {
   function model(kind: TrainKind, count: number, units: number[], label?: string) {
     const group = new THREE.Group(), owned = new Map<THREE.Material, THREE.Material>();
     const cars = createTrainSet(kind, count, ctx.renderer, { units, label, dest: ctx.route.stations.at(-1)?.name });
-    cars.forEach((car, i) => {
-      car.object.position.z = (i - (cars.length - 1) / 2) * CAR_LEN;
+    const total = cars.reduce((a, c) => a + c.length, 0);
+    let z0 = -total / 2;
+    cars.forEach(car => {
+      car.object.position.z = z0 + car.length / 2; z0 += car.length;
       car.object.traverse(o => {
         if (!(o instanceof THREE.Mesh || o instanceof THREE.Sprite)) return;
         const clone = (m: THREE.Material) => {

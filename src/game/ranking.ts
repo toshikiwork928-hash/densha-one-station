@@ -1,10 +1,13 @@
 // 記録（localStorage。使えない環境では記録しないだけ）: 自己ベスト・プレイ履歴・前回の選択
 import type { ServiceId, TrainKind } from '../route/types';
 import type { GameMode, Selection } from './state';
+import { DEFAULT_ROUTE, lineOf } from '../route';
 
 const KEY = 'densha.best.v1';
 const KEY_HIST = 'densha.history.v1';
 const KEY_SEL = 'densha.selection.v1';
+/** 路線（線区）ごとの最後の選択（路線を切り替えて戻ったときに復元） */
+const KEY_SEL_LINES = 'densha.selection.lines.v1';
 const HIST_MAX = 100;
 
 export interface BestEntry { total: number; rank: string; date: string }
@@ -70,4 +73,18 @@ export const loadSelection = (): Selection | undefined => {
   const s = read<Selection | null>(KEY_SEL, null);
   return s && typeof s.service === 'string' ? { ...s, vehicles: s.vehicles ?? {} } : undefined;
 };
-export const saveSelection = (sel: Selection): void => write(KEY_SEL, sel);
+/** 選択を保存（現在の選択と、その路線の最後の選択） */
+export function saveSelection(sel: Selection): void {
+  write(KEY_SEL, sel);
+  const line = lineOf(sel.routeId ?? DEFAULT_ROUTE.id);
+  if (!line) return;
+  const all = read<Record<string, Selection>>(KEY_SEL_LINES, {});
+  all[line.id] = sel;
+  write(KEY_SEL_LINES, all);
+}
+
+/** 路線（線区）の最後の選択。無ければ undefined */
+export function selectionForLine(lineId: string): Selection | undefined {
+  const s = read<Record<string, Selection>>(KEY_SEL_LINES, {})[lineId];
+  return s && typeof s.service === 'string' ? { ...s, vehicles: s.vehicles ?? {} } : undefined;
+}

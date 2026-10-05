@@ -1,7 +1,10 @@
 // 時刻表の生成: 種別ごとに自動運転（最速走行）で各駅の到着・通過時刻を求め、+5% を 5 秒単位に切り上げる
-// 実行: npm run timetable（src/route/routes/shiokaze-timetable.ts を書き換える）
+// 実行: npm run timetable（src/route/routes/shiokaze-timetable.ts・mountain-timetable.ts を書き換える）
+// 山岳線（単線）は先の下り勾配の分だけ計画減速度を下げる（抑速ブレーキなしで制限を守る運転）。上り勾配では車両性能で遅くなる
 import { writeFileSync } from 'node:fs';
 import { shiokaze, shiokazeUp } from '../src/route/routes/shiokaze';
+import { mountain, mountainUp } from '../src/route/routes/mountain';
+import { meetDwell } from '../src/game/meet';
 import { waitDwell } from '../src/game/overtake';
 import { applyService } from '../src/route/service';
 import { buildTrack } from '../src/route/track';
@@ -16,7 +19,7 @@ function run(route: Route, id: ServiceId) {
   const svc = applyService(route, id)!;
   const track = buildTrack(route), perf = TRAIN_PERF[svc.kind];
   const env = { adhesion: 1, gradePermil: 0, perf };
-  const plan = perf.bMax * .62; // 計画減速度（B5 相当）
+  const plan0 = perf.bMax * .62; // 計画減速度（B5 相当）
   const tr: TrainState = { s: route.startS, v: 0, acc: 0, notch: 0 };
   const out: Record<number, { arr: number; dep?: number }> = { 0: { arr: 0, dep: 0 } };
   let t = 0;
@@ -29,6 +32,12 @@ function run(route: Route, id: ServiceId) {
       const target = route.stations[stops[si]].stopS;
       // 先の制限・停車位置に対する許容速度
       const vNow = tr.v;
+      let plan = plan0;
+      if (route.singleTrack) {
+        let g = 0;
+        for (let d = 0; d < 800; d += 20) g = Math.min(g, track.gradeAt(tr.s + d));
+        plan = Math.max(.2, perf.bMax * .75 - 9.81 * -g / 1000);
+      }
       let vAllow = track.limitAt(tr.s) / 3.6;
       for (let d = 5; d < 2500; d += 5) {
         const q = tr.s + d;
@@ -50,7 +59,8 @@ function run(route: Route, id: ServiceId) {
       si++;
       const last = i === route.stations.length - 1;
       const w = svc.waits?.find(x => x.station === i);
-      const dwell = !w ? DWELL : waitDwell(route, i, route.services!.find(x => x.id === w.passedBy)!, svc.cars);
+      const meet = route.meets?.some(m => m.station === i);
+      const dwell = meet ? meetDwell() : !w ? DWELL : waitDwell(route, i, route.services!.find(x => x.id === w.passedBy)!, svc.cars);
       out[i] = last ? { arr: t } : { arr: t, dep: t + dwell };
       if (!last) t += dwell;
     }
@@ -61,7 +71,7 @@ function run(route: Route, id: ServiceId) {
 const up = (x: number) => Math.ceil(x * MARGIN / 5) * 5;
 function table(route: Route): Record<string, string> {
   const res: Record<string, string> = {};
-  for (const id of ['local', 'express', 'limited'] as ServiceId[]) {
+  for (const id of (route.services ?? []).map(v => v.id)) {
     const raw = run(route, id);
     // 駅間の走行時間に余裕を足し、停車時間はそのまま
     let prevRaw = 0, prevOut = 0;
@@ -92,4 +102,19 @@ export const TT: Record<ServiceId, ServiceSpec['timetable']> = ${body(dn)};
 
 /** 上り（岬口 → 桜ヶ丘） */
 export const TT_UP: Record<ServiceId, ServiceSpec['timetable']> = ${body(upT)};
+`);
+
+const mDn = table(mountain), mUp = table(mountainUp);
+writeFileSync('src/route/routes/mountain-timetable.ts', `// 霧峰線の時刻表（scripts/timetable.ts が生成。手で直さない）
+import type { ServiceSpec } from '../types';
+
+/** 下り（川原町 → 雲ノ橋） */
+export const MT: Record<'local', ServiceSpec['timetable']> = {
+  local: ${mDn.local},
+};
+
+/** 上り（雲ノ橋 → 川原町） */
+export const MT_UP: Record<'local', ServiceSpec['timetable']> = {
+  local: ${mUp.local},
+};
 `);

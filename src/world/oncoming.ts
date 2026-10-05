@@ -3,6 +3,7 @@
 // 2面4線駅（汐見町・海浜公園）の対向側には待避線（対向線の +lat 側へ鏡像）があり、対向の普通（spec.stop.loop）はそこへ分岐器（制限 45km/h）で入って停車し、
 // 島式ホーム側のドアだけ開ける。同じ駅の対向の優等列車（spec.follow）は本線に停車 / 通過し、普通はその優等列車が分岐器を抜けてから発車する
 // 同時に走る対向列車は、走路が重ならないものだけ（出現位置が他の編成の走路と重なるうちは出さない）。同じ線の前後の編成は間隔を保つ。車両セットは種別・両数ごとに使い回す
+// 単線（route.singleTrack）: 交換駅で行き違う対向列車（route.meets）は game/meet.ts が動かし（st.meet）、ここでは描画・ドア・警笛のみ。右の線（+spread）を走る
 // spec.kind 未指定なら 普通(新型4両) → 急行(旧型6両) → 特急(6両) の順に割り当てる
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
@@ -111,6 +112,7 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
   /** 編成の走る線の横位置（待避線に入る編成は分岐器で +lat 側の待避線へ） */
   const laneLat = (o: OncomingTrain, s: number): number => {
     const lat = o.spec.lat;
+    if (route.singleTrack) return islandOffset(route, 0, s, 1);
     return lat + islandOffset(route, lat, s) + (o.zone ? -o.zone.lat * loopShape(o.zone, s) : 0);
   };
   // 種別・両数ごとに1セットを先に作る（出現時の負荷を避ける）
@@ -243,10 +245,40 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
     return true;
   }
 
+  // ---------- 行き違いの対向列車（st.meet） ----------
+  const meetSpecs: OncomingTrain[] = (route.meets ?? []).map((m, i) => ({
+    spec: { spawnAt: Infinity, startS: 0, cars: m.cars, carLen: 18, gap: .8, kmh: m.kmh, lat: 0, kind: m.kind, ...(m.label ? { label: m.label } : {}), ...(m.dest ? { dest: m.dest } : {}) },
+    kind: m.kind, idx: -1 - i, zone: null, view: null, active: false, done: false, started: false, head: 0, v: 0, phase: 'cruise', left: false, tStop: 0, tClose: 0, tPlayer: 0, horn: false,
+  }));
+  for (const o of meetSpecs) if (!sets.has(keyOf(o))) build(o);
+  let meetHornStage = '';
+  /** 戻り値 = すれ違いの近さ 0..1（非表示なら -1） */
+  function updateMeet(ps: number, pv: number): number {
+    const m = st.meet;
+    for (const [i, o] of meetSpecs.entries()) {
+      const show = !!m && m.spec === i && m.stage !== 'gone';
+      if (!show) { if (o.active) { o.active = false; release(o); } continue; }
+      if (!o.active) { o.active = true; o.view = acquire(o); meetHornStage = ''; }
+      o.head = m!.head; o.v = m!.v;
+      const open = m!.stage === 'stopped';
+      for (const c of o.view!.cars) c.setDoors(open, 'R');
+      place(o);
+      // 警笛: 交換駅へ進入するとき・発車するとき（自列車の近く）
+      const d = o.head - ps;
+      if ((m!.stage === 'brake' && meetHornStage === '' && Math.abs(d) < 400) || (m!.stage === 'accel' && meetHornStage !== 'accel' && Math.abs(d) < 500)) {
+        meetHornStage = m!.stage;
+        events.emit('oncomingHorn', { distance: Math.max(0, d) });
+      }
+      const tail = o.head + o.view!.length, dist = d > 0 ? d : tail > ps ? 0 : ps - tail;
+      return Math.max(0, 1 - dist / 60) * Math.min(1, (pv + o.v) / 8) * .8;
+    }
+    return -1;
+  }
+
   events.on('frame', ({ dt }) => {
     if (st.state !== 'run' && st.state !== 'dwell') return;
     const ps = st.train.s, pv = st.train.v;
-    let p = -1;
+    let p = updateMeet(ps, pv);
     for (const o of trains) {
       if (!o.active && !o.done && ps >= o.spec.spawnAt) {
         const ok = canSpawn(o, ps);
@@ -262,12 +294,16 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
   });
   events.on('reset', () => {
     for (const o of trains) { Object.assign(o, { active: false, done: false, started: false, horn: false }); release(o); }
+    for (const o of meetSpecs) { o.active = false; release(o); }
   });
 
   // 開発時の確認用: 各編成の状態
   if (import.meta.env.DEV) (window as any).__oncomingDebug = () => trains.map(o => ({ kind: o.kind, stop: o.spec.stop?.station, loop: !!o.zone, active: o.active, done: o.done, phase: o.phase, head: Math.round(o.head), len: Math.round(lenOf(o)), lat: +laneLat(o, o.head).toFixed(1), kmh: Math.round(o.v * 3.6), tStop: Math.round(o.tStop), tPlayer: Math.round(o.tPlayer) }));
 
   return {
-    activeSpans: () => trains.filter(o => o.active && o.view && o.phase !== 'stopped' && o.phase !== 'closing').map(o => ({ head: o.head, tail: o.head + o.view!.length })),
+    activeSpans: () => [
+      ...trains.filter(o => o.active && o.view && o.phase !== 'stopped' && o.phase !== 'closing'),
+      ...meetSpecs.filter(o => o.active && o.view && o.v > 0),
+    ].map(o => ({ head: o.head, tail: o.head + o.view!.length })),
   };
 }

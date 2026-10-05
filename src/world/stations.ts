@@ -7,6 +7,7 @@ import type { Station } from '../route/types';
 import { GeoBatch, M, P, onLight } from './batch';
 import { canvasTex } from './canvas-tex';
 import { getTerrain } from './terrain';
+import { buildMountainStations } from './mountain-stations';
 
 const platMat = new THREE.MeshLambertMaterial({ color: 0xc9c5bc });
 const bodyMat = new THREE.MeshLambertMaterial({ vertexColors: true });
@@ -14,7 +15,7 @@ const SHIRTS = [0x2d3a5a, 0xf0f0f0, 0x6a2a2a, 0x3a5a3a, 0xc8b89a, 0x222222, 0x8a
 const PANTS = [0x22262e, 0x3a3f4a, 0x4a3a2e, 0x6a6a70, 0x1a2a4a];
 
 /** 人（立ち姿、ローカル座標 y=0 が床） */
-function person(b: GeoBatch, rnd: () => number, x: number, z: number, ry: number): void {
+export function person(b: GeoBatch, rnd: () => number, x: number, z: number, ry: number): void {
   const h = 1.5 + rnd() * .32, shirt = SHIRTS[Math.floor(rnd() * SHIRTS.length)], pants = PANTS[Math.floor(rnd() * PANTS.length)];
   const legH = h * .46, torso = h * .34;
   for (const dx of [-.09, .09]) b.add('body', P.box, M(x + dx * Math.cos(ry), legH / 2, z - dx * Math.sin(ry), ry, .13, legH, .16), pants);
@@ -25,7 +26,7 @@ function person(b: GeoBatch, rnd: () => number, x: number, z: number, ry: number
   if (rnd() < .4) b.add('body', P.box, M(x + .28 * Math.cos(ry), legH + .05, z - .28 * Math.sin(ry), ry, .1, .3, .35), [0x222222, 0x6a4a2a, 0xb0a090][Math.floor(rnd() * 3)]); // かばん
 }
 
-function nameTex(sta: Station, prevName: string, nextName: string): THREE.CanvasTexture {
+export function nameTex(sta: Station, prevName: string, nextName: string): THREE.CanvasTexture {
   return canvasTex(1024, 300, (g, w, h) => {
     g.fillStyle = '#fff'; g.fillRect(0, 0, w, h);
     g.fillStyle = '#e0588c'; g.fillRect(0, 196, w, 22);
@@ -156,7 +157,8 @@ export function buildStation(ctx: GameContext, sta: Station, prevName: string, n
 
 /** 島式ホーム（幅 PW、両側に線路）。lat = ホーム中心の横位置。駅名標は rev で前後を入れ替え（対向側） */
 const PW0 = 6;
-function buildIsland(ctx: GameContext, sta: Station, prevName: string, nextName: string, lat: number, PW = PW0): THREE.Group {
+export function buildIsland(ctx: GameContext, sta: Station, prevName: string, nextName: string, lat: number, PW = PW0,
+  opt: { /** 跨線橋への階段口 */ stairs?: boolean; /** 上屋の長さ（ホーム長に対する割合） */ roof?: number } = {}): THREE.Group {
   const { rng: rnd, track } = ctx;
   const s0 = sta.platform.from, s1 = sta.platform.to;
   const len = s1 - s0, sc = (s0 + s1) / 2, t = track.trackAt(sc);
@@ -171,7 +173,7 @@ function buildIsland(ctx: GameContext, sta: Station, prevName: string, nextName:
     box(e - sx * .02, .9, 0, .06, .3, len, 0x9a968c);
   }
   // 上屋（中央の柱1列）
-  const rl = len * .7;
+  const rl = len * (opt.roof ?? .7);
   box(0, 4.35, 0, PW - .8, .14, rl, 0x6b7680);
   box(0, 4.22, 0, PW - 1, .12, rl, 0xdcdcd8);
   for (const sx of [-1, 1]) box(sx * (PW / 2 - .45), 4.15, 0, .1, .35, rl, 0x6b7680);
@@ -188,8 +190,10 @@ function buildIsland(ctx: GameContext, sta: Station, prevName: string, nextName:
   const signs: number[] = [-len * .3, len * .3];
   for (const z of signs) for (const dz of [-1.5, 1.5]) box(0, 1.9, z + dz, .08, 1.6, .08, 0x777d84);
   // 階段口（跨線橋へ。ホーム中央）
-  box(0, 1.6, 0, 2.6, 1.0, 14, 0xd8d4ca);
-  for (const sx of [-1, 1]) box(sx * 1.32, 2.6, 0, .06, 1.0, 14, 0x9aa0a6);
+  if (opt.stairs ?? true) {
+    box(0, 1.6, 0, 2.6, 1.0, 14, 0xd8d4ca);
+    for (const sx of [-1, 1]) box(sx * 1.32, 2.6, 0, .06, 1.0, 14, 0x9aa0a6);
+  }
   // 人（両側の乗車位置付近）
   for (let k = 0; k < 26; k++) {
     const z = (rnd() - .5) * len * .8, sx = rnd() < .5 ? -1 : 1;
@@ -253,6 +257,7 @@ function buildIslandConcourse(ctx: GameContext, sta: Station, loopLat: number, c
 
 export function buildStations(ctx: GameContext): void {
   const st = ctx.route.stations, T = getTerrain(ctx);
+  if (ctx.route.theme === 'mountain') { buildMountainStations(ctx); return; }
   st.forEach((sta, i) => {
     const prev = st[i - 1]?.name ?? ctx.route.prevName ?? '';
     const next = st[i + 1]?.name ?? ctx.route.nextName ?? '';

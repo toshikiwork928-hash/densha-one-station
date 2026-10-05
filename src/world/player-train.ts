@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import { onLight } from './batch';
 import { placeCar } from './emu';
-import { CAR_LEN, createTrainSet, setTrainNight, type TrainCar } from './train-models';
+import { bogieOffset, carLenOf, createTrainSet, setTrainNight, type TrainCar } from './train-models';
 
 export { formation } from './train-models';
 
@@ -22,8 +22,8 @@ export function createPlayerTrain(ctx: GameContext): PlayerTrain {
   /** 種別に合わせて編成を作り直す（車種・両数・種別表示） */
   function build() {
     const svc = ctx.service;
-    const n = svc?.cars ?? Math.max(2, Math.round(route.trainLength / CAR_LEN));
     const kind = svc?.kind ?? 'commuter-new', units = svc?.units;
+    const n = svc?.cars ?? Math.max(2, Math.round(route.trainLength / carLenOf(kind)));
     const key = `${kind}:${units?.join('+') ?? n}:${svc?.name ?? ''}`;
     if (key === built) return;
     built = key;
@@ -36,7 +36,6 @@ export function createPlayerTrain(ctx: GameContext): PlayerTrain {
   ctx.events.on('serviceChange', build);
   ctx.events.on('reset', build);
 
-  const bogie = CAR_LEN / 2 - .25 - 2.6;
   // 線路を照らす前照灯の光源は環境担当（env/night-lights.ts）。ここは灯具の発光・窓明かりのみ
   onLight(ctx, (n, t) => setTrainNight(Math.max(n, t)));
 
@@ -52,7 +51,7 @@ export function createPlayerTrain(ctx: GameContext): PlayerTrain {
     for (const c of cars) {
       c.setDoors(open, side);
       sc -= c.length / 2;
-      const a = sc + bogie, b = sc - bogie;
+      const bogie = bogieOffset(c.length), a = sc + bogie, b = sc - bogie;
       p1.copy(track.pathAt(a, 0, .38)); p2.copy(track.pathAt(b, 0, .38));
       placeCar(c.object, p1, p2);
       sc -= c.length / 2;

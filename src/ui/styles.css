@@ -214,3 +214,27 @@ table.keys td:first-child { white-space: nowrap; width: 1%; padding-right: 12px;
   #touch button { width: 72px; height: 52px; font-size: 18px; }
   #touch button[data-k="eb"] { height: 36px; }
 }
+
+/* 路線の選択（タイトル最上部のカード） */
+.lines { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 12px 0 4px; }
+.lines button { position: relative; text-align: left; padding: 10px 12px 10px 14px; border-radius: 10px; border: 1px solid var(--line); color: #dfe6ee; cursor: pointer;
+  background: #1b2330; font-size: 15px; line-height: 1.35; overflow: hidden; }
+.lines button::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: #4a5566; }
+.lines button b { display: block; font-size: 16px; }
+.lines button small { display: block; margin-top: 3px; font-size: 11px; color: #9aa6b6; }
+.lines button.line-coast::before { background: linear-gradient(#4aa8ff, #2a6fd0); }
+.lines button.line-mountain::before { background: linear-gradient(#6fbf5a, #2f6b3a); }
+.lines button.on.line-coast { background: linear-gradient(135deg, #1f4f8f, #173a66); border-color: #4aa8ff; }
+.lines button.on.line-mountain { background: linear-gradient(135deg, #2f6b3a, #1d4528); border-color: #6fbf5a; }
+.lines button.on small { color: #d6e2ee; }
+.lines button:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+@media (max-width: 420px) {
+  .lines { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .lines button { padding: 8px 8px 8px 11px; }
+  .lines button b { font-size: 14px; }
+  .lines button small { font-size: 10px; }
+}
+@media (max-height: 500px) {
+  .lines { margin-top: 6px; }
+  .lines button small { display: none; }
+}

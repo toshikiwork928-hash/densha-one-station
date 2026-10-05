@@ -14,7 +14,35 @@ const approachSigns = (stopS: number): Sign[] => [
   { kind: 'stopMarker', s: stopS, cars: 6 },
 ];
 
-export function reverseRoute(down: Route, opt: { id: string; name: string; timetable: Record<string, ServiceSpec['timetable']>; /** 下りの停車駅 index で指定した対向列車の停車（上りでは駅 index を反転して配置） */ oncomingStops?: StopScene[] }): Route {
+/** 単線の閉そく信号: 各駅の出発信号（停止位置の 30m 先。交換駅では出口分岐器の手前）、場内信号（交換駅・島式駅は入口分岐器の 60m 手前、棒線駅はホームの 200m 手前）、
+ *  間は約 700m ごとに閉そく信号。踏切の前後 25m は避ける */
+export function singleTrackSignals(stations: Station[], crossings: { s: number }[] = [], prefix = ''): { id: string; s: number }[] {
+  const n = stations.length, fixed: number[] = [];
+  stations.forEach((st, i) => {
+    if (i < n - 1) fixed.push(st.stopS + 30);
+    if (i > 0) { const iz = islandZone(st); fixed.push(iz ? iz.inFrom - 60 : st.platform.from - 200); }
+  });
+  fixed.sort((a, b) => a - b);
+  const sig: number[] = [];
+  for (let k = 0; k < fixed.length; k++) {
+    sig.push(fixed[k]);
+    const nx = fixed[k + 1];
+    if (nx == null) break;
+    const gap = nx - fixed[k], cnt = Math.floor(gap / 800);
+    for (let j = 1; j <= cnt; j++) {
+      let s = fixed[k] + gap * j / (cnt + 1);
+      for (const c of crossings) if (Math.abs(s - c.s) < 25) s = c.s - 30;
+      sig.push(Math.round(s));
+    }
+  }
+  return sig.map(s => ({ id: prefix + 's' + Math.round(s), s: Math.round(s) }));
+}
+
+export function reverseRoute(down: Route, opt: {
+  id: string; name: string; timetable: Record<string, ServiceSpec['timetable']>;
+  /** 下りの停車駅 index で指定した対向列車の停車（上りでは駅 index を反転して配置） */ oncomingStops?: StopScene[];
+  /** 駅の距離標・停止位置目標（既定は 6両基準の汐風線の形） */ signs?: (stopS: number) => Sign[];
+}): Route {
   const L = totalLength(down), m = (s: number) => L - s;
   const n = down.stations.length, ri = (i: number) => n - 1 - i;
   // 標高: 下りの終点側の標高から始める
@@ -22,7 +50,13 @@ export function reverseRoute(down: Route, opt: { id: string; name: string; timet
   for (const g of down.gradients ?? []) endY += (g.to - g.from) * g.permil / 1000;
   const stations: Station[] = [...down.stations].reverse().map(st => {
     const from = m(st.platform.to), to = m(st.platform.from), ahead = st.platform.to - st.stopS;
-    return { ...st, platform: { ...st.platform, from, to }, stopS: to - ahead, scheduledArrival: 0, dwell: undefined, pass: undefined };
+    // 単線: ホーム・副線は物理的に片側にあるので、逆向きでは左右が入れ替わる
+    const single = !!down.singleTrack;
+    const island = st.island && { ...st.island, ...(st.island.bay ? { bay: { ...st.island.bay, lat: -st.island.bay.lat, bumper: st.island.bay.bumper === 'behind' ? 'ahead' as const : 'behind' as const } } : {}) };
+    return {
+      ...st, platform: { ...st.platform, from, to, side: single && !st.island ? (st.platform.side === 'L' ? 'R' as const : 'L' as const) : st.platform.side },
+      stopS: to - ahead, scheduledArrival: 0, dwell: undefined, pass: undefined, ...(island ? { island } : {}),
+    };
   });
   const len = down.trainLength;
   const limits: SpeedLimit[] = down.limits.map(Lm => {
@@ -75,18 +109,19 @@ export function reverseRoute(down: Route, opt: { id: string; name: string; timet
     services,
     prevName: down.nextName,
     nextName: down.prevName,
-    signs: stations.slice(1).flatMap(st => approachSigns(st.stopS)),
+    signs: stations.slice(1).flatMap(st => (opt.signs ?? approachSigns)(st.stopS)),
     extent: { from: m(down.extent.to), to: m(down.extent.from) },
     scenery: {
       cityZones: down.scenery.cityZones.map(z => ({ from: m(z.to), to: m(z.from) })).sort((a, b) => a.from - b.from),
-      endBlockS: m(down.extent.from) + 110,
+      ...(down.scenery.endBlockS != null ? { endBlockS: m(down.extent.from) + 110 } : {}),
     },
     // 対向列車（下り列車）: 走り抜けるものは下りの出現位置を同じ距離で写し、駅に停車するもの・待避線の普通と並ぶもの（follow）は上りの駅の位置から作り直す
     oncoming: [
       ...down.oncoming.filter(o => !o.stop && !o.follow).map(o => ({ ...o, spawnAt: startS + (o.spawnAt - down.startS), startS: startS + (o.startS - down.startS) })),
       ...stopScenes(stations, (opt.oncomingStops ?? []).map(sc => ({ ...sc, station: ri(sc.station) }))),
     ],
-    signals: sig.map(s => ({ id: 'u' + Math.round(s), s })),
+    signals: down.singleTrack ? singleTrackSignals(stations, crossings, 'u') : sig.map(s => ({ id: 'u' + Math.round(s), s })),
+    ...(down.meets ? { meets: down.meets.map(mt => ({ ...mt, station: ri(mt.station) })) } : {}),
     crossings,
     structures,
   };

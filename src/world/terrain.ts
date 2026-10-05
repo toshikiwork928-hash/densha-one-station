@@ -5,6 +5,7 @@ import type { GameContext } from '../core/context';
 import type { Route } from '../route/types';
 import type { Track } from '../route/track';
 import { loopZone } from '../route/service';
+import { buildMountainTerrain, makeMountainTerrain, type MountainTerrain } from './mountain-terrain';
 
 export type StructureKind = 'tunnel' | 'viaduct' | 'bridge';
 type Structure = NonNullable<Route['structures']>[number];
@@ -35,7 +36,7 @@ const cache = new WeakMap<GameContext, Terrain>();
 
 export function getTerrain(ctx: GameContext): Terrain {
   let t = cache.get(ctx);
-  if (!t) { t = makeTerrain(ctx.route, ctx.track); cache.set(ctx, t); }
+  if (!t) { t = ctx.route.theme === 'mountain' ? makeMountainTerrain(ctx.route, ctx.track) : makeTerrain(ctx.route, ctx.track); cache.set(ctx, t); }
   return t;
 }
 
@@ -136,6 +137,7 @@ export const hash = (x: number, y = 0) => { const v = Math.sin(x * 127.1 + y * 3
 /** 地面・盛土・山を生成 */
 export function buildTerrain(ctx: GameContext): Terrain {
   const T = getTerrain(ctx), { track, route, scene } = ctx;
+  if (route.theme === 'mountain') { buildMountainTerrain(ctx, T as MountainTerrain); return T; }
   const S0 = route.extent.from - 400, S1 = route.extent.to + 400;
   const groundMat = new THREE.MeshLambertMaterial({ vertexColors: true });
   groundMat.name = 'ground';

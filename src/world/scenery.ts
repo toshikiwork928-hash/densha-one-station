@@ -5,6 +5,7 @@ import type { GameContext } from '../core/context';
 import { fallbackBox, fallbackTree, prepareModel, type LoadedAssets, type PreparedModel } from './assets';
 import { buildSceneryBatches, type SceneryItem } from './scenery-batch';
 import { getTerrain } from './terrain';
+import { isMountain } from './mountain-terrain';
 import type { TreeSpot } from './town-jp';
 
 /** 景観カテゴリ別のモデル集合 */
@@ -23,6 +24,7 @@ export const KIT_SCALE: Record<keyof SceneryModels, number> = { city: 9, far: 9,
  *  線路の左右に帯状の山並みを置く。稜線は重ねた正弦波＋乱数の峰で起伏を付け、手前ほど濃い緑・奥ほど霞んだ青灰色。 */
 export function buildBackdrop(ctx: GameContext): void {
   const { scene, rng: rnd, track, route } = ctx;
+  if (route.theme === 'mountain') return; // 山岳線は地形の遠景格子（mountain-terrain.ts）と空の稜線
   const S0 = route.extent.from - 1500, S1 = route.extent.to + 1500;
   // 曲線の内側で山並みが折り重ならないよう、線路を ±600m で平滑化した基準線から横へずらす
   const STEP = 60, W = 10, raw: { x: number; z: number; c: number; sn: number }[] = [];
@@ -117,7 +119,10 @@ export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot
   const pick = <T>(arr: T[]): T => arr[Math.floor(rnd() * arr.length)];
   const facing = (side: number) => (side < 0 ? Math.PI / 2 : -Math.PI / 2) + (rnd() < .3 ? Math.PI : 0);
   const nearCity = (s: number, m: number) => route.scenery.cityZones.some(z => s > z.from - m && s < z.to + m);
-  const blocked = (s: number) => T.nearCrossing(s, 3) || T.structureAt(s, 60)?.kind === 'tunnel' || T.groundY(s) < -.3;
+  // 山岳線: ビル・線路際の植え込みは平地（町）で地面が線路と同じ高さの所だけ
+  const MT = isMountain(T) ? T : null;
+  const level = (s: number, lat: number) => !MT || (MT.flat(s) > .97 && Math.abs(MT.terrainY(s, lat) - MT.groundY(s)) < .9);
+  const blocked = (s: number) => T.nearCrossing(s, 3) || T.structureAt(s, 60)?.kind === 'tunnel' || (!MT && T.groundY(s) < -.3) || !level(s, 0);
 
   for (const side of [-1, 1]) {
     // 市街地の奥: 商業ビル・中層ビル
@@ -125,13 +130,15 @@ export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot
       if (!T.isCity(s) || blocked(s)) { s += 10; continue; }
       const mid = rnd() < .4, model = pick(mid ? M.mid : M.city), k = mid ? KIT_SCALE.mid : KIT_SCALE.city;
       const half = Math.max(model.size.x, model.size.z) * k / 2;
+      if (!level(s, latOf(side, 70 + half))) { s += 10; continue; }
       put(model, s, latOf(side, 70 + half + rnd() * 10), facing(side), k);
       s += half * 2 + 3 + rnd() * 6;
     }
     // 遠景: 簡易ビル群（市街地付近のみ）
     for (let s = TS0; s < TS1 + 400;) {
       if (!nearCity(s, 250) || blocked(s)) { s += 20; continue; }
-      put(pick(M.far), s, latOf(side, 100 + rnd() * 140), rnd() * 6, KIT_SCALE.far * (1 + rnd() * .5));
+      const fm = pick(M.far), fl = latOf(side, 100 + rnd() * 140); // 乱数の消費順は従来どおり
+      if (level(s, fl)) put(fm, s, fl, rnd() * 6, KIT_SCALE.far * (1 + rnd() * .5));
       s += 12 + rnd() * 25;
     }
     // 線路際の木・植え込み（柵と道路の間）
@@ -139,7 +146,8 @@ export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot
       if (rnd() < .5 || blocked(s) || T.structureAt(s, 5) || T.nearStation(s, 10)) continue;
       const big = rnd() < .35;
       const model = pick(big ? M.trees : M.bushes), k = (big ? KIT_SCALE.trees * .8 : KIT_SCALE.bushes) * (.7 + rnd() * .4);
-      put(model, s, latOf(side, 8.6 + rnd() * 1.4), rnd() * 6, k);
+      const tl = latOf(side, 8.6 + rnd() * 1.4);
+      if (level(s, tl)) put(model, s, tl, rnd() * 6, k);
     }
   }
   // 街並み側が決めた木（庭木・屋敷林・山林）

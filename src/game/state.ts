@@ -5,6 +5,7 @@ import { applyService, applyVehicles } from '../route/service';
 import type { Route, ServiceId, TrainKind } from '../route/types';
 import type { TrainState } from '../sim/train';
 import type { PassJudgement, StopJudgement } from './scoring';
+import type { MeetState } from './meet';
 
 export type GameStateName = 'title' | 'run' | 'dwell' | 'result';
 
@@ -114,6 +115,8 @@ export interface GameState {
   penalties: Penalties;
   /** 待避（普通のみ）。無ければ null */
   overtake: OvertakeState | null;
+  /** 単線の交換駅で行き違う対向列車（game/meet.ts）。無ければ null */
+  meet: MeetState | null;
 }
 
 /** 停車駅（通過駅を除く）の index 列 */
@@ -175,7 +178,7 @@ export function resetState(st: GameState, route: Route): void {
     signals: (route.signals ?? []).map(() => 'G'), nextSignal: -1, sigLimit: Infinity, precedingS: 0,
     ats: { state: 'normal', timer: 0, reason: '' },
     penalties: { atsWarn: 0, atsBrake: 0, redPass: 0, wrongStop: 0 },
-    overtake: null,
+    overtake: null, meet: null,
   } satisfies GameState);
 }
 

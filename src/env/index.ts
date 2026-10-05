@@ -26,7 +26,7 @@ export function attachEnvSystem(ctx: GameContext): EnvSystem {
   let settings = loadSettings();
 
   // 既存の背景色は霧色と共有。スカイドームが上に描かれる
-  const sky = createSkyDome(scene, QUALITY_SPEC[settings.quality].cloudOctaves);
+  const sky = createSkyDome(scene, QUALITY_SPEC[settings.quality].cloudOctaves, ctx.route.theme); // 山岳線は遠景の山並みを高く
   const precip = createPrecip(scene);
   const shield = createWindshield();
   const lights = createNightLights(ctx);
@@ -194,7 +194,7 @@ export function attachEnvSystem(ctx: GameContext): EnvSystem {
     shield.update(dt, rainAmt * out, snowAmt * out, tr.v, ctx.cameraMode === 'cab', light);
 
     // 積雪面
-    snowPlane.visible = cur.snow > .02;
+    snowPlane.visible = cur.snow > .02 && ctx.route.theme !== 'mountain'; // 山岳線は地形の上向きの面を白く（world/mountain-terrain.ts）
     if (snowPlane.visible) {
       snowMat.opacity = Math.min(.92, cur.snow * .95);
       snowPlane.position.x = Math.round(camera.position.x / 50) * 50; snowPlane.position.z = Math.round(camera.position.z / 50) * 50;

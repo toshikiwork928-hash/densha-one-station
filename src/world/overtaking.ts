@@ -5,7 +5,7 @@ import type { GameContext } from '../core/context';
 import { islandOffset, loopShape, loopZones, serviceOf } from '../route/service';
 import type { TrainKind } from '../route/types';
 import { placeCar } from './emu';
-import { CAR_LEN, createTrainSet, type TrainCar } from './train-models';
+import { bogieOffset, createTrainSet, type TrainCar } from './train-models';
 
 interface SetView { group: THREE.Group; cars: TrainCar[] }
 
@@ -27,13 +27,13 @@ export function createOvertaking(ctx: GameContext): void {
     }
     return v;
   };
-  const bogie = CAR_LEN / 2 - .25 - 2.6;
   const pa = new THREE.Vector3(), pb = new THREE.Vector3();
   /** 先頭 head から後ろへ並べる。latAt = 横位置 */
   const place = (v: SetView, head: number, latAt: (s: number) => number) => {
     let sc = head;
     for (const c of v.cars) {
       sc -= c.length / 2;
+      const bogie = bogieOffset(c.length);
       pa.copy(track.at(sc + bogie, latAt(sc + bogie), .38)); pb.copy(track.at(sc - bogie, latAt(sc - bogie), .38));
       placeCar(c.object, pa, pb);
       sc -= c.length / 2;

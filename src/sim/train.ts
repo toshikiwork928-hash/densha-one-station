@@ -23,6 +23,9 @@ const kmh = (x: number) => x / 3.6;
 export const TRAIN_PERF: Record<TrainKind, TrainPerf> = {
   'commuter-new': { a0: kmh(3.0), vBase: kmh(40), k: 1, bMax: 1.2, eb: 1.45, vMax: kmh(110) },
   'commuter-old': { a0: kmh(2.5), vBase: kmh(35), k: 1.25, bMax: 1.1, eb: 1.4, vMax: kmh(110) },
+  // 2300系（山岳線の 18m 車。高速域が弱い）: 2.8km/h/s。50‰ の上りでは約 40km/h で頭打ち（均衡速度）、
+  // 下りは B4 以上で 50‰ の勾配に打ち勝って減速できる（抑速ブレーキなしで速度を保てる）
+  'commuter-2300': { a0: kmh(2.8), vBase: kmh(30), k: 1.4, bMax: 1.2, eb: 1.45, vMax: kmh(100) },
   limited: { a0: kmh(2.5), vBase: kmh(55), k: 1, bMax: 1.15, eb: 1.45, vMax: kmh(120) },
 };
 /** 種別なし路線の従来性能 */

@@ -2,12 +2,16 @@
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import { loopZone } from '../route/service';
+import { getTerrain } from '../world/terrain';
+import { isMountain } from '../world/mountain-terrain';
 
 export interface CabCamera {
   update(time: number): void;
 }
 
 const CAB_FOV = 58;
+/** 沿線カメラの地表からの最低高さ [m] */
+const CAM_CLEAR = 1.5;
 
 /** リプレイのショット種別 */
 type ShotKind = 'trackside' | 'low' | 'chase' | 'heli' | 'platform';
@@ -20,6 +24,7 @@ export function createCabCamera(ctx: GameContext): CabCamera {
   const viewDir = new THREE.Vector3(), viewRight = new THREE.Vector3(), viewUp = new THREE.Vector3(), viewPoint = new THREE.Vector3();
   const lat = -.45; // 運転席は左寄り
   const { events, route } = ctx;
+  const T0 = getTerrain(ctx), MT = isMountain(T0) ? T0 : null;
   let outsideVariant = 0, prevMode = ctx.cameraMode, snap = true;
   let shot: Shot | null = null, shotN = 0;
   const viewLabel = document.createElement('div');
@@ -61,17 +66,45 @@ export function createCabCamera(ctx: GameContext): CabCamera {
   function nextShot(s: number, v: number, time: number): Shot {
     const L = route.trainLength;
     const sta = nearStation(s);
-    if (sta && v > 1) return { kind: 'platform', s: sta.stopS + 12, lat: sta.island ? (Math.min(...route.tracks) + Math.max(...route.tracks)) / 2 + 1 : sta.enterLoop ? (loopZone(sta)?.lat ?? 0) + 4.2 : -4.2, h: 2.4, t0: time, fov: 40 };
+    if (sta && v > 1) {
+      // 島式は線路間、待避線はその外側、棒線駅はホームの側（汐風線は左、山岳線は駅ごと）
+      const plat = sta.island ? (Math.min(...route.tracks) + Math.max(...route.tracks)) / 2 + 1 : sta.enterLoop ? (loopZone(sta)?.lat ?? 0) + 4.2 : (sta.platform.side === 'R' ? 1 : -1) * 4.2;
+      return { kind: 'platform', s: sta.stopS + 12, lat: plat, h: 2.4, t0: time, fov: 40 };
+    }
     const kind = SHOT_ORDER[shotN++ % SHOT_ORDER.length];
     const ahead = Math.max(120, v * 7);
     const side = shotN % 2 ? -1 : 1;
     switch (kind) {
-      case 'trackside': return { kind, s: s + ahead, lat: side * (9 + (shotN % 3) * 4), h: 1.8 + (shotN % 2) * 3, t0: time, fov: 32 };
+      case 'trackside': {
+        const shot: Shot = { kind, s: s + ahead, lat: side * (9 + (shotN % 3) * 4), h: 1.8 + (shotN % 2) * 3, t0: time, fov: 32 };
+        return MT ? fitTrackside(shot) ?? { kind: 'chase', s: 0, lat: side * 6, h: 5, t0: time, fov: 55 } : shot;
+      }
       case 'low': return { kind, s: s + ahead * .8, lat: -2.7, h: .5, t0: time, fov: 50 };
       case 'chase': return { kind, s: 0, lat: side * 6, h: 5, t0: time, fov: 55 };
       case 'heli': return { kind, s: 0, lat: 40, h: 45, t0: time, fov: 45 };
       default: return { kind: 'chase', s: 0, lat: -L * 0, h: 5, t0: time, fov: 55 };
     }
+  }
+
+  /** 山岳線: 沿線カメラを地表（斜面・切土）より上に置き、列車が斜面に隠れない側を選ぶ。トンネル内・坑口際なら null（別ショット） */
+  function fitTrackside(shot: Shot): Shot | null {
+    const T = MT!;
+    if (T.structureAt(shot.s, 25)?.kind === 'tunnel') return null;
+    const y0 = T.trackY(shot.s);
+    for (const lat of [shot.lat, -shot.lat]) {
+      const g = T.terrainY(shot.s, lat);
+      const h = Math.max(shot.h, g + CAM_CLEAR - y0);
+      if (h > shot.h + 8) continue; // 法面の上に高く持ち上がる側は避ける
+      // 見通し: カメラから線路（撮る範囲）までの間に地表が出ないこと
+      let clear = true;
+      for (const ds of [0, 30]) for (let k = 1; k < 6 && clear; k++) {
+        const u = k / 6, q = shot.s + ds * u, l = lat * (1 - u);
+        const yl = y0 + h + (T.trackY(shot.s + ds) + 2 - y0 - h) * u;
+        if (T.terrainY(q, l) > yl - .3) clear = false;
+      }
+      if (clear) return { ...shot, lat, h };
+    }
+    return null;
   }
 
   function updateReplay(s: number, v: number, time: number) {
