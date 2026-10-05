@@ -10,8 +10,8 @@ import { buildLimitedCar, paintLimitedSide, HW_L } from './trains/limited';
 export interface TrainCar {
   object: THREE.Object3D;
   length: number;
-  /** 客用ドアの開閉（停車中の見た目。何度呼んでもよい） */
-  setDoors(open: boolean): void;
+  /** 客用ドアの開閉（停車中の見た目。何度呼んでもよい）。side = 開ける側（進行方向に対して。ホーム側）。省略は両側 */
+  setDoors(open: boolean, side?: 'L' | 'R'): void;
 }
 
 /** 行先表示などの任意指定 */
@@ -115,7 +115,7 @@ function openMat(k: KindKit, head: boolean, make: () => THREE.MeshStandardMateri
   let c = openCache.get(k);
   if (!c) { c = {}; openCache.set(k, c); }
   const key = head ? 'head' : 'mid';
-  if (!c[key]) { c[key] = make(); k.openMats.push(c[key]!); applyNight(k); }
+  if (!c[key]) { c[key] = make(); c[key]!.userData.doorsOpen = true; k.openMats.push(c[key]!); applyNight(k); }
   return c[key]!;
 }
 
@@ -137,9 +137,11 @@ function ledMat(label: string, dest: string): THREE.MeshBasicMaterial {
 type Role = 'front' | 'rear' | 'mid' | 'jointFront' | 'jointRear';
 const blankLed = new THREE.MeshBasicMaterial({ color: 0x060606 });
 
-function makeCar(kit: KindKit, kind: CarKind, role: Role, led: THREE.Material, led2?: THREE.Material): { car: THREE.Group; setDoors(open: boolean): void } {
+function makeCar(kit: KindKit, kind: CarKind, role: Role, led: THREE.Material, led2?: THREE.Material): { car: THREE.Group; setDoors: TrainCar['setDoors'] } {
   const g = kit.geo(kind), car = new THREE.Group(), body = new THREE.Group();
-  const shell = new THREE.Mesh(g.shell, kind === 'head' ? kit.side.head : kit.side.mid);
+  const closed = kind === 'head' ? kit.side.head : kit.side.mid;
+  // 外板は +X 側 / -X 側の2グループ（材質配列 [+X, -X]）。+X = 車の進行方向右。後ろ向きの運転台付き車（body を PI 回転）は左右が入れ替わる
+  const shell = new THREE.Mesh(g.shell, [closed, closed]);
   body.add(shell);
   body.add(new THREE.Mesh(g.paint, kit.paint));
   if (g.face && kit.face) body.add(new THREE.Mesh(g.face, kit.face));
@@ -159,13 +161,17 @@ function makeCar(kit: KindKit, kind: CarKind, role: Role, led: THREE.Material, l
   }
   for (const o of body.children) { o.matrixAutoUpdate = false; o.updateMatrix(); }
   car.add(body);
-  let isOpen = false;
+  const flip = body.rotation.y !== 0;
+  let key = '';
   return {
     car,
-    setDoors(open) {
-      if (open === isOpen) return;
-      isOpen = open;
-      shell.material = open ? kit.open(kind === 'head') : kind === 'head' ? kit.side.head : kit.side.mid;
+    setDoors(open, side) {
+      const l = open && side !== 'R', r = open && side !== 'L'; // 左側 / 右側を開ける
+      const k = `${l ? 1 : 0}${r ? 1 : 0}`;
+      if (k === key) return;
+      key = k;
+      const o = kit.open(kind === 'head');
+      shell.material = flip ? [l ? o : closed, r ? o : closed] : [r ? o : closed, l ? o : closed];
     },
   };
 }

@@ -147,15 +147,20 @@ export function shellGeo(half: V2[], rings: Ring[], ytop: number, Lb: number): T
     const [x, y] = ringPoint(p, rg, ytop);
     pos.push(x, y, rg.z); uv.push((rg.z + Lb / 2) / Lb, (y - Y0) / (ytop - Y0));
   }
+  // 外板は +X 側（右半分）と -X 側（左半分）を別グループにする（ドアを開ける側だけ材質を替えるため。group 0 = +X、1 = -X）
+  const idxL: number[] = [], m = half.length;
   for (let j = 0; j < rs.length - 1; j++) for (let i = 0; i < n - 1; i++) {
     const a = j * n + i, b = a + 1, c = a + n, d = c + 1;
     // 外向き: 断面は +X 下端から反時計回り（正面 -Z から見て）
-    idx.push(a, b, d, a, d, c);
+    (i < m - 1 ? idx : idxL).push(a, b, d, a, d, c);
   }
+  const nR = idx.length;
+  idx.push(...idxL);
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.setIndex(idx); g.computeVertexNormals();
+  g.addGroup(0, nR, 0); g.addGroup(nR, idx.length - nR, 1);
   return g;
 }
 

@@ -81,7 +81,7 @@ export function buildStation(ctx: GameContext, sta: Station, prevName: string, n
   const signs: number[] = [-len * .3, 0, len * .3];
   for (const z of signs) for (const dz of [-1.5, 1.5]) box(-4.0, 1.9, z + dz, .08, 1.6, .08, 0x777d84);
   // 人（ホーム上、停車駅のみ多め）
-  const n = opt.minimal ? 10 : sta.pass && !sta.loop ? 6 : 22;
+  const n = opt.minimal ? 10 : sta.pass && !sta.loop && !sta.island ? 6 : 22;
   for (let k = 0; k < n; k++) {
     const z = (rnd() - .5) * len * .8, x = -(3.0 + rnd() * 2.8);
     b.parent = new THREE.Matrix4().makeTranslation(0, 1.1, 0);
@@ -155,8 +155,8 @@ export function buildStation(ctx: GameContext, sta: Station, prevName: string, n
 }
 
 /** 島式ホーム（幅 PW、両側に線路）。lat = ホーム中心の横位置。駅名標は rev で前後を入れ替え（対向側） */
-const PW = 6;
-function buildIsland(ctx: GameContext, sta: Station, prevName: string, nextName: string, lat: number): THREE.Group {
+const PW0 = 6;
+function buildIsland(ctx: GameContext, sta: Station, prevName: string, nextName: string, lat: number, PW = PW0): THREE.Group {
   const { rng: rnd, track } = ctx;
   const s0 = sta.platform.from, s1 = sta.platform.to;
   const len = s1 - s0, sc = (s0 + s1) / 2, t = track.trackAt(sc);
@@ -210,29 +210,28 @@ function buildIsland(ctx: GameContext, sta: Station, prevName: string, nextName:
   return grp;
 }
 
-/** 島式2面4線駅の駅舎（自線の待避線の外）と跨線橋 */
-function buildIslandConcourse(ctx: GameContext, sta: Station, loopLat: number): void {
-  const { track, route } = ctx;
+/** 島式駅の駅舎（自線側の最も外の線路 loopLat の外）と跨線橋。centers = 跨線橋が階段でつながる島式ホームの中心の横位置。compact = 駅舎・広場を小さくする（島式1面2線） */
+function buildIslandConcourse(ctx: GameContext, sta: Station, loopLat: number, centers: number[], compact = false): void {
+  const { track } = ctx;
   const sc = (sta.platform.from + sta.platform.to) / 2, t = track.trackAt(sc);
-  const L1 = Math.max(...route.tracks);
   const grp = new THREE.Group(); grp.position.copy(track.at(sc, 0, 0)); grp.rotation.y = -t.phi; ctx.scene.add(grp);
   const b = new GeoBatch();
   const box = (x: number, y: number, z: number, w: number, h: number, d: number, col: number) => b.add('body', P.box, M(x, y, z, 0, w, h, d), col);
-  // 駅舎（待避線の外側、2階で跨線橋につながる）
-  const bx = loopLat - 3.2 - 6, bd = 12, bw = 24;
+  // 駅舎（外側の線路の外、2階で跨線橋につながる）
+  const bd = compact ? 10 : 12, bw = compact ? 22 : 24, bx = loopLat - (compact ? 2.8 : 3.2) - bd / 2, plazaW = compact ? 16 : 24;
   b.add('body', P.boxB, M(bx, 0, 0, 0, bd, 11.5, bw), 0xe8e4da);
   box(bx, 11.75, 0, bd + .6, .5, bw + .6, 0x6b7680);
   box(bx - bd / 2 - .02, 2.0, 0, .04, 3.2, 8, 0x2b343d);
   box(bx - bd / 2 - 1.2, 3.8, 0, 2.4, .15, 10, 0x8a9096);
   for (let z = -bw / 2 + 2; z < bw / 2 - 1; z += 3.2) if (Math.abs(z) > 5) box(bx - bd / 2 - .02, 8.5, z, .04, 1.6, 2, 0x2b343d);
-  b.add('body', P.plane, M(bx - bd / 2 - 12, .04, 0, 0, 24, 60, 1, -Math.PI / 2), 0x6a6c70);
+  b.add('body', P.plane, M(bx - bd / 2 - plazaW / 2, .04, 0, 0, plazaW, 60, 1, -Math.PI / 2), 0x6a6c70);
   // 跨線橋（駅舎 → 両方の島式ホーム。架線の上を通す）
-  const x0 = bx + bd / 2, x1 = L1 - loopLat / 2 + 2, yb = 8.4, w = 4;
+  const x0 = bx + bd / 2, x1 = centers[centers.length - 1] + 2, yb = 8.4, w = 4;
   box((x0 + x1) / 2, yb + 1.5, 0, x1 - x0, 3, w, 0xdedad0); // 通路
   box((x0 + x1) / 2, yb + 3.1, 0, x1 - x0 + .4, .2, w + .4, 0x6b7680); // 屋根
   for (let x = x0 + 2; x < x1; x += 2.2) for (const sz of [-1, 1]) box(x, yb + 1.9, sz * (w / 2 + .01), 1.6, .9, .02, 0x2b343d); // 窓
   // 階段（島式ホームの階段口から上がる）と橋脚
-  for (const c of [loopLat / 2, L1 - loopLat / 2]) {
+  for (const c of centers) {
     box(c, (1.1 + yb) / 2 + .6, 0, 2.6, yb - 1.1, 3, 0xd8d4ca);
     for (const sz of [-1, 1]) box(c, yb / 2, sz * (w / 2 - .2), .4, yb, .4, 0x9aa0a6);
   }
@@ -257,12 +256,20 @@ export function buildStations(ctx: GameContext): void {
   st.forEach((sta, i) => {
     const prev = st[i - 1]?.name ?? ctx.route.prevName ?? '';
     const next = st[i + 1]?.name ?? ctx.route.nextName ?? '';
+    if (sta.island) {
+      // 島式1面2線: 下り線と上り線の間に島式ホーム1本（線路は駅の前後で両側へ開く）。幅 = 線間 + 2×spread − 3.4（ホーム端から線路中心 1.7m）
+      const L0 = Math.min(...ctx.route.tracks), L1 = Math.max(...ctx.route.tracks), sp = sta.island.spread;
+      const mid = (L0 + L1) / 2;
+      buildIsland(ctx, sta, prev, next, mid, L1 - L0 + 2 * sp - 3.4);
+      buildIslandConcourse(ctx, sta, L0 - sp, [mid], true);
+      return;
+    }
     if (sta.loop) {
       // 島式2面4線: 自線（本線と待避線の間）と対向線（同）に島式ホーム
       const L1 = Math.max(...ctx.route.tracks), lp = sta.loop.lat;
       buildIsland(ctx, sta, prev, next, lp / 2);
       buildIsland(ctx, sta, next, prev, L1 - lp / 2);
-      buildIslandConcourse(ctx, sta, lp);
+      buildIslandConcourse(ctx, sta, lp, [lp / 2, L1 - lp / 2]);
       return;
     }
     const sc = (sta.platform.from + sta.platform.to) / 2;

@@ -260,7 +260,7 @@ export function createGame(ctx: GameContext): Game {
       service = svcs[(k + serviceDelta + svcs.length) % svcs.length].id;
       if (stageId !== 'all') stageId = ''; // 種別が変わると停車駅間が変わるので先頭区間へ（全線通しは維持）
     }
-    st.sel = { stageId, mode: MODES[(mi + modeDelta + MODES.length) % MODES.length], service, vehicles: st.sel.vehicles };
+    st.sel = { stageId, mode: MODES[(mi + modeDelta + MODES.length) % MODES.length], service, vehicles: st.sel.vehicles, routeId: st.sel.routeId };
     saveSelection(st.sel);
     reset();
   }

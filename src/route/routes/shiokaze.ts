@@ -3,10 +3,11 @@
 //   普通: 全駅停車。汐見町で急行を待ち合わせ（乗り換え）、海浜公園で特急の通過待ち
 //   急行: 桜ヶ丘 → （みなと川 通過）→ 汐見町（普通と接続）→ （白浜台・松原町 通過）→ 海浜公園 → 岬口
 //   特急: 桜ヶ丘 → 汐見町 → 岬口（海浜公園で普通を追い抜き）
-// 汐見町・松原町・海浜公園は島式ホーム2面4線（普通は外側の待避線、急行・特急は本線）
+// 汐見町・海浜公園は島式ホーム2面4線（普通は外側の待避線、急行・特急は本線）。松原町は島式ホーム1面2線（下り線と上り線の間に1本、全種別が自線）
 // stations の stopS は6両の停止位置、pass/scheduledArrival/dwell は急行の値（種別適用で route/service.ts が書き換える）
-import type { Route, Sign, SpeedLimit, StationLoop } from '../types';
+import type { OncomingSpec, Route, Sign, SpeedLimit, Station, StationIsland, StationLoop } from '../types';
 import { reverseRoute } from '../reverse';
+import { stopScenes, type StopScene } from '../oncoming-stops';
 import { TT, TT_UP } from './shiokaze-timetable';
 
 /** 距離標（6両停止位置基準）と 4両・6両の停止位置目標。待避線駅では標識が待避線側に寄る（world/signs.ts） */
@@ -19,6 +20,9 @@ const approachSigns = (stopS: number): Sign[] => [
 /** 島式2面4線: 待避線は自線の 9.2m 左（対向側は対向線の 9.2m 右）、間に幅 6m の島式ホーム。分岐器 90m・制限 45km/h */
 const LOOP: StationLoop = { lat: -9.2, turnoutLength: 90, turnoutLimitKmh: 45 };
 
+/** 島式1面2線: 下り線・上り線が各 2.7m 外へ膨らみ（150m の S字）、線間 4m + 5.4m = 9.4m に幅 6m の島式ホームを挟む（ホーム端から線路中心 1.7m） */
+const ISLAND: StationIsland = { spread: 2.7, length: 150 };
+
 // 曲線制限（to は編成長 100m 分を含めた解除位置）
 // 半径とカントから: R500 → 70、R600 → 80、R650/700 → 85、R800 → 90、R900 → 95
 const limits: SpeedLimit[] = [
@@ -29,6 +33,30 @@ const limits: SpeedLimit[] = [
   { from: 6800, to: 7160, kmh: 85, label: '曲線制限' },
   { from: 7960, to: 8305, kmh: 85, label: '曲線制限' },
   { from: 10205, to: 10575, kmh: 95, label: '曲線制限' },
+];
+
+/** 対向列車（下り線の自列車から見て上り線を来る列車）。走り抜けるもの。同時に走るのは1編成だけ（world/oncoming.ts） */
+const PASS_BY: OncomingSpec[] = [
+  { spawnAt: 5400, startS: 6900, cars: 4, carLen: 20, gap: 0.8, kmh: 74, lat: 4, kind: 'commuter-new' },
+  { spawnAt: 9800, startS: 11300, cars: 6, carLen: 20, gap: 0.8, kmh: 87, lat: 4, kind: 'limited' },
+];
+
+/** 駅に停車する対向列車。停車駅は種別に合わせる（普通 = 全駅、急行 = 汐見町・海浜公園、特急 = 汐見町）。
+ *  汐見町は急行が本線（ホームは線間の島式で対向線の右）、松原町は島式1面2線（ホームは線間で対向列車の右）、みなと川は相対式（ホームは対向線の外側） */
+const STOP_SCENES: StopScene[] = [
+  { station: 1, kind: 'commuter-new', cars: 4, kmh: 74 },
+  { station: 2, kind: 'commuter-old', cars: 6, kmh: 80 },
+  { station: 4, kind: 'commuter-new', cars: 4, kmh: 74 },
+];
+
+const stations: Station[] = [
+  { name: '桜ヶ丘', kana: 'さくらがおか', stopS: 190, platform: { from: 20, to: 200, side: 'L' }, scheduledArrival: 0 },
+  { name: 'みなと川', kana: 'みなとがわ', stopS: 2600, platform: { from: 2420, to: 2620, side: 'L' }, scheduledArrival: 155, dwell: 25, stopMarkerCars: 6 },
+  { name: '汐見町', kana: 'しおみちょう', stopS: 4900, platform: { from: 4720, to: 4920, side: 'L' }, scheduledArrival: 312, pass: true, loop: LOOP },
+  { name: '白浜台', kana: 'しらはまだい', stopS: 7400, platform: { from: 7220, to: 7420, side: 'L' }, scheduledArrival: 466, dwell: 25, stopMarkerCars: 6 },
+  { name: '松原町', kana: 'まつばらちょう', stopS: 8650, platform: { from: 8470, to: 8670, side: 'L' }, scheduledArrival: 560, dwell: 25, stopMarkerCars: 6, island: ISLAND },
+  { name: '海浜公園', kana: 'かいひんこうえん', stopS: 9560, platform: { from: 9380, to: 9580, side: 'L' }, scheduledArrival: 646, dwell: 25, stopMarkerCars: 6, loop: LOOP },
+  { name: '岬口', kana: 'みさきぐち', stopS: 11840, platform: { from: 11660, to: 11860, side: 'L' }, scheduledArrival: 850, stopMarkerCars: 6, elevated: true },
 ];
 
 export const shiokaze: Route = {
@@ -67,15 +95,7 @@ export const shiokaze: Route = {
     { from: 10060, to: 10510, permil: 20 },
   ],
   limits,
-  stations: [
-    { name: '桜ヶ丘', kana: 'さくらがおか', stopS: 190, platform: { from: 20, to: 200, side: 'L' }, scheduledArrival: 0 },
-    { name: 'みなと川', kana: 'みなとがわ', stopS: 2600, platform: { from: 2420, to: 2620, side: 'L' }, scheduledArrival: 155, dwell: 25, stopMarkerCars: 6 },
-    { name: '汐見町', kana: 'しおみちょう', stopS: 4900, platform: { from: 4720, to: 4920, side: 'L' }, scheduledArrival: 312, pass: true, loop: LOOP },
-    { name: '白浜台', kana: 'しらはまだい', stopS: 7400, platform: { from: 7220, to: 7420, side: 'L' }, scheduledArrival: 466, dwell: 25, stopMarkerCars: 6 },
-    { name: '松原町', kana: 'まつばらちょう', stopS: 8650, platform: { from: 8470, to: 8670, side: 'L' }, scheduledArrival: 560, dwell: 25, stopMarkerCars: 6, loop: LOOP },
-    { name: '海浜公園', kana: 'かいひんこうえん', stopS: 9560, platform: { from: 9380, to: 9580, side: 'L' }, scheduledArrival: 646, dwell: 25, stopMarkerCars: 6, loop: LOOP },
-    { name: '岬口', kana: 'みさきぐち', stopS: 11840, platform: { from: 11660, to: 11860, side: 'L' }, scheduledArrival: 850, stopMarkerCars: 6, elevated: true },
-  ],
+  stations,
   // 時刻は shiokaze-timetable.ts（scripts/timetable.ts で生成）
   services: [
     {
@@ -115,17 +135,13 @@ export const shiokaze: Route = {
     ],
     endBlockS: 12220,
   },
-  oncoming: [
-    { spawnAt: 420, startS: 1750, cars: 6, carLen: 20, gap: 0.8, kmh: 78, lat: 4 },
-    { spawnAt: 3300, startS: 4900, cars: 6, carLen: 20, gap: 0.8, kmh: 75, lat: 4 },
-    { spawnAt: 7700, startS: 8660, cars: 6, carLen: 20, gap: 0.8, kmh: 70, lat: 4 },
-  ],
-  // 閉そく信号。駅の出発信号は停止位置の 50〜80m 先。s4560 / s8300 / s9210 は待避線駅の場内信号（分岐側へ進むとき注意 Y）
+  oncoming: [...PASS_BY, ...stopScenes(stations, STOP_SCENES)],
+  // 閉そく信号。駅の出発信号は停止位置の 50〜80m 先。s4560 / s9210 は待避線駅の場内信号（分岐側へ進むとき注意 Y）。松原町（島式1面2線）は S字区間 8250〜8890 の外（s8200 / s8960）に立てる
   signals: [
     { id: 's240', s: 240 }, { id: 's1000', s: 1000 }, { id: 's1800', s: 1800 }, { id: 's2380', s: 2380 },
     { id: 's2650', s: 2650 }, { id: 's3400', s: 3400 }, { id: 's4150', s: 4150 }, { id: 's4560', s: 4560 }, { id: 's4980', s: 4980 },
     { id: 's5800', s: 5800 }, { id: 's6500', s: 6500 }, { id: 's7100', s: 7100 }, { id: 's7450', s: 7450 },
-    { id: 's7860', s: 7860 }, { id: 's8300', s: 8300 }, { id: 's8730', s: 8730 }, { id: 's9210', s: 9210 }, { id: 's9640', s: 9640 },
+    { id: 's7860', s: 7860 }, { id: 's8200', s: 8200 }, { id: 's8960', s: 8960 }, { id: 's9210', s: 9210 }, { id: 's9640', s: 9640 },
     { id: 's10560', s: 10560 }, { id: 's11160', s: 11160 }, { id: 's11610', s: 11610 },
   ],
   crossings: [
@@ -143,4 +159,4 @@ export const shiokaze: Route = {
 };
 
 /** 上り（岬口 → 桜ヶ丘）。下りのデータを反転して作る */
-export const shiokazeUp: Route = reverseRoute(shiokaze, { id: 'shiokaze-up', name: '汐風線 岬口 → 桜ヶ丘', timetable: TT_UP });
+export const shiokazeUp: Route = reverseRoute(shiokaze, { id: 'shiokaze-up', name: '汐風線 岬口 → 桜ヶ丘', timetable: TT_UP, oncomingStops: STOP_SCENES });

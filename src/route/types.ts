@@ -29,6 +29,9 @@ export interface Station {
   /** 2面4線駅（島式ホーム2面）: 本線の外側に待避線、本線と待避線の間に島式ホーム。
    *  待避線を使う種別（ServiceSpec.useLoop）は分岐器で待避線へ入り、それ以外は本線のホームに停車・本線を通過 */
   loop?: StationLoop;
+  /** 島式1面2線駅: 下り線と上り線の間に島式ホーム1本。線路は駅の前後でホームの両側へ膨らみ（S字）、駅の外では元の間隔へ戻る。
+   *  待避線は無く、全種別が自線を使う（ホームは自線から見て右側） */
+  island?: StationIsland;
   /** 種別適用後: この駅で自列車が待避線に入る（route/service.ts が設定） */
   enterLoop?: boolean;
   /** 高架駅（ホームは高架上、駅舎は高架下） */
@@ -37,6 +40,9 @@ export interface Station {
 
 /** 2面4線の待避線。lat は自線待避線の横位置（左が負、例 -9.2）。対向側は route.tracks の対向線から鏡像に +lat 側へ */
 export interface StationLoop { lat: number; turnoutLength: number; turnoutLimitKmh: number }
+
+/** 島式1面2線駅の線形。spread = 各線がホーム側へ外へ膨らむ量 [m]（ホーム幅 = 線間 + 2×spread − 3.4）、length = S字（ホーム端の 70m 手前・先から）の長さ [m] */
+export interface StationIsland { spread: number; length: number }
 
 /** 運行種別（プレイヤーが選ぶ） */
 export type ServiceId = 'local' | 'express' | 'limited';
@@ -93,7 +99,12 @@ export interface OncomingSpec {
   /** 種別表示（普通/急行/特急）と行先 */
   label?: string;
   dest?: string;
+  /** 駅に停車する対向列車（未指定は走り抜ける）。ドアを開けて待ち、自列車が同じ駅で停車して少し経つと発車する */
+  stop?: OncomingStop;
 }
+
+/** 対向列車の停車。headS = 停止時の先頭位置 [m]（対向列車は s の減る向きへ走るので、ホームの手前側＝ from 寄り）、station = 停車駅 index */
+export interface OncomingStop { station: number; headS: number }
 
 export interface Route {
   id: string;

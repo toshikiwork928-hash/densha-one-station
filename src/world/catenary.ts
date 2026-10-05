@@ -5,7 +5,7 @@
 // 300m チャンクごとに「構造物 1 メッシュ＋電線 1 LineSegments」へ結合し、距離カリングする
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
-import { loopShape } from '../route/service';
+import { islandOffset, islandZones, loopShape } from '../route/service';
 import { basePart, ChunkedBatch, P, type BasePart, type GeoBatch } from './batch';
 import { cullByDistance } from './cull';
 import { getTerrain, hash, TUNNEL_CENTER, TUNNEL_HALF, TUNNEL_WALL_H } from './terrain';
@@ -199,7 +199,11 @@ export function buildCatenary(ctx: GameContext): void {
   const L0 = Math.min(...route.tracks), L1 = Math.max(...route.tracks), MID = (L0 + L1) / 2;
   const S0 = route.extent.from, S1 = route.extent.to;
   const loops = loopTracks(ctx);
-  const zones = [...new Map(loops.map(o => [o.z.index, o.z])).values()];
+  // 待避線駅の区間（lat = 外側の線路の振れ）と、島式1面2線駅の S字区間（各線が spread だけ外へ開く）。柱・ビームは外側の線路の外に立てる
+  const zones: { inFrom: number; outTo: number; lat: number }[] = [
+    ...new Map(loops.map(o => [o.z.index, o.z])).values(),
+    ...islandZones(route).map(z => ({ inFrom: z.inFrom, outTo: z.outTo, lat: -z.spread })),
+  ];
   const structs = route.structures ?? [];
 
   // ---------- 支持点の位置（踏切・信号・標識・駅舎・構造物の端を避ける） ----------
@@ -233,7 +237,7 @@ export function buildCatenary(ctx: GameContext): void {
     if (s >= woodFrom) return 'wood';
     if (st?.kind === 'viaduct') return 'viaduct';
     if (st?.kind === 'bridge') return 'bridge';
-    if (route.stations.some(x => !x.loop && s > x.platform.from - 10 && s < x.platform.to + 10)) return 'station';
+    if (route.stations.some(x => !x.loop && !x.island && s > x.platform.from - 10 && s < x.platform.to + 10)) return 'station';
     if (T.isCity(s)) return T.nearStation(s, 280) ? 'hbeam' : 'pipe';
     // 古い区間（約 1.2km 単位でまれに）は組合柱
     if (hash(Math.floor(s / 1200), 23) < .25) return 'lattice';
@@ -265,7 +269,7 @@ export function buildCatenary(ctx: GameContext): void {
   // ---------- 電線の系統（本線・待避線、オーバーラップと引留め） ----------
   const runs: Run[] = [];
   const zero: Off = { dl: 0, dy: 0 };
-  const OVERLAPS = [2050, 6650, 8850].filter(o => o > S0 + 200 && o < S1 - 200);
+  const OVERLAPS = [2050, 6650, 9000].filter(o => o > S0 + 200 && o < S1 - 200);
   for (const c of route.tracks) {
     const side = c < MID ? -1 : 1;
     const cuts = OVERLAPS.map(o => supIdx(o)).filter(k => k > 1 && k < sups.length - 2);
@@ -278,7 +282,7 @@ export function buildCatenary(ctx: GameContext): void {
       const endA = j < cuts.length ? sups[k].s : Infinity, endB = bS;
       const begA = prevCut >= 0 ? sups[prevCut].s : -Infinity, begB = prevCut >= 0 ? sups[prevCut + 1].s : -Infinity;
       runs.push({
-        lat: () => c, s0: a, s1: bS,
+        lat: (s) => c + islandOffset(route, c, s), s0: a, s1: bS,
         off: (s) => {
           if (s > endA) { const u = (s - endA) / (endB - endA); return { dl: side * .38 * u, dy: .3 * u }; }
           if (s < begB) { const u = (begB - s) / (begB - begA); return { dl: -side * .38 * u, dy: .3 * u }; }

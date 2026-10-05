@@ -28,6 +28,42 @@ export function loopShape(z: LoopZone, s: number): number {
   return (1 - Math.cos(Math.PI * u)) / 2;
 }
 
+/** 島式1面2線駅の線形区間（ホーム端の 70m 手前・先を平坦部とし、その外側に S字 length） */
+export interface IslandZone { inFrom: number; inTo: number; outFrom: number; outTo: number; spread: number }
+
+export function islandZone(sta: Station): IslandZone | null {
+  const I = sta.island;
+  if (!I) return null;
+  const inTo = sta.platform.from - 70, outFrom = sta.platform.to + 70;
+  return { inFrom: inTo - I.length, inTo, outFrom, outTo: outFrom + I.length, spread: I.spread };
+}
+
+/** ホーム側へ開く量 0..1（S字は余弦） */
+export function islandShape(z: IslandZone, s: number): number {
+  if (s <= z.inFrom || s >= z.outTo) return 0;
+  if (s >= z.inTo && s <= z.outFrom) return 1;
+  const u = s < z.inTo ? (s - z.inFrom) / (z.inTo - z.inFrom) : (z.outTo - s) / (z.outTo - z.outFrom);
+  return (1 - Math.cos(Math.PI * u)) / 2;
+}
+
+/** 路線の島式ホーム区間一覧（station index 付き） */
+export function islandZones(route: Route): (IslandZone & { index: number })[] {
+  const out: (IslandZone & { index: number })[] = [];
+  route.stations.forEach((sta, index) => { const z = islandZone(sta); if (z) out.push({ ...z, index }); });
+  return out;
+}
+
+/** 島式ホーム駅での線路の横ずれ [m]。base = 線路の横位置（tracks の中央より左の線は左へ、右の線は右へ開く） */
+export function islandOffset(route: Route, base: number, s: number): number {
+  const tr = route.tracks, mid = (Math.min(...tr) + Math.max(...tr)) / 2;
+  let lat = 0;
+  for (const sta of route.stations) {
+    const z = islandZone(sta);
+    if (z && s > z.inFrom && s < z.outTo) lat += (base <= mid ? -1 : 1) * z.spread * islandShape(z, s);
+  }
+  return lat;
+}
+
 /** 路線の待避線区間一覧（station index 付き） */
 export function loopZones(route: Route): (LoopZone & { index: number })[] {
   const out: (LoopZone & { index: number })[] = [];
@@ -43,7 +79,7 @@ export function playerPathLat(route: Route, s: number): number {
     const z = loopZone(sta)!;
     if (s > z.inFrom && s < z.outTo) lat += z.lat * loopShape(z, s);
   }
-  return lat;
+  return lat + islandOffset(route, route.tracks[0] ?? 0, s);
 }
 
 /** 線路側の横ずれ（種別に関係なく待避線に沿う）。s が待避線区間外なら 0 */
@@ -102,8 +138,8 @@ export function applyService(route: Route, id: ServiceId | undefined): ServiceSp
     sta.dwell = tt?.dep != null ? tt.dep - tt.arr : undefined;
     sta.stopMarkerCars = svc.cars;
     sta.enterLoop = !!sta.loop && !sta.pass && !!svc.useLoop;
-    // 島式ホーム: 待避線に入ると右側、本線は左側がホーム
-    sta.platform.side = sta.loop ? (sta.enterLoop ? 'R' : 'L') : base.platform.side;
+    // 2面4線: 待避線に入ると右側、本線は左側がホーム。島式1面2線: 自線の右側
+    sta.platform.side = sta.island ? 'R' : sta.loop ? (sta.enterLoop ? 'R' : 'L') : base.platform.side;
   });
   // 曲線制限の解除位置は編成長に合わせる（元データは base.trainLength 分を含む）
   const lim: SpeedLimit[] = b.limits.map(L => ({ ...L, to: L.to - b.trainLength + len }));

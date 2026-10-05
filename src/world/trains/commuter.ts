@@ -25,14 +25,14 @@ interface Look {
 }
 const LOOK: Record<CommuterVariant, Look> = {
   new: {
-    r: .16, base: ['#d3d7dc', '#b4bac1'], roof: '#a7acb2', rough: .38, metal: .75,
+    r: .24, base: ['#d3d7dc', '#b4bac1'], roof: '#a7acb2', rough: .38, metal: .75,
     topBand: [3.27, 3.4], topLine: [3.2, 3.24], lowBand: [1.87, 1.94], lowLine: [1.81, 1.85],
     frontBand: [1.58, 2.0], frontLine: [1.48, 1.55], win: [2.12, 3.02], door: '#c4c9cf',
   },
   old: {
     r: .3, base: ['#cfd2d7', '#bfc3c9'], roof: '#9fa4aa', rough: .42, metal: .12,
     topBand: [3.22, 3.42], topLine: [3.13, 3.18], lowBand: [1.6, 1.67], lowLine: [1.53, 1.57],
-    frontBand: [1.6, 2.02], frontLine: [1.49, 1.56], win: [1.98, 3.0], door: '#c9ccd1', // ドアは車体と同系色の塗装
+    frontBand: [1.6, 2.02], frontLine: [1.49, 1.56], win: [2.0, 2.88], door: '#c9ccd1', // ドアは車体と同系色の塗装
   },
 };
 
@@ -75,13 +75,15 @@ export function paintCommuterSide(v: CommuterVariant, Lb: number, head: boolean,
   for (let i = 0; i < DOORS.length - 1; i++) {
     const zc = (DOORS[i] + DOORS[i + 1]) / 2;
     if (v === 'new') s.glass(zc - 1.35, zc + 1.35, w0, w1, '#4a5056', .04);
-    else { s.glass(zc - 1.4, zc - .2, w0, w1, '#565c63', .06); s.glass(zc + .2, zc + 1.4, w0, w1, '#565c63', .06); }
+    else for (const dz of [-1.12, 0, 1.12]) s.glass(zc + dz - .43, zc + dz + .43, w0, w1, '#565c63', .03); // 850mm角の1段下降窓
   }
-  s.glass(DOORS[3] + DOOR_W / 2 + .35, hz - .4, w0, w1, '#565c63', .05);
+  if (v === 'new') s.glass(DOORS[3] + DOOR_W / 2 + .35, hz - .4, w0, w1, '#565c63', .05);
+  else s.glass((DOORS[3] + DOOR_W / 2 + hz) / 2 - .43, (DOORS[3] + DOOR_W / 2 + hz) / 2 + .43, w0, w1, '#565c63', .03);
   if (head) {
     door(crewZ, .6, false);
     s.glass(crewZ + .5, DOORS[0] - DOOR_W / 2 - .3, w0, w1, '#565c63', .05);
-  } else s.glass(-hz + .4, DOORS[0] - DOOR_W / 2 - .35, w0, w1, '#565c63', .05);
+  } else if (v === 'new') s.glass(-hz + .4, DOORS[0] - DOOR_W / 2 - .35, w0, w1, '#565c63', .05);
+  else s.glass((DOORS[0] - DOOR_W / 2 - hz) / 2 - .43, (DOORS[0] - DOOR_W / 2 - hz) / 2 + .43, w0, w1, '#565c63', .03);
   // 号車札・小表示（文字なし）
   s.rect(DOORS[1] + .9, DOORS[1] + 1.2, 3.46, 3.53, '#2b3138');
   if (v === 'old') for (let z = -hz + .2; z < hz; z += 2.1) s.rect(z, z + .02, Y0, 3.55, 'rgba(0,0,0,.06)'); // 外板継ぎ目
@@ -174,16 +176,18 @@ export function buildCommuterCar(v: CommuterVariant, kind: CarKind, Lb: number):
       add(0, 3.24, z - .05, 1.06, .1, .1, 0x1a1c20);
       for (const sx of [-1, 1]) add(sx * .5, 2.2, z - .05, .1, 2.06, .1, 0x1a1c20);
       add(0, 1.2, z - .12, .9, .05, .24, 0x8f959b);
-      // 屋根上の前照灯（2灯）
-      add(0, roofTop - .08, zf + .25, 1.25, .3, .46, 0xc6cad0);
+      // 前照灯・標識灯: 前面下部の左右に黒いライトケース（丸い前照灯 + 小さな標識灯を縦に並べる）
       for (const sx of [-1, 1]) {
-        b.add('paint', P.cyl, M(sx * .36, roofTop - .08, zf + .02, 0, .3, .08, .3, Math.PI / 2), 0xdadde1);
-        lit.add('l', P.cyl, M(sx * .36, roofTop - .08, zf - .025, 0, .22, .02, .22, Math.PI / 2), 0xffffff);
-        glows.push(new THREE.Vector3(sx * .36, roofTop - .08, zf - .25));
-        // 標識灯（橙線の両端）
-        add(sx * 1.2, 1.4, z - .01, .17, .13, .03, 0x8a6a2a);
-        tl.add('l', P.box, M(sx * 1.2, 1.4, z - .03, 0, .13, .09, .02), 0xffffff);
+        add(sx * .97, 1.46, z - .03, .42, .4, .07, 0x15171a);
+        add(sx * .97, 1.46, z - .07, .46, .03, .02, 0x8f959b); // ケースの縁
+        b.add('paint', P.cyl, M(sx * .97, 1.56, z - .075, 0, .26, .04, .26, Math.PI / 2), 0xdadde1);
+        lit.add('l', P.cyl, M(sx * .97, 1.56, z - .1, 0, .2, .02, .2, Math.PI / 2), 0xffffff);
+        glows.push(new THREE.Vector3(sx * .97, 1.56, z - .25));
+        add(sx * .97, 1.33, z - .075, .3, .1, .03, 0x6e5a30);
+        tl.add('l', P.box, M(sx * .97, 1.33, z - .1, 0, .26, .07, .02), 0xffffff);
       }
+      // 屋根の前端の小さな庇（前面窓の上）
+      add(0, roofTop - .16, zf - .01, 1.9, .04, .05, 0x9ea3a9);
       led = mergeLed([[.93, 3.29, .66]], z - .01, .22);
       // 簡易スカート・連結器・ホース
       add(0, .78, zf + .05, 2.4, .42, .1, 0x8e9399, -.1);
@@ -195,8 +199,13 @@ export function buildCommuterCar(v: CommuterVariant, kind: CarKind, Lb: number):
   addUnderfloor(b, Lb, kind, { frame: 0x3a3d42, equip: 0x2b2e33, bogie: 0x24272b });
   // 屋根上: 冷房装置
   if (v === 'new') {
-    add(0, roofTop + .14, 0, 2.0, .3, 6.2, 0xb5bac0);
-    for (let i = -2; i <= 2; i++) add(0, roofTop + .3, i * 1.15, 1.5, .02, .8, 0x6a7076);
+    // セミ集中式の冷房装置（2基）と独立した車外スピーカー
+    for (const z of [-4.2, 4.2]) {
+      add(0, roofTop + .13, z, 1.9, .26, 4.0, 0xb5bac0);
+      add(0, roofTop + .27, z, 1.5, .03, 3.4, 0x9fa5ab);
+      for (const dz of [-1.2, 0, 1.2]) add(0, roofTop + .29, z + dz, 1.1, .02, .6, 0x6a7076);
+    }
+    add(0, roofTop + .08, 0, .5, .16, .9, 0x9da2a8);
     add(0, roofTop + .03, 0, .5, .06, Lb - 2, 0x868b91);
   } else {
     // 分散冷房（箱形・両側にルーバー）
@@ -205,6 +214,8 @@ export function buildCommuterCar(v: CommuterVariant, kind: CarKind, Lb: number):
       for (const dz of [-.42, .42]) for (const sx of [-1, 1]) add(sx * .76, roofTop + .17, z + dz, .02, .2, .5, 0x3a3f45);
     }
     for (const sx of [-.85, .85]) add(sx, roofTop - .05, 0, .06, .06, Lb - 1, 0x8a8f95); // 配管
+    for (const z of [-8.2, -4, 0, 4, 8.2]) add(0, roofTop + .06, z, .3, .1, .3, 0x8a8f95); // 通風器
+    if (kind === 'head') add(0, roofTop + .05, zf + .9, .5, .06, .5, 0x8a8f95);
   }
   if (kind === 'pan') (v === 'new' ? addSingleArm : addLozenge)(b, -hz + 4.0, roofTop - .02);
   return { shell, face, paint: b.geometry('paint')!, glass: gl.geometry('l') ?? undefined, led, led2, head: lit.geometry('l') ?? undefined, tail: tl.geometry('l') ?? undefined, glows };

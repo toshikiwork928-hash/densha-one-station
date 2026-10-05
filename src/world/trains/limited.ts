@@ -21,7 +21,7 @@ const TIP_Y = 1.85;
 /** 先頭部の断面形状（u = 0: 車体との境 → 1: 先端）。上 = 屋根の稜線、下 = 裾、w = 半幅 */
 const noseTop = (u: number) => TIP_Y + (YTOP_L - TIP_Y) * Math.pow(Math.max(0, 1 - u ** 2.1), .62);
 const noseBot = (u: number) => TIP_Y - (TIP_Y - Y0) * Math.pow(Math.max(0, 1 - u ** 3), .5);
-const noseW = (u: number) => Math.pow(Math.max(0, 1 - u ** 2.6), .55);
+const noseW = (u: number) => Math.pow(Math.max(0, 1 - u ** 3.4), .5);
 
 /** open = 乗降口を開けた状態 */
 export function paintLimitedSide(Lb: number, head: boolean, open = false): SheetMaps {
@@ -61,7 +61,10 @@ export function buildLimitedCar(kind: CarKind, Lb: number): CarParts {
   addEndWall(b, hz, YTOP_L, HW_L, BLUE_L);
   addUnderfloor(b, Lb, kind, { frame: 0x1b1d26, equip: 0x24262e, bogie: 0x202228, frontCut: head ? NOSE_LEN - 1.2 : 0 });
   // 屋根上の低いカバー
-  add(0, YTOP_L + .06, head ? NOSE_LEN / 2 + 1 : 0, 1.3, .14, head ? Lb - NOSE_LEN - 3 : 12, 0x262c78);
+  // 屋根上の FRP 製の冷却装置カバー（青で統一。2段の低い箱）
+  const cz = head ? NOSE_LEN / 2 + 1 : 0, cl = head ? Lb - NOSE_LEN - 3 : 12;
+  add(0, YTOP_L + .04, cz, 1.5, .1, cl, 0x232970);
+  add(0, YTOP_L + .11, cz, 1.0, .06, cl - .6, 0x2b3280);
   if (kind === 'pan') addSingleArm(b, -hz + 4.0, YTOP_L - .02);
   return { shell, paint: b.geometry('paint')!, glass: gl.geometry('g') ?? undefined, head: lit.geometry('l') ?? undefined, tail: tl.geometry('l') ?? undefined, glows };
 }
@@ -118,7 +121,7 @@ function buildNose(b: GeoBatch, lit: GeoBatch, tl: GeoBatch, glows: THREE.Vector
     const [u, , v] = par[k], x = P3.getX(k), y = P3.getY(k);
     tmp.copy(cBody);
     // 前面窓: 高さ一定の帯が先頭部の曲面を回り込む。中央に細い仕切り
-    const w = band(y, 2.3, 2.98 - .12 * u) * band(u, .3, .93, .02) * (1 - band(x, -.035, .035, .015) * .85);
+    const w = band(y, 2.18, 3.02 - .14 * u) * band(u, .3, .93, .02) * (1 - band(x, -.035, .035, .015) * .85);
     tmp.lerp(cGlass, w);
     tmp.lerp(cSilver, band(x, -.045, .045, .012) * sm(2.95, 3.0, y) * (1 - sm(.83, .87, u)));
     tmp.lerp(cSkirt, 1 - sm(.08, .12, v));
@@ -143,10 +146,12 @@ function buildNose(b: GeoBatch, lit: GeoBatch, tl: GeoBatch, glows: THREE.Vector
     if (nrm.z > 0) nrm.negate();
     const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), nrm);
     const m = (k: number, w: number, h: number) => new THREE.Matrix4().compose(p.clone().addScaledVector(nrm, k), q, new THREE.Vector3(w, h, w * .75));
-    b.add('paint', P.cyl, m(.005, .42, .04), 0x0a0c14); // 黒い縁
-    b.add('paint', P.cyl, m(.015, .3, .05), 0x8f96a8);
-    (kind === 'h' ? lit : tl).add('l', P.cyl, m(.035, .22, .02), 0xffffff);
-    if (kind === 'h') glows.push(p.clone().addScaledVector(nrm, .3));
+    // 砲弾型の灯具ポッド（外板から張り出す半球）に前照灯 / 尾灯を埋める
+    b.add('paint', P.sphere, m(0, .52, .34), 0x2a3070);
+    b.add('paint', P.cyl, m(.12, .38, .05), 0x8f96a8);
+    b.add('paint', P.cyl, m(.14, .3, .03), 0x0a0c14);
+    (kind === 'h' ? lit : tl).add('l', P.cyl, m(.16, .22, .02), 0xffffff);
+    if (kind === 'h') glows.push(p.clone().addScaledVector(nrm, .35));
   };
   for (const sx of [-1, 1]) { lamp(.84, sx, 1.95, 'h'); lamp(.76, sx, 1.95, 't'); }
   // 排障器（スカート）: 先頭部の平面形に沿った板（上から見た輪郭を押し出し）

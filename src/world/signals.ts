@@ -93,13 +93,14 @@ export function buildSignals(ctx: GameContext): void {
     const a = st.signals?.[hd.i] ?? 'G', sS = sigs[hd.i].s, o = st.overtake;
     const passing = !!o && o.phase === 'run' && o.head < sS + 2;
     if (hd.role === 'single') return passing && sS < st.train.s ? 'G' : a; // 自列車の後方を通過列車が進む
-    const onLoop = !ctx.route.stations[hd.station].pass;
+    // 自列車が待避線に入る駅（普通のみ）だけ待避線側。停車しても本線を通る急行・特急は本線用が自線の信号
+    const onLoop = !!ctx.route.stations[hd.station].enterLoop;
     if (hd.role === 'loop') return onLoop ? a : 'R';
     return onLoop ? (passing ? 'G' : 'R') : a;
   };
   const c = new THREE.Color();
   ctx.events.on('frame', () => {
-    for (const d of indicators) d.mesh.material = ctx.route.stations[d.station].pass ? indOff : indOn;
+    for (const d of indicators) d.mesh.material = ctx.route.stations[d.station].enterLoop ? indOn : indOff;
     items.forEach(it => {
       const a = shown(it.hd);
       if (a === it.aspect) return;

@@ -47,8 +47,10 @@ export function createPlayerTrain(ctx: GameContext): PlayerTrain {
     if (!group.visible) return;
     let sc = s;
     const open = ctx.state.doors === 'open';
+    // ホーム側（進行方向に対して）だけ開ける。待避線に入ると右側
+    const side = route.stations[ctx.state.target]?.platform.side;
     for (const c of cars) {
-      c.setDoors(open);
+      c.setDoors(open, side);
       sc -= c.length / 2;
       const a = sc + bogie, b = sc - bogie;
       p1.copy(track.pathAt(a, 0, .38)); p2.copy(track.pathAt(b, 0, .38));

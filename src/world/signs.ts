@@ -17,28 +17,50 @@ export function addSign(ctx: GameContext, tex: THREE.Texture, s: number, lat: nu
   return grp;
 }
 
-/** lat0 = 標識を立てる線路の横位置（待避線では横にずれる） */
-function buildSign(ctx: GameContext, sg: Sign, lat0: number, parent?: THREE.Object3D): void {
+/** 標識1枚の配置情報。lat は走行線（lat0）からではなく線路基準の横位置 */
+interface Def { s: number; lat: number; w: number; h: number; y: number; tex: () => THREE.Texture; pri: number; parent: THREE.Object3D }
+
+/** 近接とみなす前後方向の距離 [m]。この範囲で横位置が重なる標識は外側へずらす（運転台からも重なって見えない） */
+const NEAR_S = 14;
+/** 標識どうしの横方向の最小すき間 [m] */
+const GAP = .35;
+
+/** lat0 = 標識を立てる線路の横位置（待避線では横にずれる）。配置は place() が重なりを避けて決める */
+function define(sg: Sign, lat0: number, parent: THREE.Object3D): Def {
   switch (sg.kind) {
     case 'limit': {
       const k = sg.size ?? 1.0;
-      addSign(ctx, limitTex(sg.kmh), sg.s, lat0 + (sg.lat ?? -2.2), k, k, sg.y ?? 3.0, 0, parent);
-      break;
+      return { s: sg.s, lat: lat0 + (sg.lat ?? -2.2), w: k, h: k, y: sg.y ?? 3.0, tex: () => limitTex(sg.kmh), pri: 2, parent };
     }
     case 'limitEnd':
-      addSign(ctx, textBoard([{ t: '制限' }, { t: '解除' }], '#fff', '#e8502a', 256, 256, 80), sg.s, lat0 + (sg.lat ?? -2.2), .9, .9, 3.0, 0, parent);
-      break;
+      return { s: sg.s, lat: lat0 + (sg.lat ?? -2.2), w: .9, h: .9, y: 3.0, tex: () => textBoard([{ t: '制限' }, { t: '解除' }], '#fff', '#e8502a', 256, 256, 80), pri: 3, parent };
     case 'limitNotice':
       // 黄地に黒の数字、下に「予告」
-      addSign(ctx, textBoard([{ t: sg.kmh, size: 120 }, { t: '予告', size: 46 }], '#ffd21a', '#111', 256, 300), sg.s, lat0 + (sg.lat ?? -2.2), .85, 1.0, 3.0, 0, parent);
-      break;
+      return { s: sg.s, lat: lat0 + (sg.lat ?? -2.2), w: .85, h: 1.0, y: 3.0, tex: () => textBoard([{ t: sg.kmh, size: 120 }, { t: '予告', size: 46 }], '#ffd21a', '#111', 256, 300), pri: 4, parent };
     case 'distance':
-      addSign(ctx, textBoard([{ t: sg.meters, size: 120 }], '#fff', '#111'), sg.s, lat0 + (sg.lat ?? -2.0), .7, .7, sg.meters >= 200 ? 2.2 : 2.9, 0, parent);
-      break;
+      return { s: sg.s, lat: lat0 + (sg.lat ?? -2.0), w: .7, h: .7, y: sg.meters >= 200 ? 2.2 : 2.9, tex: () => textBoard([{ t: sg.meters, size: 120 }], '#fff', '#111'), pri: 1, parent };
     case 'stopMarker':
       // 6両と8両は先頭が同じ位置に止まる（ホームは 200m）
-      addSign(ctx, textBoard([{ t: sg.cars === 6 ? '6・8' : String(sg.cars), size: sg.cars === 6 ? 100 : 150 }, { t: '停止位置', size: 34 }], '#1b4fd1', '#fff', 256, 300), sg.s, lat0 + (sg.lat ?? -2.0), .9, 1.05, 3.0, 0, parent);
-      break;
+      return { s: sg.s, lat: lat0 + (sg.lat ?? -2.0), w: .9, h: 1.05, y: 3.0, tex: () => textBoard([{ t: sg.cars === 6 ? '6・8' : String(sg.cars), size: sg.cars === 6 ? 100 : 150 }, { t: '停止位置', size: 34 }], '#1b4fd1', '#fff', 256, 300), pri: 0, parent };
+  }
+}
+
+/** 標識を立てる。優先度の高いもの（停止位置目標 → 距離標 → 速度制限 → 解除 → 予告）から順に、前後 NEAR_S 以内で横に重なる標識があれば
+ *  外側（走行線から離れる向き）へ横にずらす。標識の向きは走行線の接線に直角（待避線の S字区間でも正対する） */
+function place(ctx: GameContext, defs: Def[], base: (d: Def) => number): void {
+  const placed: { s: number; lat: number; w: number }[] = [];
+  for (const d of [...defs].sort((a, b) => a.pri - b.pri || a.s - b.s)) {
+    const dir = d.lat >= base(d) ? 1 : -1;
+    let lat = d.lat;
+    for (let k = 0; k < 8; k++) {
+      const hit = placed.find(p => Math.abs(p.s - d.s) < NEAR_S && Math.abs(p.lat - lat) < (p.w + d.w) / 2 + GAP);
+      if (!hit) break;
+      lat = hit.lat + dir * ((hit.w + d.w) / 2 + GAP);
+    }
+    placed.push({ s: d.s, lat, w: d.w });
+    // 走行線の進行方向（S字区間では接線が線路方向と異なる）に直角に立てる
+    const slope = (ctx.track.pathLat(d.s + 1) - ctx.track.pathLat(d.s - 1)) / 2;
+    addSign(ctx, d.tex(), d.s, lat, d.w, d.h, d.y, -Math.atan(slope), d.parent);
   }
 }
 
@@ -51,49 +73,42 @@ function clear(group: THREE.Group): void {
 
 export function buildSigns(ctx: GameContext): void {
   const { route, track, events } = ctx;
+  const stopGroup = new THREE.Group(); stopGroup.name = 'stopSigns'; ctx.scene.add(stopGroup);
+  const group = new THREE.Group(); group.name = 'limitSigns'; ctx.scene.add(group);
   if (!route.services) {
-    for (const sg of route.signs) buildSign(ctx, sg, 0);
+    place(ctx, route.signs.map(sg => define(sg, 0, ctx.scene)), () => 0);
     return;
   }
-  // 距離標・停止位置目標: 自列車の走行線の左（2面4線駅は種別により待避線または本線）。待避線ではホームが右なので右に立てる
-  const stopGroup = new THREE.Group(); stopGroup.name = 'stopSigns'; ctx.scene.add(stopGroup);
-  let stopBuilt = '';
-  const rebuildStop = () => {
-    const key = route.stations.map(x => `${x.enterLoop ? 1 : 0}`).join('') + ':' + (ctx.service?.cars ?? 0);
-    if (key === stopBuilt) return;
-    stopBuilt = key;
-    clear(stopGroup);
-    for (const sg of route.signs) {
-      const lat = track.pathLat(sg.s), loopSta = route.stations.find(x => x.enterLoop && Math.abs(x.stopS - sg.s) < 520);
-      buildSign(ctx, loopSta && lat < -1 ? { ...sg, lat: 2.0 } : sg, lat, stopGroup);
-    }
-  };
-  rebuildStop();
-  events.on('serviceChange', rebuildStop);
-  events.on('reset', rebuildStop);
-  // 速度制限・解除: 自列車の走行線の左。解除標は、より厳しい制限の中・終着駅より先なら立てない
-  const group = new THREE.Group(); group.name = 'limitSigns'; ctx.scene.add(group);
+  // 停止位置と制限の標識は同じ並びで重なりを判定するため、まとめて作り直す
   let built = '';
   const rebuild = () => {
-    const key = route.lineLimit + ':' + route.limits.map(L => `${L.from}-${L.to}-${L.kmh}`).join();
+    const key = route.stations.map(x => `${x.enterLoop ? 1 : 0}`).join('') + ':' + (ctx.service?.cars ?? 0) + ':' + route.lineLimit + ':' + route.limits.map(L => `${L.from}-${L.to}-${L.kmh}`).join();
     if (key === built) return;
     built = key;
-    clear(group);
+    clear(stopGroup); clear(group);
+    const defs: Def[] = [];
+    // 距離標・停止位置目標: 自列車の走行線の左（2面4線駅は種別により待避線または本線）。待避線・島式1面2線駅ではホームが右なので、
+    // 線路がホーム側へ寄り始めたら（走行線が -1m より左）右に立てる
+    for (const sg of route.signs) {
+      const lat = track.pathLat(sg.s), rightSta = route.stations.find(x => (x.enterLoop || x.island) && Math.abs(x.stopS - sg.s) < 520);
+      defs.push(define(rightSta && lat < -1 ? { ...sg, lat: 2.0 } : sg, lat, stopGroup));
+    }
+    // 速度制限・解除: 自列車の走行線の左。解除標は、より厳しい制限の中・終着駅より先なら立てない
     const last = route.stations[route.stations.length - 1].stopS;
     // 始発駅を出た所の線区最高速度（種別ごと）
-    buildSign(ctx, { kind: 'limit', s: route.startS + 60, kmh: route.lineLimit, size: .9 }, 0, group);
+    defs.push(define({ kind: 'limit', s: route.startS + 60, kmh: route.lineLimit, size: .9 }, 0, group));
     for (const L of route.limits) {
-      buildSign(ctx, { kind: 'limit', s: L.from, kmh: L.kmh }, track.pathLat(L.from), group);
+      defs.push(define({ kind: 'limit', s: L.from, kmh: L.kmh }, track.pathLat(L.from), group));
       // 予告標: 制限の 400m 手前（より厳しい制限の中や始発駅の手前には立てない）
       const ns = L.from - 400;
       const covered = route.limits.some(o => o !== L && o.kmh <= L.kmh && ns >= o.from && ns < o.to);
-      if (!covered && ns > route.startS + 80) buildSign(ctx, { kind: 'limitNotice', s: ns, kmh: L.kmh }, track.pathLat(ns), group);
+      if (!covered && ns > route.startS + 80) defs.push(define({ kind: 'limitNotice', s: ns, kmh: L.kmh }, track.pathLat(ns), group));
       const inner = route.limits.some(o => o !== L && o.kmh <= L.kmh && L.to > o.from && L.to < o.to);
-      if (!inner && L.to < last) buildSign(ctx, { kind: 'limitEnd', s: L.to }, track.pathLat(L.to), group);
+      if (!inner && L.to < last) defs.push(define({ kind: 'limitEnd', s: L.to }, track.pathLat(L.to), group));
     }
+    place(ctx, defs, d => track.pathLat(d.s));
   };
   rebuild();
   events.on('serviceChange', rebuild);
   events.on('reset', rebuild);
 }
-

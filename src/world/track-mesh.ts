@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import type { Track } from '../route/track';
-import { loopShape, loopZones, type LoopZone } from '../route/service';
+import { islandOffset, islandZones, loopShape, loopZones, type LoopZone } from '../route/service';
 import { cullByDistance } from './cull';
 
 const GAUGE = 0.535; // 軌間の半分 [m]
@@ -63,10 +63,23 @@ export function buildTrackMesh(ctx: GameContext): void {
   const matBallast = new THREE.MeshLambertMaterial({ color: 0x8a8378, side: THREE.DoubleSide });
   const matRail = new THREE.MeshStandardMaterial({ color: 0xb8bcc2, metalness: .8, roughness: .35, side: THREE.DoubleSide });
   const matSleeper = new THREE.MeshLambertMaterial({ color: 0x6b6259 });
+  // 島式1面2線駅の区間は線路が左右へ開く（S字）ので断面を s ごとに求める。それ以外は直線の押し出し
+  const isl = islandZones(route);
   for (const c of route.tracks) {
-    scene.add(extrudeAlong(track, [[c - 2.3, 0.0], [c - 1.4, 0.22], [c + 1.4, 0.22], [c + 2.3, 0.0]], TS0, TS1, 4, matBallast));
-    for (const r of [c - GAUGE, c + GAUGE])
-      scene.add(extrudeAlong(track, [[r - .035, .24], [r - .035, .38], [r + .035, .38], [r + .035, .24]], TS0, TS1, 3, matRail));
+    let a = TS0;
+    const piece = (s0: number, s1: number, island: boolean) => {
+      if (s1 - s0 < 1) return;
+      const l = (s: number) => c + (island ? islandOffset(route, c, s) : 0);
+      scene.add(extrudeFn(track, s => { const m = l(s); return [[m - 2.3, 0.0], [m - 1.4, 0.22], [m + 1.4, 0.22], [m + 2.3, 0.0]]; }, s0, s1, island ? 2 : 4, matBallast));
+      for (const g of [-GAUGE, GAUGE])
+        scene.add(extrudeFn(track, s => { const r = l(s) + g; return [[r - .035, .24], [r - .035, .38], [r + .035, .38], [r + .035, .24]]; }, s0, s1, island ? 1 : 3, matRail));
+    };
+    for (const z of isl) {
+      const z0 = Math.max(TS0, z.inFrom), z1 = Math.min(TS1, z.outTo);
+      if (z1 <= a) continue;
+      piece(a, z0, false); piece(z0, z1, true); a = z1;
+    }
+    piece(a, TS1, false);
   }
   // 枕木（200m ごとの InstancedMesh。遠方は距離カリング）
   {
@@ -81,12 +94,13 @@ export function buildTrackMesh(ctx: GameContext): void {
         const s = TS0 + k * sp, t = trackAt(s); q.setFromEuler(e.set(0, -t.phi, 0));
         const lp = loops.find(o => o.base === c && s > o.z.inFrom && s < o.z.outTo);
         const d = lp ? lp.lat(s) - c : 0;
+        const co = c + islandOffset(route, c, s); // 島式ホーム駅の S字
         if (lp && Math.abs(d) < Math.abs(lp.off) - .01) {
           // 分岐器: 本線と分岐線にまたがる長い枕木
           inst.setMatrixAt(i++, m4.compose(at(s, c + d / 2, .27), q, wide.set((Math.abs(d) + 2) / 2, 1, 1)));
           continue;
         }
-        inst.setMatrixAt(i++, m4.compose(at(s, c, .27), q, one));
+        inst.setMatrixAt(i++, m4.compose(at(s, co, .27), q, one));
         if (lp) inst.setMatrixAt(i++, m4.compose(at(s, c + d, .27), q, one));
       }
       inst.count = i; inst.computeBoundingSphere(); scene.add(inst);

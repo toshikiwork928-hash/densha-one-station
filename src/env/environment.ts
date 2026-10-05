@@ -25,9 +25,14 @@ export function createEnvironment(scene: THREE.Scene): EnvironmentHandles {
   const sun = new THREE.DirectionalLight(0xfff4e0, 1.8);
   sun.position.set(300, 500, 200);
   scene.add(sun);
+  // 旧・ポリゴンの山並み（world/scenery.ts の 'backdrop'）はスカイドームの山並みに置き換えたので隠す
+  let oldBackdrop: THREE.Object3D | undefined, scan = 0;
   return {
     sky, fog, hemi, sun,
     setSky(hex) { sky.setHex(hex); fog.color.setHex(hex); },
-    update() { /* 将来: 時間帯・天候 */ },
+    update() {
+      if (!oldBackdrop && scan < 600) { scan++; oldBackdrop = scene.getObjectByName('backdrop'); }
+      if (oldBackdrop) oldBackdrop.visible = false;
+    },
   };
 }

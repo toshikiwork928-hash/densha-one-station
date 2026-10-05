@@ -2,7 +2,7 @@
 // 急行・特急で通過する2面4線駅の待避線に止まっている先行の普通（st.precedingS が待避線にいる間）
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
-import { loopShape, loopZones, serviceOf } from '../route/service';
+import { islandOffset, loopShape, loopZones, serviceOf } from '../route/service';
 import type { TrainKind } from '../route/types';
 import { placeCar } from './emu';
 import { CAR_LEN, createTrainSet, type TrainCar } from './train-models';
@@ -40,6 +40,9 @@ export function createOvertaking(ctx: GameContext): void {
     }
   };
   const zones = loopZones(route);
+  /** 本線のホーム側 / 待避線のホーム側（島式: 本線は進行方向左、待避線は右。自列車が待避線に入る駅は platform.side が 'R' に変わる） */
+  const mainSide = (i: number): 'L' | 'R' => { const sta = route.stations[i]; return sta.enterLoop ? (sta.platform.side === 'R' ? 'L' : 'R') : sta.platform.side; };
+  const flip = (x: 'L' | 'R'): 'L' | 'R' => x === 'L' ? 'R' : 'L';
   let hornDone = false, wasNear = false, lastH = 0;
 
   events.on('reset', () => { hornDone = false; });
@@ -55,8 +58,9 @@ export function createOvertaking(ctx: GameContext): void {
       const svc = serviceOf(route, o.passedBy)!;
       const v = view(svc.kind, svc.units, svc.name);
       v.group.visible = true;
-      for (const c of v.cars) c.setDoors(o.stage === 'stopped' && o.localStopped); // 停車して接続中はドアを開ける
-      place(v, o.head, () => 0);
+      const connecting = o.stage === 'stopped' && o.localStopped, side = mainSide(o.station);
+      for (const c of v.cars) c.setDoors(connecting, side); // 停車して接続中は本線ホーム側のドアを開ける
+      place(v, o.head, s => islandOffset(route, 0, s));
       const gap = o.head < ps - plen ? ps - plen - o.head : o.head - o.len > ps ? o.head - o.len - ps : 0;
       if (!hornDone && o.head > ps - plen - 250) { hornDone = true; events.emit('oncomingHorn', { distance: Math.max(0, ps - plen - o.head) }); }
       const prox = Math.max(0, 1 - gap / NEAR);
@@ -75,7 +79,8 @@ export function createOvertaking(ctx: GameContext): void {
     v.group.visible = true;
     // 待避線に停車している間はドアを開ける（動き出したら閉める）
     const still = Math.abs(h - prevH) < 1e-3;
-    for (const c of v.cars) c.setDoors(still);
+    const side = flip(mainSide(z.index));
+    for (const c of v.cars) c.setDoors(still, side);
     place(v, h, s => z.lat * loopShape(z, s));
   });
 }

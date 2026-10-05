@@ -1,6 +1,7 @@
 // 逆向き（上り）の路線データを下りのデータから作る。s' = 全長 - s で写し、右カーブ ↔ 左カーブ、勾配の符号を反転。
 // 自列車は下りの対向線（横位置 4）を走るが、進行方向から見ると左側の線路なので横位置はそのまま [0, 4] で表せる（駅・待避線は左右対称）
-import { loopZone } from './service';
+import { islandZone, loopZone } from './service';
+import { stopScenes, type StopScene } from './oncoming-stops';
 import type { Route, ServiceSpec, Sign, SpeedLimit, Station } from './types';
 
 /** 下りの全長（線形要素の合計） */
@@ -13,7 +14,7 @@ const approachSigns = (stopS: number): Sign[] => [
   { kind: 'stopMarker', s: stopS, cars: 6 },
 ];
 
-export function reverseRoute(down: Route, opt: { id: string; name: string; timetable: Record<string, ServiceSpec['timetable']> }): Route {
+export function reverseRoute(down: Route, opt: { id: string; name: string; timetable: Record<string, ServiceSpec['timetable']>; /** 下りの停車駅 index で指定した対向列車の停車（上りでは駅 index を反転して配置） */ oncomingStops?: StopScene[] }): Route {
   const L = totalLength(down), m = (s: number) => L - s;
   const n = down.stations.length, ri = (i: number) => n - 1 - i;
   // 標高: 下りの終点側の標高から始める
@@ -39,9 +40,12 @@ export function reverseRoute(down: Route, opt: { id: string; name: string; timet
   // 閉そく信号: 出発信号（停止位置の 60m 先）、2面4線駅の場内信号（入口分岐器の 90m 手前）、間は約 700m ごと
   const fixed: number[] = [];
   stations.forEach((st, i) => {
-    if (i < n - 1) fixed.push(st.stopS + 60);
+    const iz = islandZone(st);
+    // 島式1面2線駅: S字区間（線路の横ずれ）に信号機が掛からないよう、区間の外に出発信号・場内信号を置く
+    if (i < n - 1) fixed.push(iz ? iz.outTo + 70 : st.stopS + 60);
     const z = loopZone(st);
     if (z && i > 0) fixed.push(z.inFrom - 90);
+    if (iz && i > 0) fixed.push(iz.inFrom - 50);
   });
   fixed.sort((a, b) => a - b);
   const sig: number[] = [];
@@ -52,6 +56,8 @@ export function reverseRoute(down: Route, opt: { id: string; name: string; timet
     for (let j = 1; j <= cnt; j++) {
       let s = fixed[k] + gap * j / (cnt + 1);
       for (const c of crossings) if (Math.abs(s - c.s) < 25) s = c.s - 30;
+      // 島式駅の S字区間（信号機の横位置と線路が重なる）には置かない
+      if (stations.some(q => { const iz = islandZone(q); return iz && s > iz.inFrom - 20 && s < iz.outTo + 20; })) continue;
       sig.push(Math.round(s));
     }
   }
@@ -75,8 +81,11 @@ export function reverseRoute(down: Route, opt: { id: string; name: string; timet
       cityZones: down.scenery.cityZones.map(z => ({ from: m(z.to), to: m(z.from) })).sort((a, b) => a.from - b.from),
       endBlockS: m(down.extent.from) + 110,
     },
-    // 対向列車（下り列車）: 下りの出現位置を同じ比率で写す
-    oncoming: down.oncoming.map(o => ({ ...o, spawnAt: startS + (o.spawnAt - down.startS), startS: startS + (o.startS - down.startS) })),
+    // 対向列車（下り列車）: 走り抜けるものは下りの出現位置を同じ距離で写し、駅に停車するものは上りの駅の位置から作り直す
+    oncoming: [
+      ...down.oncoming.filter(o => !o.stop).map(o => ({ ...o, spawnAt: startS + (o.spawnAt - down.startS), startS: startS + (o.startS - down.startS) })),
+      ...stopScenes(stations, (opt.oncomingStops ?? []).map(sc => ({ ...sc, station: ri(sc.station) }))),
+    ],
     signals: sig.map(s => ({ id: 'u' + Math.round(s), s })),
     crossings,
     structures,

@@ -58,7 +58,10 @@ export function createNightLights(ctx: GameContext): NightLights {
     const s0 = sta.platform.from, s1 = sta.platform.to, len = s1 - s0;
     const L1 = Math.max(...route.tracks), lp = sta.loop?.lat ?? 0;
     // [蛍光灯の横位置, 照らす床の横位置[]]。島式ホームは中央に蛍光灯、床は両側
-    const sides: [number, number[]][] = sta.loop
+    const L0 = Math.min(...route.tracks), mid = (L0 + L1) / 2;
+    const sides: [number, number[]][] = sta.island
+      ? [[mid, [mid - 1.5, mid + 1.5]]] // 島式1面2線: 線間の島式ホーム1本
+      : sta.loop
       ? [[lp / 2, [lp / 2 - 1.5, lp / 2 + 1.5]], [L1 - lp / 2, [L1 - lp / 2 - 1.5, L1 - lp / 2 + 1.5]]]
       : [[-4.2, [-3.6]], [L1 + 4.2, [L1 + 3.6]]]; // 相対式: 両側
     const rl = len * .6, sc = (s0 + s1) / 2;
