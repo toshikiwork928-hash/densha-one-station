@@ -35,7 +35,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e13; col
 #touch button { width: 76px; height: 64px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); font-size: 22px; font-weight: 700; touch-action: manipulation; }
 #touch button small { display: block; font-size: 10px; color: var(--muted); }
 #touch button[data-k="eb"] { background: #7a1616; height: 44px; font-size: 16px; }
-@media (pointer: coarse) { #touch { display: flex; } #dash { justify-content: flex-start; } }
+/* タッチ端末とスマホ幅のプレビューでは操作ボタンを表示する。 */
+@media (any-pointer: coarse), (max-width: 640px), (max-width: 1024px) and (max-height: 500px) { #touch { display: flex; } #dash { justify-content: flex-start; } }
 @media (max-width: 640px) {
   #meter { width: 160px; height: 160px; }
   #dist { font-size: 22px; } #clock { font-size: 20px; } #distPanel { min-width: 130px; }
@@ -179,12 +180,12 @@ table.keys td:first-child { white-space: nowrap; width: 1%; padding-right: 12px;
 #distPanel { grid-area: dist; justify-self: end; }
 #meter { grid-area: meter; width: 190px; height: 190px; }
 #dash > .panel:last-child { grid-area: notch; }
-@media (pointer: coarse) { #dash { justify-content: start; } #distPanel { justify-self: start; } }
+@media (any-pointer: coarse), (max-width: 640px) { #dash { justify-content: start; } #distPanel { justify-self: start; } }
 @media (max-width: 640px) {
   #meter { width: 160px; height: 160px; }
   #dash { padding-right: 0; }
 }
-@media (max-width: 640px) and (pointer: coarse) { #dash { padding-right: 88px; } }
+@media (max-width: 640px) { #dash { padding-right: 88px; } }
 @media (max-width: 640px) {
   /* 狭い画面ではバナーを上部パネルの間に挟まず、視界中央寄りに全幅で出す */
   #banner { position: fixed; left: 8px; right: 8px; top: 34%; padding: 0; font-size: 18px; }
@@ -204,7 +205,7 @@ table.keys td:first-child { white-space: nowrap; width: 1%; padding-right: 12px;
   #notches div { padding: 0 6px; font-size: 9px; line-height: 1.15; }
   .limitSign { width: 42px; height: 42px; font-size: 17px; border-width: 4px; }
 }
-@media (max-height: 500px) and (pointer: coarse) {
+@media (max-height: 500px) and (any-pointer: coarse), (max-height: 500px) and (max-width: 1024px) {
   #dash { padding-right: 92px; }
   #touch { gap: 5px; right: 8px; bottom: 8px; }
   #touch button { width: 72px; height: 52px; font-size: 18px; }
