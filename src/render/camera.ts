@@ -1,4 +1,4 @@
-// カメラ: 運転台視点（走行揺れ付き）/ 外部視点（後方追従・側面）/ リプレイ（沿線カメラの切替演出）
+// カメラ: 運転台視点（走行揺れ付き）/ 外部視点（俯瞰追従・前方斜め・編成全景）/ リプレイ（沿線カメラの切替演出）
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import { loopZone } from '../route/service';
@@ -17,14 +17,20 @@ const SHOT_ORDER: ShotKind[] = ['trackside', 'chase', 'low', 'heli', 'trackside'
 export function createCabCamera(ctx: GameContext): CabCamera {
   const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
   const smPos = new THREE.Vector3(), smLook = new THREE.Vector3();
+  const viewDir = new THREE.Vector3(), viewRight = new THREE.Vector3(), viewUp = new THREE.Vector3(), viewPoint = new THREE.Vector3();
   const lat = -.45; // 運転席は左寄り
   const { events, route } = ctx;
   let outsideVariant = 0, prevMode = ctx.cameraMode, snap = true;
   let shot: Shot | null = null, shotN = 0;
+  const viewLabel = document.createElement('div');
+  viewLabel.className = 'camera-view-label'; viewLabel.hidden = true;
+  viewLabel.setAttribute('role', 'status'); document.body.appendChild(viewLabel);
 
   events.on('cameraMode', ({ mode }) => {
-    outsideVariant = mode === 'outside' && prevMode === 'outside' ? (outsideVariant + 1) % 2 : 0;
+    outsideVariant = mode === 'outside' && prevMode === 'outside' ? (outsideVariant + 1) % 3 : 0;
     prevMode = mode; snap = true; shot = null; shotN = 0;
+    viewLabel.hidden = mode !== 'outside';
+    viewLabel.textContent = ['俯瞰追従', '前方斜め', '編成全景'][outsideVariant];
     setFov(CAB_FOV);
     document.body.classList.toggle('cam-outside', mode !== 'cab');
     document.body.classList.toggle('cam-replay', mode === 'replay');
@@ -33,6 +39,20 @@ export function createCabCamera(ctx: GameContext): CabCamera {
   function setFov(f: number) {
     if (Math.abs(ctx.camera.fov - f) < .01) return;
     ctx.camera.fov = f; ctx.camera.updateProjectionMatrix();
+  }
+
+  // 曲線・勾配・縦長画面でも、編成の端が画面から切れない距離まで引く。
+  function fitFormation(s: number, length: number) {
+    viewDir.copy(camPos).sub(camLook);
+    let distance = viewDir.length(); viewDir.normalize();
+    viewRight.set(0, 1, 0).cross(viewDir).normalize(); viewUp.copy(viewDir).cross(viewRight).normalize();
+    const tan = Math.tan(THREE.MathUtils.degToRad(ctx.camera.fov / 2));
+    for (let i = 0; i <= 4; i++) for (const x of [-1.65, 1.65]) for (const y of [.3, 6.4]) {
+      viewPoint.copy(ctx.track.pathAt(s - length * i / 4, x, y)).sub(camLook);
+      distance = Math.max(distance, viewPoint.dot(viewDir) + 1.15 * Math.max(
+        Math.abs(viewPoint.dot(viewRight)) / (tan * ctx.camera.aspect), Math.abs(viewPoint.dot(viewUp)) / tan));
+    }
+    camPos.copy(camLook).addScaledVector(viewDir, distance);
   }
 
   /** 次の停車駅 index（リプレイでは位置から推定） */
@@ -104,9 +124,15 @@ export function createCabCamera(ctx: GameContext): CabCamera {
         if (outsideVariant === 0) { // 後方斜め上から追従
           camPos.copy(at(s - L - 16, 2.2, 6));
           camLook.copy(at(s + 30, 0, 1.5));
-        } else { // 先頭付近の側面
-          camPos.copy(at(s - 25, 12, 3.2));
-          camLook.copy(at(s - 30, 0, 2));
+        } else if (outsideVariant === 1) { // 顔と側面を見る。街側へ出ず、屋根の上から先頭車を撮る。
+          setFov(45);
+          camPos.copy(at(s + 26, 7.5, 10));
+          camLook.copy(at(s - 10, 0, 2.4));
+        } else { // 先頭斜め上から編成全体。車両数に合わせて引き、駅の屋根より高く撮る。
+          setFov(50);
+          camPos.copy(at(s + 24 + L * .25, THREE.MathUtils.clamp(L * .22, 18, 32), Math.max(56, L * .85)));
+          camLook.copy(at(s - L * .48, 0, 2));
+          fitFormation(s, L);
         }
       } else updateReplay(s, v, time);
       // 追従系はなめらかに（切替直後は即時）

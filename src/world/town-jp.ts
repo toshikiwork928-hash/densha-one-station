@@ -323,6 +323,16 @@ export function buildTown(ctx: GameContext): TownResult {
   const rnd = createRng(20240917);
   const atlas = buildAtlas();
   const chunks = new ChunkedBatch(300, new Set(['sign']));
+  const shadowChunks = new ChunkedBatch(300, new Set(['shadow']));
+  // 建物の接地影。地面に貼るだけなので低画質でも足元の浮きを抑えられる。
+  const shadowCanvas = document.createElement('canvas'); shadowCanvas.width = shadowCanvas.height = 64;
+  const sg = shadowCanvas.getContext('2d')!;
+  const fade = sg.createRadialGradient(32, 32, 8, 32, 32, 32);
+  fade.addColorStop(0, '#ffffff'); fade.addColorStop(.55, '#aaaaaa'); fade.addColorStop(1, '#000000');
+  sg.fillStyle = fade; sg.fillRect(0, 0, 64, 64);
+  const shadowMat = new THREE.MeshBasicMaterial({ color: 0x18283b, alphaMap: new THREE.CanvasTexture(shadowCanvas),
+    transparent: true, opacity: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+  shadowMat.userData.illustrationShadow = true;
   const trees: TreeSpot[] = [];
   const S0 = route.extent.from, S1 = route.extent.to;
   const L0 = Math.min(...route.tracks), L1 = Math.max(...route.tracks);
@@ -483,6 +493,8 @@ export function buildTown(ctx: GameContext): TownResult {
         const sc = s + lotW / 2, setback = type === 'conbini' ? 11 : type === 'shop' ? .6 : 2.2 + rnd() * 1.5;
         const dc = d0 + setback + dep / 2, lat = latOf(sd, dc);
         const k = kitAt(sc, lat, sd);
+        const sb = shadowChunks.at(sc); sb.parent = parentAt(sc, lat, sd);
+        sb.add('shadow', P.plane, M(0, .025, 0, 0, w + 5, dep + 5, 1, -Math.PI / 2));
         occ.push({ sd, a: s - 2, b: s + lotW + 2, d: d0 + setback + dep + 3 });
         switch (type) {
           case 'house': house(k, w, dep); break;
@@ -554,6 +566,10 @@ export function buildTown(ctx: GameContext): TownResult {
   const group = new THREE.Group(); group.name = 'town'; scene.add(group);
   // 遠方のチャンクは距離で非表示（家屋は 1.6km 先でほぼ点、電線は 900m 先で見えない）
   for (const g of chunks.build(mats, group)) cullByDistance(ctx, g, 1600);
+  for (const g of shadowChunks.build({ shadow: shadowMat }, group)) {
+    g.traverse(o => { o.userData.noShadow = true; });
+    cullByDistance(ctx, g, 350);
+  }
   const wireMat = new THREE.LineBasicMaterial({ color: 0x2a2a2a });
   for (const arr of wires.values()) {
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));

@@ -35,7 +35,7 @@ export function createGame(ctx: GameContext): Game {
   };
   const banner = (text: string, sec = 3) => events.emit('banner', { text, sec });
 
-  // カメラ: 0 = 運転台, 1 = 後方追従, 2 = 側面（camera.ts が 'outside' の連続で切替）
+  // カメラ: 0 = 運転台, 1 = 俯瞰追従, 2 = 前方斜め, 3 = 編成全景（camera.ts が 'outside' の連続で切替）
   let camCycle = 0;
   function setCamera(mode: CameraMode) {
     if (mode !== 'outside') camCycle = 0;
@@ -284,7 +284,7 @@ export function createGame(ctx: GameContext): Game {
     atsAck: () => { if (st.state === 'run' || st.state === 'dwell') signals.ack(); },
     cycleCamera: () => {
       if (replay.active) return;
-      camCycle = (camCycle + 1) % 3;
+      camCycle = (camCycle + 1) % 4;
       const mode: CameraMode = camCycle === 0 ? 'cab' : 'outside';
       ctx.cameraMode = mode;
       events.emit('cameraMode', { mode });

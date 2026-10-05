@@ -22,7 +22,7 @@ export interface GameActions {
   canControl(): boolean;
   /** [A] ATS 確認扱い */
   atsAck(): void;
-  /** [A] カメラ切替（運転台 → 外部 → 側面 → 運転台） */
+  /** [A] カメラ切替（運転台 → 俯瞰追従 → 前方斜め → 編成全景 → 運転台） */
   cycleCamera(): void;
   /** [A] 結果画面からタイトルへ */
   toTitle(): void;

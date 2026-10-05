@@ -9,6 +9,7 @@ import { safetyDeductions } from '../game/scoring';
 import { MODE_LABEL, findStage, stagesOf, type GameMode } from '../game/state';
 import { serviceOf, unitsLabel } from '../route/service';
 import type { ServiceSpec, TrainKind } from '../route/types';
+import { createVehiclePreview } from './vehicle-preview';
 
 /** 種別の説明（停車駅・編成） */
 const svcDesc = (route: GameContext['route'], v: ServiceSpec) =>
@@ -41,10 +42,20 @@ export function attachOverlay(ctx: GameContext): void {
   type Tab = 'stage' | 'car' | 'rec' | 'env' | 'sound' | 'keys';
   const TABS: [Tab, string][] = [['stage', '運転'], ['car', '車両'], ['rec', '記録'], ['env', '環境'], ['sound', '音'], ['keys', '操作']];
   let tab: Tab = 'stage';
+  let gallery: ReturnType<typeof createVehiclePreview> | undefined;
   function showTab(t: Tab) {
     tab = t;
     card.querySelectorAll<HTMLElement>('[data-tab]').forEach(b => { b.classList.toggle('on', b.dataset.tab === t); b.setAttribute('aria-selected', String(b.dataset.tab === t)); });
     card.querySelectorAll<HTMLElement>('[data-pane]').forEach(p => { p.hidden = p.dataset.pane !== t; });
+    if (t === 'car') {
+      const svc = serviceOf(route, st.sel.service);
+      const host = card.querySelector<HTMLElement>('.vehicle-preview');
+      if (svc && host) {
+        gallery ??= createVehiclePreview(ctx);
+        card.querySelectorAll<HTMLImageElement>('[data-face-kind]').forEach(img => { img.src = gallery!.faceIcon(img.dataset.faceKind as TrainKind); });
+        gallery.mount(host, svc);
+      }
+    }
   }
 
   function showTitle() {
@@ -138,11 +149,12 @@ export function attachOverlay(ctx: GameContext): void {
   function vehiclePane(svc: ServiceSpec | undefined): string {
     if (!svc) return '<p class="sub">この路線は車両を選べません。</p>';
     const kinds = svc.kindOptions ?? [svc.kind], forms = svc.formationOptions ?? [svc.units];
-    const kb = kinds.map(k => `<button data-kind="${k}" class="${k === svc.kind ? 'on' : ''}" ${kinds.length < 2 ? 'disabled' : ''}>${KIND_INFO[k].name}<small>${KIND_INFO[k].desc}</small></button>`).join('');
+    const kb = kinds.map(k => `<button data-kind="${k}" class="vehicle-choice ${k === svc.kind ? 'on' : ''}" aria-pressed="${k === svc.kind}" ${kinds.length < 2 ? 'disabled' : ''}><img class="vehicle-face" data-face-kind="${k}" alt="${KIND_INFO[k].name}の正面" width="64" height="64"><span>${KIND_INFO[k].name}<small>${KIND_INFO[k].desc}</small></span></button>`).join('');
     const formLabel = (u: number[]) => `${carsOfUnits(u)}両${u.length > 1 ? `<small>${unitsLabel(u)}（${u.length}編成を連結）</small>` : ''}`;
     const cb = forms.map(u => `<button data-units="${u.join('+')}" class="${u.join('+') === svc.units.join('+') ? 'on' : ''}" ${forms.length < 2 ? 'disabled' : ''}>${formLabel(u)}</button>`).join('');
     return `<div class="selLbl"><span class="svcBadge svc-${svc.id}">${svc.name}</span> の車両${kinds.length < 2 ? '（固定）' : ''}</div>
       <div class="sel col" id="selKind">${kb}</div>
+      <div class="vehicle-preview"></div>
       <div class="selLbl">編成${forms.length < 2 ? '（固定）' : ''}</div><div class="sel" id="selCars">${cb}</div>
       <p class="sub">${svc.cars}両編成${svc.units.length > 1 ? `（${svc.units.map(n => n + '両').join(' + ')}を連結）` : ''}。駅では「${svc.cars >= 8 ? '6・8' : svc.cars}両」の停止位置目標に先頭を合わせる。</p>`;
   }

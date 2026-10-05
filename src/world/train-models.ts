@@ -142,6 +142,7 @@ function makeCar(kit: KindKit, kind: CarKind, role: Role, led: THREE.Material, l
   const closed = kind === 'head' ? kit.side.head : kit.side.mid;
   // 外板は +X 側 / -X 側の2グループ（材質配列 [+X, -X]）。+X = 車の進行方向右。後ろ向きの運転台付き車（body を PI 回転）は左右が入れ替わる
   const shell = new THREE.Mesh(g.shell, [closed, closed]);
+  shell.name = 'train-shell';
   body.add(shell);
   body.add(new THREE.Mesh(g.paint, kit.paint));
   if (g.face && kit.face) body.add(new THREE.Mesh(g.face, kit.face));

@@ -13,6 +13,7 @@ import { createState } from './game/state';
 import { loadSelection } from './game/ranking';
 import { createGame } from './game/loop';
 import { createRenderCore } from './render/renderer';
+import { attachIllustratedLook } from './render/illustrated';
 import { createCabCamera } from './render/camera';
 import { createEnvironment } from './env/environment';
 import { attachEnvSystem } from './env';
@@ -48,6 +49,7 @@ const world = buildWorld(ctx);
 const game = createGame(ctx);
 const cab = createCabCamera(ctx);
 attachEnvSystem(ctx); // [B] 空・時間帯・天候・影・夜間照明
+attachIllustratedLook(ctx);
 attachSfx(ctx.events, ctx);
 attachHud(ctx);
 attachOverlay(ctx);
