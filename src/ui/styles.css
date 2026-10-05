@@ -186,10 +186,13 @@ table.keys td:first-child { white-space: nowrap; width: 1%; padding-right: 12px;
   #dash { padding-right: 0; }
 }
 @media (max-width: 640px) { #dash { padding-right: 88px; } }
-@media (max-width: 640px) {
-  /* 狭い画面ではバナーを上部パネルの間に挟まず、視界中央寄りに全幅で出す */
-  #banner { position: fixed; left: 8px; right: 8px; top: 34%; padding: 0; font-size: 18px; }
+@media (max-width: 640px), (max-height: 500px) {
+  /* 狭い画面（縦持ち・横持ちのスマホ）ではバナーを上部パネルの間に挟まず、視界中央寄りに全幅で出す。
+     左の情報パネル・計器より前面に出して全文を読めるようにする */
+  #banner { position: fixed; left: 8px; right: 8px; top: 40%; padding: 6px 10px; font-size: 18px; z-index: 30; pointer-events: none; background: rgba(10, 14, 20, .68); border-radius: 8px; }
+  #banner:empty { display: none; }
 }
+@media (max-height: 500px) { #banner { top: 26%; font-size: 16px; } }
 /* 横向きスマホ（高さが低い画面）: 左の情報パネルを詰め、計器はタッチボタンの左に右寄せ */
 @media (max-height: 500px) {
   #hud { padding: 10px 10px 8px; }
