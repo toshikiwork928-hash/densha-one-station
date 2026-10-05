@@ -16,6 +16,8 @@ const ROOF: V2[] = [[HW, 3.42], [HW - .05, 3.58], [HW - .3, 3.71], [HW - .75, 3.
 /** 断面: new = すそ絞り、old = 直線車体（鋼製） */
 const HALFS: Record<CommuterVariant, V2[]> = { new: [[HW - .06, Y0], [HW, 1.5], ...ROOF], old: [[HW, Y0], ...ROOF] };
 const DOORS = [-7.2, -2.4, 2.4, 7.2], DOOR_W = 1.3;
+/** 先頭車: 前端から乗務員扉の中心まで・扉幅・客用扉1の後ろへのずらし量・扉後ろの窓幅 */
+const CREW_OFF = .55, CREW_W = .64, HEAD_SHIFT = .4, CREW_WIN = 1.1;
 const BLUE = '#2f3fa8', ORANGE = '#f0961c';
 
 interface Look {
@@ -44,12 +46,14 @@ export function paintCommuterSide(v: CommuterVariant, Lb: number, head: boolean,
   s.base(grd, L.rough, L.metal);
   s.rect(-hz - 1, hz + 1, L.roofY, YTOP + .1, L.roof, .6, L.metal * .6);
   const band = (b: V2, col: string, z0 = -hz - 1) => s.rect(z0, hz + 1, b[0], b[1], col, .35, .1);
-  const crewZ = -hz + .75;
+  // 先頭車: 乗務員扉（幅0.64m）→ 窓（約1.1m）→ 客用扉。1つ目の客用扉は中間車より後ろ（+0.35m）へずらして窓の幅を取る
+  const crewZ = -hz + CREW_OFF;
+  const doors = head ? [DOORS[0] + HEAD_SHIFT, ...DOORS.slice(1)] : DOORS;
   if (head) {
-    const zs = crewZ + .55, k = .62;
+    const zs = crewZ + CREW_W / 2 + .06, k = .62;
     sweepBand(s, Lb, L.frontLine, L.topLine, zs + .12, k, ORANGE, .35, .1);
     sweepBand(s, Lb, L.frontBand, L.topBand, zs, k, BLUE, .35, .1, -.12);
-    band(L.lowBand, BLUE, zs + 2.2); band(L.lowLine, ORANGE, zs + 2.2);
+    band(L.lowBand, BLUE, doors[0]); band(L.lowLine, ORANGE, doors[0]);
   } else {
     band(L.topBand, BLUE); band(L.topLine, ORANGE); band(L.lowBand, BLUE); band(L.lowLine, ORANGE);
   }
@@ -62,6 +66,10 @@ export function paintCommuterSide(v: CommuterVariant, Lb: number, head: boolean,
       s.rect(zc - w / 2, zc + w / 2, 1.16, 1.3, '#5b5f66', .6, .1);
       s.rect(zc - w / 2, zc + w / 2, 2.98, 3.05, '#d9d6c8', .5, 0);
       for (const sg of [-1, 1]) s.rect(zc + sg * (w / 2 - .06) - .06, zc + sg * (w / 2 - .06) + .06, 1.16, 3.05, L.door, v === 'old' ? L.rough : .4, v === 'old' ? L.metal : .7);
+      // 夜の発光: 天井の灯りが明るく、床へ向かって暗くなる車内。床・引き込まれた扉の縁は光らない
+      s.emit(zc - w / 2, zc + w / 2, 1.16, 3.05, s.emitGrad(1.3, 3.05, '#ffffff', '#6a5e48'));
+      s.emit(zc - w / 2, zc + w / 2, 1.16, 1.3, '#000');
+      for (const sg of [-1, 1]) s.emit(zc + sg * (w / 2 - .06) - .06, zc + sg * (w / 2 - .06) + .06, 1.16, 3.05, '#000');
       return;
     }
     s.rect(zc - w / 2, zc + w / 2, 1.16, 3.05, L.door, v === 'old' ? L.rough : .4, v === 'old' ? L.metal : .7);
@@ -70,18 +78,22 @@ export function paintCommuterSide(v: CommuterVariant, Lb: number, head: boolean,
       for (const sg of [-1, 1]) s.glass(zc + sg * w / 4 - .22, zc + sg * w / 4 + .22, v === 'new' ? 2.04 : 2.0, 2.93, '#5a6067', .06);
     } else s.glass(zc - .2, zc + .2, 2.12, 2.92, '#5a6067', .03);
   };
-  for (const d of DOORS) door(d, DOOR_W, true);
+  for (const d of doors) door(d, DOOR_W, true);
   // 側窓
-  for (let i = 0; i < DOORS.length - 1; i++) {
-    const zc = (DOORS[i] + DOORS[i + 1]) / 2;
-    if (v === 'new') for (const sg of [-1, 1]) s.glass(zc + sg * .5 - .45, zc + sg * .5 + .45, w0, w1, '#4a5056', .1); // 幅1.9mの2枚引き違い大窓（実車は1枚に見える）
-    else for (const dz of [-.49, .49]) s.glass(zc + dz - .42, zc + dz + .42, w0, w1, '#565c63', .07); // 850mm角の1段下降窓を2枚ずつ
+  for (let i = 0; i < doors.length - 1; i++) {
+    const zc = (doors[i] + doors[i + 1]) / 2;
+    if (v === 'new') {
+      // 幅1.9mの大窓: 外枠の中に2枚の窓ガラスと、中央の細い仕切り（約6cm）
+      s.rect(zc - .95 - .045, zc + .95 + .045, w0 - .045, w1 + .045, '#4a5056', .5, 0, .12);
+      for (const sg of [-1, 1]) s.glass(sg < 0 ? zc - .95 : zc + .03, sg < 0 ? zc - .03 : zc + .95, w0, w1, '', .04);
+    } else for (const dz of [-.49, .49]) s.glass(zc + dz - .42, zc + dz + .42, w0, w1, '#565c63', .07); // 850mm角の1段下降窓を2枚ずつ
   }
   if (v === 'new') s.glass(DOORS[3] + DOOR_W / 2 + .35, hz - .4, w0, w1, '#565c63', .1);
   else s.glass((DOORS[3] + DOOR_W / 2 + hz) / 2 - .43, (DOORS[3] + DOOR_W / 2 + hz) / 2 + .43, w0, w1, '#565c63', .03);
   if (head) {
-    door(crewZ, .6, false);
-    s.glass(crewZ + .5, DOORS[0] - DOOR_W / 2 - .3, w0, w1, '#565c63', .05);
+    door(crewZ, CREW_W, false);
+    const wz1 = doors[0] - DOOR_W / 2 - .17; // 客用扉の枠の手前
+    s.glass(wz1 - CREW_WIN, wz1, w0, w1, '#565c63', .05);
   } else if (v === 'new') s.glass(-hz + .4, DOORS[0] - DOOR_W / 2 - .35, w0, w1, '#565c63', .05);
   else s.glass((DOORS[0] - DOOR_W / 2 - hz) / 2 - .43, (DOORS[0] - DOOR_W / 2 - hz) / 2 + .43, w0, w1, '#565c63', .03);
   // 号車札・小表示（文字なし）

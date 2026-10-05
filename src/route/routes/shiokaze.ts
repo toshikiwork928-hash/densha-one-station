@@ -38,15 +38,21 @@ const limits: SpeedLimit[] = [
 /** 対向列車（下り線の自列車から見て上り線を来る列車）。走り抜けるもの。同時に走るのは1編成だけ（world/oncoming.ts） */
 const PASS_BY: OncomingSpec[] = [
   { spawnAt: 5400, startS: 6900, cars: 4, carLen: 20, gap: 0.8, kmh: 74, lat: 4, kind: 'commuter-new' },
-  { spawnAt: 9800, startS: 11300, cars: 6, carLen: 20, gap: 0.8, kmh: 87, lat: 4, kind: 'limited' },
+  { spawnAt: 9800, startS: 11300, cars: 6, carLen: 20, gap: 0.8, kmh: 85, lat: 4, kind: 'commuter-new' }, // 海浜公園を通過する特急（STOP_SCENES）と続けて特急が来ないよう、普通の6両
 ];
 
 /** 駅に停車する対向列車。停車駅は種別に合わせる（普通 = 全駅、急行 = 汐見町・海浜公園、特急 = 汐見町）。
- *  汐見町は急行が本線（ホームは線間の島式で対向線の右）、松原町は島式1面2線（ホームは線間で対向列車の右）、みなと川は相対式（ホームは対向線の外側） */
+ *  みなと川は相対式（ホームは対向線の外側）、松原町は島式1面2線（ホームは線間で対向列車の右）。
+ *  汐見町・海浜公園は島式2面4線: 対向の普通は対向側の待避線（本線の +9.2m）に停車して島式ホームの側だけ開き、
+ *  汐見町は対向の急行が本線に停車して接続（普通は急行が出てから発車）、海浜公園は対向の特急が本線を通過（普通は通過後に発車）。
+ *  loop / follow / through の組は連続して並べる（follow は直前の loop の後ろから出現） */
 const STOP_SCENES: StopScene[] = [
   { station: 1, kind: 'commuter-new', cars: 4, kmh: 74 },
-  { station: 2, kind: 'commuter-old', cars: 6, kmh: 80 },
+  { station: 2, kind: 'commuter-new', cars: 4, kmh: 74, loop: true },
+  { station: 2, kind: 'commuter-old', cars: 6, kmh: 80, follow: true },
   { station: 4, kind: 'commuter-new', cars: 4, kmh: 74 },
+  { station: 5, kind: 'commuter-old', cars: 4, kmh: 74, label: '普通', loop: true },
+  { station: 5, kind: 'limited', cars: 6, kmh: 95, follow: true, through: true },
 ];
 
 const stations: Station[] = [

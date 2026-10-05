@@ -81,9 +81,9 @@ export function reverseRoute(down: Route, opt: { id: string; name: string; timet
       cityZones: down.scenery.cityZones.map(z => ({ from: m(z.to), to: m(z.from) })).sort((a, b) => a.from - b.from),
       endBlockS: m(down.extent.from) + 110,
     },
-    // 対向列車（下り列車）: 走り抜けるものは下りの出現位置を同じ距離で写し、駅に停車するものは上りの駅の位置から作り直す
+    // 対向列車（下り列車）: 走り抜けるものは下りの出現位置を同じ距離で写し、駅に停車するもの・待避線の普通と並ぶもの（follow）は上りの駅の位置から作り直す
     oncoming: [
-      ...down.oncoming.filter(o => !o.stop).map(o => ({ ...o, spawnAt: startS + (o.spawnAt - down.startS), startS: startS + (o.startS - down.startS) })),
+      ...down.oncoming.filter(o => !o.stop && !o.follow).map(o => ({ ...o, spawnAt: startS + (o.spawnAt - down.startS), startS: startS + (o.startS - down.startS) })),
       ...stopScenes(stations, (opt.oncomingStops ?? []).map(sc => ({ ...sc, station: ri(sc.station) }))),
     ],
     signals: sig.map(s => ({ id: 'u' + Math.round(s), s })),

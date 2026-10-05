@@ -101,10 +101,16 @@ export interface OncomingSpec {
   dest?: string;
   /** 駅に停車する対向列車（未指定は走り抜ける）。ドアを開けて待ち、自列車が同じ駅で停車して少し経つと発車する */
   stop?: OncomingStop;
+  /** 直前の要素（待避線に停車する普通）の後ろから出現する優等列車。普通が待避線へ入る間は後ろで間隔を保ち、普通はこの列車が出口分岐器を抜けてから発車する */
+  follow?: boolean;
 }
 
 /** 対向列車の停車。headS = 停止時の先頭位置 [m]（対向列車は s の減る向きへ走るので、ホームの手前側＝ from 寄り）、station = 停車駅 index */
-export interface OncomingStop { station: number; headS: number }
+export interface OncomingStop {
+  station: number; headS: number;
+  /** 2面4線駅の対向側の待避線（本線の対向線から +lat 側へ鏡像）に停車。ドアは島式ホーム側（進行方向の右）だけ開く */
+  loop?: boolean;
+}
 
 export interface Route {
   id: string;

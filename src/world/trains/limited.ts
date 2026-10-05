@@ -23,6 +23,14 @@ const noseTop = (u: number) => TIP_Y + (YTOP_L - TIP_Y) * Math.pow(Math.max(0, 1
 const noseBot = (u: number) => TIP_Y - (TIP_Y - Y0) * Math.pow(Math.max(0, 1 - u ** 3), .5);
 const noseW = (u: number) => Math.pow(Math.max(0, 1 - u ** 3.0), .5);
 
+/** 顎（前面下部が前へ突き出す）: 先端付近の下寄りの点を前へ押し出す。JAW = 最大突出量、JAW_Y = 突出の中心高さ */
+const JAW = .38, JAW_Y = 1.42;
+/** 稜線の先端を JAW の分だけ後ろへ置く（顎の先が車体端に来て全長は変わらない） */
+const TIP_Z = .32;
+const jawDz = (px: number, py: number, u: number) => -JAW * Math.exp(-((px / .8) ** 2) - ((py - JAW_Y) / .55) ** 2) * u ** 4;
+/** 先頭部の前後位置（車体端 = -hz からの絶対 z）。顎の押し出しなし */
+const noseZ = (hz: number, u: number) => -hz + TIP_Z + (NOSE_LEN - TIP_Z) * (1 - u);
+
 /** open = 乗降口を開けた状態 */
 export function paintLimitedSide(Lb: number, head: boolean, open = false): SheetMaps {
   const s = sideSheet(Lb, YTOP_L), hz = Lb / 2;
@@ -32,7 +40,14 @@ export function paintLimitedSide(Lb: number, head: boolean, open = false): Sheet
   s.rect(-hz - 1, hz + 1, Y0, 1.16, '#151a4a', .35, .4); // 裾
   const door = (zc: number) => {
     s.rect(zc - .42, zc + .42, 1.2, 3.1, '#151a46', .3, .5, .08);
-    if (open) { s.glass(zc - .39, zc + .39, 1.23, 3.07, '', .02, ['#4a463e', '#23262b']); return; }
+    if (open) {
+      s.glass(zc - .39, zc + .39, 1.23, 3.07, '', .02, ['#4a463e', '#23262b']);
+      // 夜の発光: 上が明るく床へ向かって暗い車内。床と左右の縁は光らない
+      s.emit(zc - .39, zc + .39, 1.23, 3.07, s.emitGrad(1.35, 3.07, '#ffffff', '#6a5e48'));
+      s.emit(zc - .39, zc + .39, 1.23, 1.35, '#000');
+      for (const sg of [-1, 1]) s.emit(zc + sg * .37 - .02, zc + sg * .37 + .02, 1.23, 3.07, '#000');
+      return;
+    }
     s.rect(zc - .39, zc + .39, 1.23, 3.07, BLUE_CSS, .2, .55, .07);
     s.oval(zc, 2.55, .09, .38, '#151a3e');
   };
@@ -87,14 +102,16 @@ function resample(half: V2[], n: number): V2[] {
 
 /** 先頭部の外形上の点（u = 前後、x/y = 車体断面上の点） */
 function nosePoint(hz: number, u: number, x: number, y: number): THREE.Vector3 {
-  const v = (y - Y0) / (YTOP_L - Y0);
-  return new THREE.Vector3(x * noseW(u), noseBot(u) + v * (noseTop(u) - noseBot(u)), -hz + NOSE_LEN * (1 - u));
+  const v = (y - Y0) / (YTOP_L - Y0), px = x * noseW(u), py = noseBot(u) + v * (noseTop(u) - noseBot(u));
+  return new THREE.Vector3(px, py, noseZ(hz, u) + jawDz(px, py, u));
 }
+
+function smooth(t: number) { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 * t); }
 
 function buildNose(b: GeoBatch, lit: GeoBatch, tl: GeoBatch, glows: THREE.Vector3[], hz: number) {
   const add = adder(b);
   // 外板: 車体断面を前方へ絞りながら押し出したロフト（滑らかな法線）
-  const sec = resample(HALF, 180), NU = 96;
+  const sec = resample(HALF, 150), NU = 80;
   const pos: number[] = [], idx: number[] = [], par: [number, number, number][] = [];
   for (let j = 0; j <= NU; j++) {
     const u = 1 - (1 - j / NU) ** 1.6; // 先端ほど細かく
@@ -111,7 +128,7 @@ function buildNose(b: GeoBatch, lit: GeoBatch, tl: GeoBatch, glows: THREE.Vector
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setIndex(idx); g.computeVertexNormals();
-  // 頂点ごとに色を決める（境界は約 3cm でぼかす）: 塗装 / 前面窓（黒）/ 銀帯 / 裾
+  // 頂点ごとに色を決める（境界は約 3cm でぼかす）: 塗装 / 前面窓（黒）/ 銀の曲線帯 / 裾
   const sm = (e0: number, e1: number, x: number) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
   const band = (x: number, lo: number, hi: number, w = .03) => sm(lo - w, lo + w, x) * (1 - sm(hi - w, hi + w, x));
   const cBody = new THREE.Color(BLUE_L), cGlass = new THREE.Color(0x07080f), cSilver = new THREE.Color(SILVER), cSkirt = new THREE.Color(0x151a46);
@@ -120,10 +137,10 @@ function buildNose(b: GeoBatch, lit: GeoBatch, tl: GeoBatch, glows: THREE.Vector
   for (let k = 0; k < P3.count; k++) {
     const [u, , v] = par[k], x = P3.getX(k), y = P3.getY(k);
     tmp.copy(cBody);
-    // 前面窓: 先端寄りだけ（角を少し回り込む）。高さは車体の上下に比例。上縁に銀の縁取り。側面の「頬」に小さな縦長の楕円窓
-    const win = band(v, .46, .79, .02) * band(u, .62, .985, .015) * (1 - band(x, -.035, .035, .015) * .85);
+    // 前面窓: 先端寄りだけ（角を少し回り込む）。高さは車体の上下に比例。上縁と後ろ縁は銀の曲線帯（別ジオメトリ）で縁取る
+    const win = band(v, .46, .79, .02) * band(u, .64, .985, .015) * (1 - band(x, -.035, .035, .015) * .85);
     tmp.lerp(cGlass, win);
-    tmp.lerp(cSilver, band(v, .79, .84, .012) * band(u, .6, .99, .02) * .9);
+    // 側面の「頬」に小さな縦長の楕円窓
     const side = sm(.82, .95, Math.abs(x) / (HW_L * noseW(Math.min(u, .999))));
     const eu = (u - .52) / .055, ev = (v - .6) / .2;
     tmp.lerp(cGlass, side * (1 - sm(.85, 1, Math.hypot(eu, ev))));
@@ -142,6 +159,16 @@ function buildNose(b: GeoBatch, lit: GeoBatch, tl: GeoBatch, glows: THREE.Vector
     let best = sec[0], bd = Infinity;
     for (const q of sec) if (q[0] * sx > 0 && Math.abs(q[1] - y) < bd && q[1] > Y0 + .05) { bd = Math.abs(q[1] - y); best = q; }
     return best;
+  };
+  // 断面の外周上で高さ y の点を、折れ線の線形補間で連続的に求める（帯の縁がギザギザにならないように）
+  const secAt = (sx: number, y: number): V2 => {
+    for (let i = 0; i < sec.length - 1; i++) {
+      const a = sec[i], c = sec[i + 1];
+      if (a[0] * sx < 0 || c[0] * sx < 0 || a[1] === c[1] || (y - a[1]) * (y - c[1]) > 0) continue;
+      const f = (y - a[1]) / (c[1] - a[1]);
+      return [a[0] + (c[0] - a[0]) * f, y];
+    }
+    return edge(sx, y);
   };
   const surf = (u: number, sx: number, y: number) => { const [ex, ey] = edge(sx, y); return nosePoint(hz, u, ex, ey); };
   const lamp = (u: number, sx: number, y: number, kind: 'h' | 't') => {
@@ -177,12 +204,51 @@ function buildNose(b: GeoBatch, lit: GeoBatch, tl: GeoBatch, glows: THREE.Vector
     pod(.4, sx, 3.0, .12); pod(.43, sx, 2.45, .12); pod(.47, sx, 1.75, .12);
     lamp(.86, sx, 1.95, 'h'); lamp(.76, sx, 1.95, 't');
   }
-  // 排障器（スカート）: 先頭部の平面形に沿った板（上から見た輪郭を押し出し）
+  // 銀の曲線帯: 前面窓の上縁に沿って先端から後ろへ流れ、窓の後ろ縁で側面へ回り込んで斜め下へ（頬の高さで細くなって消える）
+  const silver = new THREE.Color(0xcdd2dc);
+  const path = new THREE.CatmullRomCurve3([[.995, .815], [.93, .815], [.84, .815], [.75, .813], [.7, .79], [.66, .72], [.63, .6], [.6, .45], [.55, .28], [.48, .17], [.38, .135], [.27, .12]].map(([u, v]) => new THREE.Vector3(u, v, 0))).getPoints(72);
+  const rp: number[] = [], rn: number[] = [], rc: number[] = [];
+  for (const sx of [-1, 1]) {
+    const pts = path.map(q => { const [ex, ey] = secAt(sx, Y0 + q.y * (YTOP_L - Y0)), p = nosePoint(hz, Math.min(q.x, .999), ex, ey); return { p, ex, ey, u: q.x }; });
+    const rows: THREE.Vector3[][] = [], nrms: THREE.Vector3[] = [];
+    pts.forEach((c, i) => {
+      const a = pts[Math.max(0, i - 1)].p, d = pts[Math.min(pts.length - 1, i + 1)].p, t = d.clone().sub(a).normalize();
+      const dv = nosePoint(hz, Math.min(c.u, .999), c.ex, c.ey + .08).sub(c.p), du = nosePoint(hz, Math.min(c.u + .01, .999), c.ex, c.ey).sub(c.p);
+      let n = du.clone().cross(dv).normalize();
+      const mid = new THREE.Vector3(0, (noseBot(c.u) + noseTop(c.u)) / 2, c.p.z);
+      if (n.dot(c.p.clone().sub(mid)) < 0) n.negate();
+      const side = n.clone().cross(t).normalize();
+      const f = i / (pts.length - 1), w = .07 * (1 - smooth((f - .6) / .4));
+      const base = c.p.clone().addScaledVector(n, .01);
+      rows.push([base.clone().addScaledVector(side, -w), base.clone().addScaledVector(side, w)]); nrms.push(n);
+    });
+    for (let i = 0; i < rows.length - 1; i++) {
+      const [a0, b0] = rows[i], [a1, b1] = rows[i + 1];
+      for (const [p, n] of [[a0, nrms[i]], [b0, nrms[i]], [a1, nrms[i + 1]], [b0, nrms[i]], [b1, nrms[i + 1]], [a1, nrms[i + 1]]] as [THREE.Vector3, THREE.Vector3][]) {
+        rp.push(p.x, p.y, p.z); rn.push(n.x, n.y, n.z); rc.push(silver.r, silver.g, silver.b);
+      }
+    }
+  }
+  b.addColored('paint', rp, rn, rc);
+  // 排障器（スカート）: 先頭部の平面形に沿った板（上から見た輪郭を押し出し）。前端は顎の下に潜る
+  const SK_Y = .8, SK_U = .955;
+  const skirtP = (u: number, sx: number): [number, number] => { const x = sx * HW_L * noseW(u) * .82; return [x, noseZ(hz, u) + jawDz(x, SK_Y, u)]; };
   const outline: THREE.Vector2[] = [];
-  for (let k = 0; k <= 16; k++) { const u = .86 * k / 16; outline.push(new THREE.Vector2(HW_L * noseW(u) * .82, hz - NOSE_LEN * (1 - u))); }
-  for (let k = 16; k >= 0; k--) { const u = .86 * k / 16; outline.push(new THREE.Vector2(-HW_L * noseW(u) * .82, hz - NOSE_LEN * (1 - u))); }
-  const skirt = new THREE.ExtrudeGeometry(new THREE.Shape(outline), { depth: .6, bevelEnabled: false }).rotateX(-Math.PI / 2).translate(0, .45, 0);
+  for (let k = 0; k <= 18; k++) { const [x, z] = skirtP(SK_U * k / 18, 1); outline.push(new THREE.Vector2(x, -z)); }
+  for (let k = 18; k >= 0; k--) { const [x, z] = skirtP(SK_U * k / 18, -1); outline.push(new THREE.Vector2(x, -z)); }
+  const skirt = new THREE.ExtrudeGeometry(new THREE.Shape(outline), { depth: .72, bevelEnabled: false }).rotateX(-Math.PI / 2).translate(0, .5, 0);
   b.add('paint', basePart(skirt), new THREE.Matrix4(), 0x1f2330);
+  // スカートの丸いボルト頭: 外周に沿って一列（側面と前端）
+  const bolt = (x: number, z: number, nx: number, nz: number, y: number) => {
+    const n = new THREE.Vector3(nx, 0, nz).normalize();
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), n);
+    b.add('paint', P.cyl, new THREE.Matrix4().compose(new THREE.Vector3(x, y, z).addScaledVector(n, .006), q, new THREE.Vector3(.11, .035, .11)), 0x9aa2b6);
+  };
+  for (const sx of [-1, 1]) for (const u of [.08, .22, .36, .5, .64, .76, .86, .93]) {
+    const [x, z] = skirtP(u, sx), [x2, z2] = skirtP(u + .01, sx);
+    bolt(x, z, -(z2 - z) * sx, (x2 - x) * sx, SK_Y);
+  }
+  for (const bx of [-.24, 0, .24]) { const [, z] = skirtP(SK_U, 1); bolt(bx, z, 0, -1, SK_Y); }
   // ワイパー
   for (const sx of [-1, 1]) {
     const p = surf(.62, sx, 2.6);

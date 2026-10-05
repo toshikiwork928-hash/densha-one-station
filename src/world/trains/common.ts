@@ -72,6 +72,15 @@ export class Sheet {
     const draw = this.rect(u0, u1, y0, y1, gg as unknown as string, .06, .2, rad);
     this.e.fillStyle = '#fff'; draw(this.e);
   }
+  /** 発光マスクだけを矩形で塗り直す（色は変えない）。fill は CSS 色または emitGrad の戻り値 */
+  emit(u0: number, u1: number, y0: number, y1: number, fill: string | CanvasGradient) {
+    const x0 = Math.min(this.X(u0), this.X(u1)), x1 = Math.max(this.X(u0), this.X(u1));
+    this.e.fillStyle = fill; this.e.fillRect(x0, this.Y(y1), x1 - x0, this.Y(y0) - this.Y(y1));
+  }
+  /** 発光マスク用の縦グラデーション（y1 側 = 上端の色） */
+  emitGrad(y0: number, y1: number, top: string, bottom: string): CanvasGradient {
+    const g = this.e.createLinearGradient(0, this.Y(y1), 0, this.Y(y0)); g.addColorStop(0, top); g.addColorStop(1, bottom); return g;
+  }
   /** 楕円窓 */
   oval(u: number, y: number, ru: number, ry: number, frame: string) {
     const ell = (g: CanvasRenderingContext2D, k: number) => {

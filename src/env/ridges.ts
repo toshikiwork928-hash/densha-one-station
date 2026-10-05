@@ -19,9 +19,9 @@ function makeNoise(seed: number) {
 /** 層ごとの形（base: 麓の高さ, amp: 起伏, f: 基本周波数[周/円周], ridged: 尖り具合 0..1） */
 const LAYERS = [
   { base: .045, amp: .200, f: 3, ridged: .30, seed: 11 },
-  { base: .030, amp: .150, f: 4, ridged: .22, seed: 23 },
-  { base: .016, amp: .105, f: 6, ridged: .15, seed: 37 },
-  { base: .006, amp: .060, f: 9, ridged: .05, seed: 51 },
+  { base: .030, amp: .150, f: 4, ridged: .24, seed: 23 },
+  { base: .017, amp: .115, f: 6, ridged: .20, seed: 37 },
+  { base: .009, amp: .085, f: 9, ridged: .16, seed: 51 },
 ];
 
 export function createRidgeTexture(): THREE.DataTexture {

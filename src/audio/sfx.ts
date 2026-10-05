@@ -13,7 +13,7 @@ import { createStation, type StationSfx } from './station';
 import { createAlarms, type Alarms } from './alarms';
 import { createAmbience, type Ambience } from './ambience';
 import { createAnnouncer } from './announce';
-import { approachText, arriveText, departText, spoken } from './announce-text';
+import { approachText, arriveText, departText } from './announce-text';
 import { createSettings, renderSettingsUi, type SettingsStore } from './settings';
 
 interface Parts {
@@ -40,7 +40,6 @@ export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
   function applySettings() {
     const s = settings.value;
     announcer.setVolume(s.muted ? 0 : s.master * s.voice);
-    announcer.setGender(s.gender);
     if (!p) return;
     const now = p.core.now();
     p.core.master.gain.setTargetAtTime(s.muted ? 0 : s.master, now, .03);
@@ -150,10 +149,7 @@ export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
     // 車外視点: 車体越しのこもりを外す
     p.core.runTone.frequency.setTargetAtTime(e.mode === 'cab' ? 9000 : 18000, p.core.now(), .1);
   });
-  events.on('titleRender', e => renderSettingsUi(e.container, settings, {
-    describe: () => announcer.describe(),
-    preview: () => announcer.preview(`ご乗車ありがとうございます。この電車は、${spoken(ctx.route.stations[ctx.route.stations.length - 1])}行きです。`),
-  }));
+  events.on('titleRender', e => renderSettingsUi(e.container, settings));
 
   events.on('frame', e => {
     if (!p) return;
