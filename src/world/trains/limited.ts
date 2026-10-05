@@ -14,14 +14,14 @@ const BLUE_CSS = '#2a318c';
 const SILVER = 0xe2e6ec;
 
 /** 流線形の先頭部の長さ [m]（車体端から） */
-const NOSE_LEN = 4.3;
+const NOSE_LEN = 3.8;
 /** 先端の高さ（上下の稜線が集まる点）[m] */
-const TIP_Y = 1.85;
+const TIP_Y = 1.7;
 
 /** 先頭部の断面形状（u = 0: 車体との境 → 1: 先端）。上 = 屋根の稜線、下 = 裾、w = 半幅 */
-const noseTop = (u: number) => TIP_Y + (YTOP_L - TIP_Y) * Math.pow(Math.max(0, 1 - u ** 2.1), .62);
+const noseTop = (u: number) => TIP_Y + (YTOP_L - TIP_Y) * Math.pow(Math.max(0, 1 - u ** 2.8), .55); // 丸い額（ずんぐりした横顔）
 const noseBot = (u: number) => TIP_Y - (TIP_Y - Y0) * Math.pow(Math.max(0, 1 - u ** 3), .5);
-const noseW = (u: number) => Math.pow(Math.max(0, 1 - u ** 3.4), .5);
+const noseW = (u: number) => Math.pow(Math.max(0, 1 - u ** 3.0), .5);
 
 /** open = 乗降口を開けた状態 */
 export function paintLimitedSide(Lb: number, head: boolean, open = false): SheetMaps {
@@ -120,10 +120,14 @@ function buildNose(b: GeoBatch, lit: GeoBatch, tl: GeoBatch, glows: THREE.Vector
   for (let k = 0; k < P3.count; k++) {
     const [u, , v] = par[k], x = P3.getX(k), y = P3.getY(k);
     tmp.copy(cBody);
-    // 前面窓: 高さ一定の帯が先頭部の曲面を回り込む。中央に細い仕切り
-    const w = band(y, 2.18, 3.02 - .14 * u) * band(u, .3, .93, .02) * (1 - band(x, -.035, .035, .015) * .85);
-    tmp.lerp(cGlass, w);
-    tmp.lerp(cSilver, band(x, -.045, .045, .012) * sm(2.95, 3.0, y) * (1 - sm(.83, .87, u)));
+    // 前面窓: 先端寄りだけ（角を少し回り込む）。高さは車体の上下に比例。上縁に銀の縁取り。側面の「頬」に小さな縦長の楕円窓
+    const win = band(v, .46, .79, .02) * band(u, .62, .985, .015) * (1 - band(x, -.035, .035, .015) * .85);
+    tmp.lerp(cGlass, win);
+    tmp.lerp(cSilver, band(v, .79, .84, .012) * band(u, .6, .99, .02) * .9);
+    const side = sm(.82, .95, Math.abs(x) / (HW_L * noseW(Math.min(u, .999))));
+    const eu = (u - .52) / .055, ev = (v - .6) / .2;
+    tmp.lerp(cGlass, side * (1 - sm(.85, 1, Math.hypot(eu, ev))));
+    tmp.lerp(cSilver, band(x, -.045, .045, .012) * sm(2.95, 3.0, y) * (1 - sm(.83, .87, u)) * .6);
     tmp.lerp(cSkirt, 1 - sm(.08, .12, v));
     col[k * 3] = tmp.r; col[k * 3 + 1] = tmp.g; col[k * 3 + 2] = tmp.b;
   }
@@ -153,7 +157,26 @@ function buildNose(b: GeoBatch, lit: GeoBatch, tl: GeoBatch, glows: THREE.Vector
     (kind === 'h' ? lit : tl).add('l', P.cyl, m(.16, .22, .02), 0xffffff);
     if (kind === 'h') glows.push(p.clone().addScaledVector(nrm, .35));
   };
-  for (const sx of [-1, 1]) { lamp(.84, sx, 1.95, 'h'); lamp(.76, sx, 1.95, 't'); }
+  // 側面の通風スリット（外板に沿った細い黒い溝）と、前端の稜線に沿って縦に並ぶ丸いポッド
+  const slit = (u: number, sx: number, y: number, len: number) => {
+    const p = surf(u, sx, y), du = surf(u + .01, sx, y).sub(p).normalize(), dv = surf(u, sx, y + .08).sub(p);
+    const nrm = du.clone().cross(dv).normalize(); if (nrm.z > 0) nrm.negate();
+    const bt = du.clone().cross(nrm).normalize(), tg = nrm.clone().cross(bt).normalize();
+    const m = new THREE.Matrix4().makeBasis(tg, nrm, bt).scale(new THREE.Vector3(len, .03, .07)).setPosition(p.addScaledVector(nrm, .005));
+    b.add('paint', P.box, m, 0x07091a);
+  };
+  const pod = (u: number, sx: number, y: number, r: number) => {
+    const p = surf(u, sx, y), du = surf(u + .01, sx, y).sub(p), dv = surf(u, sx, y + .08).sub(p);
+    const nrm = du.clone().cross(dv).normalize(); if (nrm.z > 0) nrm.negate();
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), nrm);
+    b.add('paint', P.sphere, new THREE.Matrix4().compose(p.clone().addScaledVector(nrm, .01), q, new THREE.Vector3(r, r * .6, r)), 0x2a3070);
+    b.add('paint', P.cyl, new THREE.Matrix4().compose(p.clone().addScaledVector(nrm, r * .3), q, new THREE.Vector3(r * .72, .02, r * .72)), 0x0a0c14);
+  };
+  for (const sx of [-1, 1]) {
+    for (const [y, l] of [[3.0, .55], [2.45, .6], [1.95, .55]] as const) slit(.25, sx, y, l);
+    pod(.4, sx, 3.0, .12); pod(.43, sx, 2.45, .12); pod(.47, sx, 1.75, .12);
+    lamp(.86, sx, 1.95, 'h'); lamp(.76, sx, 1.95, 't');
+  }
   // 排障器（スカート）: 先頭部の平面形に沿った板（上から見た輪郭を押し出し）
   const outline: THREE.Vector2[] = [];
   for (let k = 0; k <= 16; k++) { const u = .86 * k / 16; outline.push(new THREE.Vector2(HW_L * noseW(u) * .82, hz - NOSE_LEN * (1 - u))); }

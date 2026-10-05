@@ -21,18 +21,18 @@ const BLUE = '#2f3fa8', ORANGE = '#f0961c';
 interface Look {
   r: number; base: [string, string]; roof: string; rough: number; metal: number;
   topBand: V2; topLine: V2; lowBand: V2; lowLine: V2; frontBand: V2; frontLine: V2;
-  win: V2; door: string;
+  win: V2; door: string; roofY: number;
 }
 const LOOK: Record<CommuterVariant, Look> = {
   new: {
     r: .24, base: ['#d3d7dc', '#b4bac1'], roof: '#a7acb2', rough: .38, metal: .75,
-    topBand: [3.27, 3.4], topLine: [3.2, 3.24], lowBand: [1.87, 1.94], lowLine: [1.81, 1.85],
-    frontBand: [1.58, 2.0], frontLine: [1.48, 1.55], win: [2.12, 3.02], door: '#c4c9cf',
+    topBand: [3.34, 3.48], topLine: [3.24, 3.33], lowBand: [1.66, 1.77], lowLine: [1.54, 1.64],
+    frontBand: [1.58, 2.0], frontLine: [1.48, 1.55], win: [2.1, 3.04], door: '#c4c9cf', roofY: 3.55, // 窓は戸間に1枚（2枚引き違い）の約1.9m幅
   },
   old: {
-    r: .3, base: ['#cfd2d7', '#bfc3c9'], roof: '#9fa4aa', rough: .42, metal: .12,
-    topBand: [3.22, 3.42], topLine: [3.13, 3.18], lowBand: [1.6, 1.67], lowLine: [1.53, 1.57],
-    frontBand: [1.6, 2.02], frontLine: [1.49, 1.56], win: [2.0, 2.88], door: '#c9ccd1', // ドアは車体と同系色の塗装
+    r: .3, base: ['#c6cbd6', '#b3b9c6'], roof: '#9fa4aa', rough: .42, metal: .12,
+    topBand: [3.4, 3.65], topLine: [3.26, 3.37], lowBand: [1.44, 1.53], lowLine: [1.34, 1.43],
+    frontBand: [1.6, 2.02], frontLine: [1.49, 1.56], win: [1.98, 2.84], door: '#c9ccd1', roofY: 3.7, // ドアは車体と同系色の塗装。上の帯は太い青＋細い橙
   },
 };
 
@@ -42,7 +42,7 @@ export function paintCommuterSide(v: CommuterVariant, Lb: number, head: boolean,
   const L = LOOK[v], s = sideSheet(Lb, YTOP), hz = Lb / 2;
   const grd = s.c.createLinearGradient(0, 0, 0, s.H); grd.addColorStop(0, L.base[0]); grd.addColorStop(1, L.base[1]);
   s.base(grd, L.rough, L.metal);
-  s.rect(-hz - 1, hz + 1, 3.55, YTOP + .1, L.roof, .6, L.metal * .6);
+  s.rect(-hz - 1, hz + 1, L.roofY, YTOP + .1, L.roof, .6, L.metal * .6);
   const band = (b: V2, col: string, z0 = -hz - 1) => s.rect(z0, hz + 1, b[0], b[1], col, .35, .1);
   const crewZ = -hz + .75;
   if (head) {
@@ -67,17 +67,17 @@ export function paintCommuterSide(v: CommuterVariant, Lb: number, head: boolean,
     s.rect(zc - w / 2, zc + w / 2, 1.16, 3.05, L.door, v === 'old' ? L.rough : .4, v === 'old' ? L.metal : .7);
     if (dbl) {
       s.rect(zc - .012, zc + .012, 1.16, 3.05, '#5e646b');
-      for (const sg of [-1, 1]) s.glass(zc + sg * w / 4 - .17, zc + sg * w / 4 + .17, 2.08, 2.92, '#5a6067', .03);
+      for (const sg of [-1, 1]) s.glass(zc + sg * w / 4 - .22, zc + sg * w / 4 + .22, v === 'new' ? 2.04 : 2.0, 2.93, '#5a6067', .06);
     } else s.glass(zc - .2, zc + .2, 2.12, 2.92, '#5a6067', .03);
   };
   for (const d of DOORS) door(d, DOOR_W, true);
   // 側窓
   for (let i = 0; i < DOORS.length - 1; i++) {
     const zc = (DOORS[i] + DOORS[i + 1]) / 2;
-    if (v === 'new') s.glass(zc - 1.35, zc + 1.35, w0, w1, '#4a5056', .04);
-    else for (const dz of [-1.12, 0, 1.12]) s.glass(zc + dz - .43, zc + dz + .43, w0, w1, '#565c63', .03); // 850mm角の1段下降窓
+    if (v === 'new') for (const sg of [-1, 1]) s.glass(zc + sg * .5 - .45, zc + sg * .5 + .45, w0, w1, '#4a5056', .1); // 幅1.9mの2枚引き違い大窓（実車は1枚に見える）
+    else for (const dz of [-.49, .49]) s.glass(zc + dz - .42, zc + dz + .42, w0, w1, '#565c63', .07); // 850mm角の1段下降窓を2枚ずつ
   }
-  if (v === 'new') s.glass(DOORS[3] + DOOR_W / 2 + .35, hz - .4, w0, w1, '#565c63', .05);
+  if (v === 'new') s.glass(DOORS[3] + DOOR_W / 2 + .35, hz - .4, w0, w1, '#565c63', .1);
   else s.glass((DOORS[3] + DOOR_W / 2 + hz) / 2 - .43, (DOORS[3] + DOOR_W / 2 + hz) / 2 + .43, w0, w1, '#565c63', .03);
   if (head) {
     door(crewZ, .6, false);
@@ -201,17 +201,20 @@ export function buildCommuterCar(v: CommuterVariant, kind: CarKind, Lb: number):
   if (v === 'new') {
     // セミ集中式の冷房装置（2基）と独立した車外スピーカー
     for (const z of [-4.2, 4.2]) {
-      add(0, roofTop + .13, z, 1.9, .26, 4.0, 0xb5bac0);
-      add(0, roofTop + .27, z, 1.5, .03, 3.4, 0x9fa5ab);
-      for (const dz of [-1.2, 0, 1.2]) add(0, roofTop + .29, z + dz, 1.1, .02, .6, 0x6a7076);
+      add(0, roofTop + .12, z, 1.8, .24, 2.7, 0xb5bac0);
+      add(0, roofTop + .25, z, 1.4, .03, 2.2, 0x9fa5ab);
+      for (const dz of [-.7, 0, .7]) add(0, roofTop + .27, z + dz, 1.0, .02, .4, 0x6a7076);
     }
     add(0, roofTop + .08, 0, .5, .16, .9, 0x9da2a8);
     add(0, roofTop + .03, 0, .5, .06, Lb - 2, 0x868b91);
   } else {
     // 分散冷房（箱形・両側にルーバー）
-    for (const z of [-6, -2, 2, 6]) {
-      add(0, roofTop + .16, z, 1.5, .36, 1.7, 0xc0c4c9);
-      for (const dz of [-.42, .42]) for (const sx of [-1, 1]) add(sx * .76, roofTop + .17, z + dz, .02, .2, .5, 0x3a3f45);
+    // 低い箱形クーラーを約2.4m間隔で並べる（実車は1両8基ほど）
+    for (const z of [-8.4, -6, -3.6, -1.2, 1.2, 3.6, 6, 8.4]) {
+      if (kind === 'pan' && Math.abs(z - (-hz + 4.0)) < 1.6) continue;
+      if (head && z < -8) continue;
+      add(0, roofTop + .15, z, 1.3, .32, 1.3, 0xc0c4c9);
+      for (const sx of [-1, 1]) add(sx * .66, roofTop + .16, z, .02, .18, .9, 0x3a3f45);
     }
     for (const sx of [-.85, .85]) add(sx, roofTop - .05, 0, .06, .06, Lb - 1, 0x8a8f95); // 配管
     for (const z of [-8.2, -4, 0, 4, 8.2]) add(0, roofTop + .06, z, .3, .1, .3, 0x8a8f95); // 通風器
