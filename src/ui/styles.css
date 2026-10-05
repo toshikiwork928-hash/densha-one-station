@@ -181,7 +181,7 @@ table.keys td:first-child { white-space: nowrap; width: 1%; padding-right: 12px;
 #dash > .panel:last-child { grid-area: notch; }
 @media (pointer: coarse) { #dash { justify-content: start; } #distPanel { justify-self: start; } }
 @media (max-width: 640px) {
-  #meter { width: 140px; height: 140px; }
+  #meter { width: 160px; height: 160px; }
   #dash { padding-right: 0; }
 }
 @media (max-width: 640px) and (pointer: coarse) { #dash { padding-right: 88px; } }
@@ -199,7 +199,7 @@ table.keys td:first-child { white-space: nowrap; width: 1%; padding-right: 12px;
   #dash { justify-content: end; grid-template-areas: "dist dist" "meter notch"; }
   #distPanel { justify-self: end; min-width: 0; }
   #dist { font-size: 20px; }
-  #meter { width: 120px; height: 120px; }
+  #meter { width: 140px; height: 140px; }
   #notches { gap: 0; }
   #notches div { padding: 0 6px; font-size: 9px; line-height: 1.15; }
   .limitSign { width: 42px; height: 42px; font-size: 17px; border-width: 4px; }
