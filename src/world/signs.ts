@@ -4,6 +4,9 @@ import type { GameContext } from '../core/context';
 import type { Sign } from '../route/types';
 import { limitTex, postMat, textBoard } from './canvas-tex';
 import { cullByDistance } from './cull';
+import { trackLines } from '../route/service';
+import { loopTracks } from './track-mesh';
+import { coastalThirdTrack } from './coastal-stations';
 
 export function addSign(ctx: GameContext, tex: THREE.Texture, s: number, lat: number, w: number, h: number, y: number, yaw = 0, parent: THREE.Object3D = ctx.scene): THREE.Group {
   const t = ctx.track.trackAt(s), grp = new THREE.Group();
@@ -49,10 +52,20 @@ function define(sg: Sign, lat0: number, parent: THREE.Object3D): Def {
  *  外側（走行線から離れる向き）へ横にずらす。標識の向きは走行線の接線に直角（待避線の S字区間でも正対する） */
 function place(ctx: GameContext, defs: Def[], base: (d: Def) => number): void {
   const placed: { s: number; lat: number; w: number }[] = [];
+  const rails = trackLines(ctx.route), loops = loopTracks(ctx);
+  const thirds = ctx.route.stations.flatMap(st => { const t = coastalThirdTrack(ctx.route, st); return t ? [t] : []; });
   for (const d of [...defs].sort((a, b) => a.pri - b.pri || a.s - b.s)) {
     const dir = d.lat >= base(d) ? 1 : -1;
     let lat = d.lat;
-    for (let k = 0; k < 8; k++) {
+    for (let k = 0; k < 32; k++) {
+      // 板幅を含む離隔を全線で確認。分岐部で隣の待避線へ押し込まない。
+      const centers = [
+        ...rails.filter(l => d.s >= l.from && d.s <= l.to).map(l => l.lat(d.s)),
+        ...loops.filter(l => d.s >= l.z.inFrom && d.s <= l.z.outTo).map(l => l.lat(d.s)),
+        ...thirds.filter(l => d.s >= l.from && d.s <= l.to).map(l => l.lat(d.s)),
+      ];
+      const rail = centers.find(c => Math.abs(c - lat) < 2.05 + d.w / 2 - 1e-7);
+      if (rail !== undefined) { lat = rail + dir * (2.05 + d.w / 2); continue; }
       const hit = placed.find(p => Math.abs(p.s - d.s) < NEAR_S && Math.abs(p.lat - lat) < (p.w + d.w) / 2 + GAP);
       if (!hit) break;
       lat = hit.lat + dir * ((hit.w + d.w) / 2 + GAP);

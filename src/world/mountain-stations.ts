@@ -107,7 +107,8 @@ function passingStation(ctx: GameContext, T: MountainTerrain, sta: Station, y: S
   const sc = (sta.platform.from + sta.platform.to) / 2, y0 = T.trackY(sc), sp = sta.island?.spread ?? 4.2;
   buildIsland(ctx, sta, prev, next, 0, islandWidth(sta), { stairs: false, roof: .4 });
   const P3 = new Put(ctx), side = y.side;
-  const bs = sta.platform.from + 16, bl = side * (sp + 3.4 + 4);
+  // 駅舎の庇（壁から1.6m）まで走行線から2m以上離す。
+  const bs = sta.platform.from + 16, bl = side * (sp + 3.4 + 4.5);
   smallBuilding(P3, bs, bl, T.trackY(bs) - .05, side, 8, 14);
   // 構内踏切（ホーム端のスロープ → 外側の線路を渡って駅舎へ）
   const xs = sta.platform.from - 2.5, yx = T.trackY(xs);
@@ -174,9 +175,13 @@ function terminalStation(ctx: GameContext, T: MountainTerrain, sta: Station, y: 
   const P3 = new Put(ctx), y0 = T.trackY(sEnd), side = y.side;
   // 頭端の通路（ホーム端 → 駅舎）
   const ca = platEnd, cb = sEnd + dir * 4, cm = (ca + cb) / 2;
-  P3.box(cm, 0, y0 + .55, 15, 1.1, Math.abs(cb - ca) + .5, CONC);
-  P3.box(cm, 0, y0 + 4.4, 15, .2, Math.abs(cb - ca) + .5, 0x6b7680); // 上屋
-  for (const l of [-7, 7]) P3.box(cm, l, y0 + 2.75, .25, 3.3, .25, 0x8a9096);
+  // 車止めまでは島式ホーム幅。頭端通路を線路の上へ張り出させない。
+  P3.box(cm, 0, y0 + .55, pw, 1.1, Math.abs(cb - ca) + .5, CONC);
+  const front = sEnd + dir * .5;
+  P3.box((front + cb) / 2, 0, y0 + .55, 15, 1.1, Math.abs(cb - front), CONC);
+  // 両線路を覆う上屋は、跨線橋と同じく架線より上（下面8.2m）へ。
+  P3.box(cm, 0, y0 + 8.3, 15, .2, Math.abs(cb - ca) + .5, 0x6b7680);
+  for (const l of [-7, 7]) P3.box(cm, l, y0 + 4.55, .25, 6.9, .25, 0x8a9096);
   // 駅舎（線路の先、横長の 2 階建て。屋根は入母屋風、朱の柱）
   const bs = sEnd + dir * 13, BW = 34, BD = 16;
   P3.box(bs, 0, y0 + .3, BW + 1, .6, BD + 1, 0x9a968c);

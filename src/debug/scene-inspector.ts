@@ -13,17 +13,26 @@ export function attachSceneInspector(ctx: GameContext): () => void {
     ...(ctx.route.coastalLandmarks ?? []).map(l => ({ label: l.label ?? l.kind, s: l.s - 40 })),
   ];
   for (const [i, p] of points.entries()) { const o = document.createElement('option'); o.value = String(i); o.textContent = p.label; select.append(o); }
-  const move = () => {
-    ctx.state.state = 'title'; ctx.state.train.s = points[Number(select.value)].s; ctx.state.train.v = 0;
+  const position = document.createElement('input'); position.type = 'number'; position.step = '1';
+  position.setAttribute('aria-label', '確認位置メートル'); position.style.width = '90px';
+  const moveTo = (s: number) => {
+    if (!Number.isFinite(s)) return;
+    ctx.state.state = 'title'; ctx.state.train.s = Math.max(ctx.route.extent.from, Math.min(ctx.route.extent.to, s)); ctx.state.train.v = 0;
     ctx.state.train.notch = 0;
+    position.value = String(Math.round(ctx.state.train.s));
     ctx.events.emit('cameraMode', { mode: ctx.cameraMode });
   };
+  const move = () => moveTo(points[Number(select.value)].s);
   select.onchange = move;
+  const jump = document.createElement('button'); jump.textContent = '位置へ移動';
+  jump.onclick = () => moveTo(Number(position.value));
   const view = document.createElement('button'); view.textContent = '視点切替';
   view.onclick = () => ctx.actions.cycleCamera();
+  const cab = document.createElement('button'); cab.textContent = '運転台';
+  cab.onclick = () => { overview = false; wide.setAttribute('aria-pressed', 'false'); ctx.cameraMode = 'cab'; ctx.events.emit('cameraMode', { mode: 'cab' }); };
   const wide = document.createElement('button'); wide.textContent = '景観俯瞰';
   wide.onclick = () => { overview = !overview; wide.setAttribute('aria-pressed', String(overview)); };
-  panel.append('景観確認 ', select, view, wide); document.body.append(panel);
+  panel.append('景観確認 ', select, position, jump, cab, view, wide); document.body.append(panel);
   ctx.cameraMode = 'outside'; move();
   return () => {
     if (!overview) return;

@@ -79,6 +79,15 @@ Three.js で運転台視点の3D表現・簡易列車物理・スコアリング
 
 ## 実行方法
 
+開発時の検証:
+
+- `npm run verify:routes`: 両路線の往復運行、汐風線3種別、終着ATS・速度超過0を検証。
+- `npm run verify:scenery`: 樹冠LODの包含球と距離境界の反復切替を検証。
+- `npm run verify:clearance`: 両路線8ケースの構造物干渉を標本検査。数分かかる。`-- --route=shiokaze --service=local` で対象を絞れる。
+- `npm run dev` の `?inspect=1&route=shiokaze` / `shiokaze-up` / `mountain` / `mountain-up`: 駅・構造物選択、任意の距離入力、外部視点で点検。
+
+干渉検査は描画なしの近似。素材の木・ビルは代替形状、BatchedMeshは包囲箱、三角形は0.4m間隔で判定する。車止めは意図的に終端を塞ぐため除外。車両・地面・電線も対象外なので、架線との離隔や読み込んだ実素材は目視でも確認する。
+
 ```bash
 cd apps/densha-one-station
 npm install

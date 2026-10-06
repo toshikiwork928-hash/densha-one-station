@@ -68,8 +68,14 @@ export function buildStation(ctx: GameContext, sta: Station, prevName: string, n
   // 柵（ホーム裏側）
   const thirdLineSide = sta.layout === 'hamadera' && (opt.lat ?? 0) === (ctx.route.id.endsWith('-up') ? 4 : 0);
   if (!thirdLineSide) {
-    for (let z = -len / 2; z <= len / 2; z += 2.5) box(-6.55, 1.75, z, .06, 1.3, .06, 0x8a9096);
-    box(-6.55, 2.35, 0, .05, .06, len, 0x8a9096); box(-6.55, 1.8, 0, .02, .9, len, 0x9fb0a8);
+    const branchSide = ctx.route.coastalLandmarks?.find(q => q.kind === 'branch')?.side ?? -1;
+    const stairOpening = sta.layout === 'hagoromo' && Math.sign(X(-6.55)) === branchSide ? len * .2 + 9.6 : undefined;
+    for (let z = -len / 2; z <= len / 2; z += 2.5) if (stairOpening === undefined || Math.abs(z - stairOpening) > 1.2) box(-6.55, 1.75, z, .06, 1.3, .06, 0x8a9096);
+    const segments = stairOpening === undefined ? [[-len / 2, len / 2]] : [[-len / 2, stairOpening - 1.2], [stairOpening + 1.2, len / 2]];
+    for (const [from, to] of segments) {
+      box(-6.55, 2.35, (from + to) / 2, .05, .06, to - from, 0x8a9096);
+      box(-6.55, 1.8, (from + to) / 2, .02, .9, to - from, 0x9fb0a8);
+    }
   }
   // ベンチ・自販機・ごみ箱・時計
   for (let z = -rl / 2 + 8; z <= rl / 2 - 8; z += 16) {
@@ -203,7 +209,8 @@ export function buildIsland(ctx: GameContext, sta: Station, prevName: string, ne
     const z = (rnd() - .5) * len * .8, sx = rnd() < .5 ? -1 : 1;
     if (Math.abs(z) < 8) continue;
     b.parent = new THREE.Matrix4().makeTranslation(0, 1.1, 0);
-    person(b, rnd, sx * (1.2 + rnd() * 1.4), z, rnd() < .7 ? (sx > 0 ? -Math.PI / 2 : Math.PI / 2) : rnd() * 6);
+    // 人の腕・かばんまで黄色線の内側。狭いホームも幅に追従する。
+    person(b, rnd, sx * Math.min(1.0 + rnd(), Math.max(0, PW / 2 - 1)), z, rnd() < .7 ? (sx > 0 ? -Math.PI / 2 : Math.PI / 2) : rnd() * 6);
     b.parent = null;
   }
   b.build({ body: bodyMat }, grp);

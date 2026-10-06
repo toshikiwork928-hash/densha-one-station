@@ -1,10 +1,21 @@
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
-import type { Station } from '../route/types';
+import type { Route, Station } from '../route/types';
 import { GeoBatch, M, P, onLight } from './batch';
 import { canvasTex } from './canvas-tex';
 import { cullByDistance } from './cull';
 import { getTerrain } from './terrain';
+
+/** 海浜公園の描画専用第3線。床版・架線・建築限界検査も同じ中心線を使う。 */
+export function coastalThirdTrack(route: Route, sta: Station) {
+  if (sta.layout !== 'hamadera') return undefined;
+  const reverse = route.id.endsWith('-up'), main = reverse ? Math.max(...route.tracks) : Math.min(...route.tracks);
+  const outer = main + (reverse ? 9.2 : -9.2), from = sta.platform.from - 90, to = sta.platform.to + 90;
+  return { main, outer, from, to, lat: (s: number) => {
+    const t = Math.min(1, Math.max(0, Math.min((s - from) / 90, (to - s) / 90)));
+    return main + (outer - main) * t * t * (3 - 2 * t);
+  } };
+}
 
 /** 高架島式駅の地上改札・駅床・ホーム支持。寸法は実測ではなく構内形式の近似。 */
 export function buildElevatedConcourse(ctx: GameContext, sta: Station, centers: number[], outside: number): void {
@@ -87,15 +98,17 @@ export function buildCoastalSpecialStations(ctx: GameContext, sta: Station): voi
     const pierHeight = floor - 1.1 - ground;
     if (pierHeight > .2) for (let z = -deckLength / 2 + 9; z < deckLength / 2; z += 20) box(center, ground + pierHeight / 2, z, .8, pierHeight, 1, 0xb9bcb3);
     // 主線ホームから一段下の支線ホームへ、折返し階段と踊り場。
-    const mainCenter = side < 0 ? -4.1 : 8.1, stairCenter = (mainCenter + center) / 2;
+    const mainCenter = side < 0 ? -4.1 : 8.1;
+    // 階段は主線床版の外へ。上端の渡り廊下で主線ホームにつなぐ。
+    const stairX = side < 0 ? -8.5 : 12.5, stairCenter = (stairX + center) / 2;
     const z = len * .2;
-    box(stairCenter, floor + .08, z, Math.abs(mainCenter - center) + 2.4, .18, 3, 0xc7c9c2);
+    box(stairCenter, floor + .08, z, Math.abs(stairX - center) + 2.4, .18, 3, 0xc7c9c2);
     for (let i = 0; i < 24; i++) {
       const u = (i + .5) / 24, stepY = floor + 4 * u;
-      box(mainCenter, stepY - .1, z + 3 + i * .27, 2.2, .2, .28, 0xd1d0c9);
-      for (const dx of [-1.08, 1.08]) box(mainCenter + dx, stepY + .65, z + 3 + i * .27, .045, 1.3, .045, 0x9aa3a0);
+      box(stairX, stepY - .1, z + 3 + i * .27, 2.2, .2, .28, 0xd1d0c9);
+      for (const dx of [-1.08, 1.08]) box(stairX + dx, stepY + .65, z + 3 + i * .27, .045, 1.3, .045, 0x9aa3a0);
     }
-    box(mainCenter, 1.1, z + 9.6, 2.6, .2, 1.4, 0xc7c9c2);
+    box((mainCenter + stairX) / 2, 1.1, z + 9.6, Math.abs(mainCenter - stairX) + 2.6, .2, 1.4, 0xc7c9c2);
     const texture = canvasTex(768, 192, (g, w, h) => {
       g.fillStyle = '#1f5b57'; g.fillRect(0, 0, w, h); g.fillStyle = '#fff';
       g.font = 'bold 66px sans-serif'; g.textAlign = 'center'; g.fillText('3番線　羽根浜支線', w / 2, 80);
@@ -107,23 +120,20 @@ export function buildCoastalSpecialStations(ctx: GameContext, sta: Station): voi
     }
     onLight(ctx, f => material.emissiveIntensity = .05 + f * .65);
   } else {
-    const reverse = ctx.route.id === 'shiokaze-up', main = reverse ? 4 : 0, outer = reverse ? 13.2 : -9.2;
-    const endMargin = 90;
+    const third = coastalThirdTrack(ctx.route, sta)!;
+    const { main, outer, lat: position } = third;
     const point = (s: number, lat: number, y: number) => ctx.track.at(s, lat, y);
-    const position = (s: number) => {
-      const t = Math.min(1, Math.max(0, Math.min((s - (sta.platform.from - endMargin)) / endMargin, (sta.platform.to + endMargin - s) / endMargin)));
-      return main + (outer - main) * t * t * (3 - 2 * t);
-    };
     // 本線→外側線→本線。島式の外縁にレールを追加して2面3線を表す。
     const wb = new GeoBatch();
     const strip = (a: THREE.Vector3, z: THREE.Vector3, width: number, height: number, color: number) => {
       const d = z.clone().sub(a), p = a.clone().add(z).multiplyScalar(.5);
-      wb.add('body', P.box, M(p.x, p.y, p.z, Math.atan2(d.x, d.z), width, height, d.length() + .025), color);
+      // 勾配上も棒の長軸を両端に合わせる。水平な箱だとレール端が線路基準から浮く。
+      wb.add('body', P.box, M(p.x, p.y, p.z, Math.atan2(d.x, d.z), width, height, d.length() + .025, -Math.asin(d.y / d.length())), color);
     };
-    for (let s = sta.platform.from - endMargin; s < sta.platform.to + endMargin; s += 4) {
-      const z = Math.min(sta.platform.to + endMargin, s + 4), la = position(s), lb = position(z);
+    for (let s = third.from; s < third.to; s += 4) {
+      const z = Math.min(third.to, s + 4), la = position(s), lb = position(z);
       strip(point(s, la, .06), point(z, lb, .06), 2.7, .28, 0x827e72);
-      for (const rail of [-.5335, .5335]) strip(point(s, la + rail, .35), point(z, lb + rail, .35), .065, .12, 0x99a5a3);
+      for (const rail of [-.5335, .5335]) strip(point(s, la + rail, .323), point(z, lb + rail, .323), .065, .12, 0x99a5a3);
       for (let q = s; q < z; q += 1) strip(point(q, position(q) - 1, .19), point(q, position(q) + 1, .19), .14, .12, 0x5b554a);
     }
     const outerSide = outer < main ? -1 : 1;

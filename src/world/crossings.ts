@@ -84,12 +84,15 @@ export function buildCrossings(ctx: GameContext, oncoming: OncomingSystem): void
   const rts: CrossingRt[] = [];
 
   for (const c of list) {
-    const w = c.roadWidth ?? 6, g = T.groundY(c.s), y = T.trackY(c.s);
+    const w = c.roadWidth ?? 6, g = T.groundY(c.s);
     // 路面（線路上はレール面まで持ち上げる）
-    const prof: [number, number][] = [[-160, g + .03], [L0 - 6.5, g + .03], [L0 - 2.6, y + .36], [L1 + 2.6, y + .36], [L1 + 6.5, g + .03], [164, g + .03]];
-    scene.add(gridAlong(track, c.s - w / 2, c.s + w / 2, w, () => prof, roadMat));
+    const prof = (s: number): [number, number][] => {
+      const roadY = T.groundY(s) + .03, railY = T.trackY(s) + .36;
+      return [[-160, roadY], [L0 - 6.5, roadY], [L0 - 2.6, railY], [L1 + 2.6, railY], [L1 + 6.5, roadY], [164, roadY]];
+    };
+    scene.add(gridAlong(track, c.s - w / 2, c.s + w / 2, 1, prof, roadMat));
     // 踏切板（ゴム）
-    const pad = gridAlong(track, c.s - w / 2 - .3, c.s + w / 2 + .3, w + .6, () => [[L0 - 1.2, y + .375], [L1 + 1.2, y + .375]], new THREE.MeshLambertMaterial({ color: 0x3a3a3a }));
+    const pad = gridAlong(track, c.s - w / 2 - .3, c.s + w / 2 + .3, 1, s => [[L0 - 1.2, T.trackY(s) + .375], [L1 + 1.2, T.trackY(s) + .375]], new THREE.MeshLambertMaterial({ color: 0x3a3a3a }));
     scene.add(pad);
     // 停止線・外側線
     const lines = new GeoBatch(), t = track.trackAt(c.s);

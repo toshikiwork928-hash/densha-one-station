@@ -211,6 +211,7 @@ function buildSingleTrackExtras(ctx: GameContext, matBallast: THREE.Material, ma
   for (const l of lines) for (const b of l.bumpers) {
     const inward = Math.abs(b - l.from) < Math.abs(b - l.to) ? 1 : -1, s = b + inward * 1.2, lat = l.lat(s);
     const t = track.trackAt(s), grp = new THREE.Group();
+    grp.name = 'track-bumper'; grp.userData.clearanceExempt = 'rail-stop';
     grp.position.copy(track.at(s, lat, 0)); grp.rotation.y = -t.phi;
     const beam = new THREE.Mesh(new THREE.BoxGeometry(2.4, .5, .35), red); beam.position.set(0, 1.0, 0); grp.add(beam);
     for (const x of [-.6, .6]) {

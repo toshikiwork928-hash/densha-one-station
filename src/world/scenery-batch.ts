@@ -4,8 +4,10 @@ import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import type { Placement, PreparedModel } from './assets';
 
-const LOD_NEAR = 240;  // これより遠い木は簡易形状 [m]
+const LOD_NEAR = 240;  // 初回の詳細/簡易形状の境界 [m]
+const LOD_MARGIN = 20; // 境界付近で視点が動いても樹冠を往復切替しない
 const TREE_FAR = 1400; // これより遠い木は描かない [m]
+const FAR_MARGIN = 50;
 
 export interface SceneryItem { model: PreparedModel; pl: Placement }
 
@@ -37,6 +39,10 @@ export function buildSceneryBatches(ctx: GameContext, items: SceneryItem[]): THR
     }
     const mat = new THREE.MeshLambertMaterial({ vertexColors: true, map: g.map });
     const bm = new THREE.BatchedMesh(nInst, nVert, nIdx, mat);
+    // r170 の setGeometryIdAt はバッチ全体の包含球を更新しない。
+    // 初回が遠景形状だと、接近後の詳細形状が包含球をはみ出して消える。
+    // 全個体・両形状を含む固定球を作り、個体の視錐台カリングは維持する。
+    const bounds = new THREE.Sphere().makeEmpty(), sphere = new THREE.Sphere();
     bm.name = 'scenery-' + (key === 'flat' ? 'flat' : 'tex');
     bm.sortObjects = false; // 並べ替えより CPU 負荷を優先
     for (const [geo, e] of g.geos) {
@@ -44,9 +50,12 @@ export function buildSceneryBatches(ctx: GameContext, items: SceneryItem[]): THR
       for (const pl of e.list) {
         const id = bm.addInstance(full);
         bm.setMatrixAt(id, m4.compose(pl.p, q.setFromEuler(e3.set(0, pl.yaw, 0)), sc.setScalar(pl.k)));
+        bm.getBoundingSphereAt(full, sphere); bounds.union(sphere.applyMatrix4(m4));
+        if (lod >= 0) { bm.getBoundingSphereAt(lod, sphere); bounds.union(sphere.applyMatrix4(m4)); }
         if (lod >= 0) lods.push({ bm, id, x: pl.p.x, z: pl.p.z, full, lod, g: full, vis: true });
       }
     }
+    bm.boundingSphere = bounds;
     // 影は BatchedMesh が影カメラで個体カリングするので近景だけが描かれる
     bm.castShadow = bm.receiveShadow = true;
     bm.userData.castOverride = true;
@@ -54,15 +63,19 @@ export function buildSceneryBatches(ctx: GameContext, items: SceneryItem[]): THR
   }
 
   // 木の距離 LOD（0.25 秒ごと）
+  let initialized = false;
   const update = () => {
     const c = ctx.camera.position;
     for (const L of lods) {
       const d2 = (L.x - c.x) ** 2 + (L.z - c.z) ** 2;
-      const vis = d2 < TREE_FAR * TREE_FAR;
+      const far = !initialized || L.vis ? TREE_FAR : TREE_FAR - FAR_MARGIN;
+      const vis = d2 < far * far;
       if (vis !== L.vis) { L.bm.setVisibleAt(L.id, vis); L.vis = vis; }
-      const g = d2 > LOD_NEAR * LOD_NEAR ? L.lod : L.full;
+      const near = !initialized ? LOD_NEAR : L.g === L.full ? LOD_NEAR + LOD_MARGIN : LOD_NEAR - LOD_MARGIN;
+      const g = d2 > near * near ? L.lod : L.full;
       if (vis && g !== L.g) { L.bm.setGeometryIdAt(L.id, g); L.g = g; }
     }
+    initialized = true;
   };
   let acc = 1;
   ctx.events.on('frame', ({ dt }) => { if ((acc += dt) >= .25) { acc = 0; update(); } });

@@ -35,9 +35,12 @@ export function attachAutodrive(ctx: GameContext, advance: (sec: number, dt?: nu
       const a = st.signals[n], lim = a === 'R' ? 0 : a === 'Y' ? 45 / 3.6 : a === 'YG' ? 65 / 3.6 : 1e9, dd = route.signals![n].s - tr.s;
       if (dd > 0 && dd < 1500) vAllow = Math.min(vAllow, Math.sqrt(lim * lim + 2 * pl * Math.max(0, dd - 10)));
     }
-    if (route.singleTrack) vAllow -= .6; // 下り勾配では惰行でも加速するので、制限より少し下を狙う
+    // 空気ブレーキの立ち上がり・制限曲線の下降を見越す。
+    // ATS の非常制動閾値以内でも速度超過減点は発生するため、全路線で余裕を持つ。
+    vAllow = Math.max(0, vAllow - .6);
     const v = tr.v;
-    ctx.actions.setNotch(v > vAllow + .3 ? -Math.min(8, Math.max(1, Math.ceil((v - vAllow) * 6 + 3))) : v > vAllow - .8 ? 0 : 5);
+    const predicted = v + Math.max(0, tr.acc - 9.81 * track.gradeAt(tr.s) / 1000) * .9;
+    ctx.actions.setNotch(predicted > vAllow ? -Math.min(8, Math.max(1, Math.ceil((predicted - vAllow) * 6 + 3))) : v > vAllow - .8 ? 0 : 5);
     if (st.ats.state !== 'normal') ctx.actions.atsAck();
     return false;
   };
@@ -54,7 +57,7 @@ export function attachAutodrive(ctx: GameContext, advance: (sec: number, dt?: nu
       if (m && m.stage !== 'gone' && m.stage !== 'accel') rows.push(['meet', +st.t.toFixed(0), m.station, m.stage, Math.round(m.head), +(m.v * 3.6).toFixed(0), m.arrived, Math.round(st.train.s), st.state, st.signals[st.nextSignal]]);
       if (o && !o.cleared) rows.push([+st.t.toFixed(0), o.station, o.stage, Math.round(o.head - o.len), Math.round(o.head), +(o.v * 3.6).toFixed(0), o.localStopped, Math.round(st.train.s), st.state]);
     }
-    return { t: +st.t.toFixed(0), log, overtake: rows };
+    return { t: +st.t.toFixed(0), log, overtake: rows, overspeed: st.overspeed, penalties: { ...st.penalties } };
   };
   (window as any).__qa = { run, hook, log };
 }

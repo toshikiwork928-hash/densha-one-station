@@ -10,6 +10,7 @@ import { basePart, ChunkedBatch, P, type BasePart, type GeoBatch } from './batch
 import { cullByDistance } from './cull';
 import { getTerrain, hash, TUNNEL_CENTER, TUNNEL_HALF, TUNNEL_WALL_H } from './terrain';
 import { loopTracks } from './track-mesh';
+import { coastalThirdTrack } from './coastal-stations';
 
 const RAIL = .38;           // レール面（線路基準の高さ）
 const CW = RAIL + 5.34;     // トロリー線の高さ（パンタグラフ上昇時の舟の上面にほぼ接する）
@@ -199,6 +200,7 @@ export function buildCatenary(ctx: GameContext): void {
   const L0 = Math.min(...route.tracks), L1 = Math.max(...route.tracks), MID = (L0 + L1) / 2;
   const S0 = route.extent.from, S1 = route.extent.to;
   const loops = loopTracks(ctx);
+  const thirds = route.stations.flatMap(st => { const t = coastalThirdTrack(route, st); return t ? [t] : []; });
   // 待避線駅の区間（lat = 外側の線路の振れ）と、島式1面2線駅の S字区間（各線が spread だけ外へ開く）。柱・ビームは外側の線路の外に立てる
   const zones: { inFrom: number; outTo: number; lat: number }[] = [
     ...new Map(loops.map(o => [o.z.index, o.z])).values(),
@@ -207,6 +209,15 @@ export function buildCatenary(ctx: GameContext): void {
   const structs = route.structures ?? [];
   // 単線の駅の右の線・副線（本線は route.tracks の 0）
   const extraLines = route.singleTrack ? trackLines(route).filter(l => l.kind !== 'main') : [];
+  const allLines = trackLines(route);
+  const railEdges = (s: number): [number, number] => {
+    const centers = [
+      ...allLines.filter(l => s >= l.from - 12 && s <= l.to + 12).map(l => l.lat(Math.max(l.from, Math.min(l.to, s)))),
+      ...loops.map(l => l.lat(s)),
+      ...thirds.filter(l => s >= l.from && s <= l.to).map(l => l.lat(s)),
+    ];
+    return [Math.min(L0, ...centers), Math.max(L1, ...centers)];
+  };
   const bays = route.stations.flatMap(st => { const b = bayZone(st); return b ? [{ from: b.from, to: b.to, platFrom: st.platform.from, platTo: st.platform.to, width: st.island!.bay!.platformWidth }] : []; });
 
   // ---------- 支持点の位置（踏切・信号・標識・駅舎・構造物の端を避ける） ----------
@@ -216,6 +227,10 @@ export function buildCatenary(ctx: GameContext): void {
     for (const g of route.signs) if (Math.abs(s - g.s) < 2.5) return true;
     for (const L of route.limits) if (Math.abs(s - L.from) < 2.5 || Math.abs(s - L.to) < 2.5) return true;
     for (const st of route.stations) if (Math.abs(s - (st.platform.from + st.platform.to) / 2) < 15.5) return true; // 駅舎
+    for (const st of route.stations) if (st.layout === 'hagoromo') {
+      const sc = (st.platform.from + st.platform.to) / 2, len = st.platform.to - st.platform.from;
+      if (Math.abs(s - (sc - len * .2 - 9.6)) < 4) return true; // 支線への階段接続口
+    }
     for (const st of structs) if (Math.abs(s - st.from) < (st.kind === 'tunnel' ? 7 : 5) || Math.abs(s - st.to) < (st.kind === 'tunnel' ? 7 : 5)) return true;
     return false;
   };
@@ -254,16 +269,25 @@ export function buildCatenary(ctx: GameContext): void {
     if (kind === 'viaduct' || kind === 'bridge') {
       // 高架駅はホームの外縁に立てる
       const el = route.stations.some(q => q.elevated && s > q.platform.from - 10 && s < q.platform.to + 10);
-      pl = L0 - (el ? 6.9 : 3.15); pr = L1 + (el ? 6.9 : 3.15);
+      const edge = route.theme === 'coast' ? (el ? 6.8 : 2.9) : (el ? 6.9 : 3.15);
+      pl = L0 - edge; pr = L1 + edge;
     }
     if (kind === 'loop') {
-      // 島式2面4線: 待避線の外側
-      const z = zones.find(q => s >= q.inFrom - 12 && s <= q.outTo + 12)!;
-      pl = L0 + z.lat - 3.3; pr = L1 - z.lat + 3.3;
+      if (route.theme === 'coast') {
+        // 分岐器で絞る床版に合わせ、実際の待避線中心から外側へ立てる。
+        const positions = loops.map(o => o.lat(s));
+        pl = Math.min(L0, ...positions) - 2.9; pr = Math.max(L1, ...positions) + 2.9;
+      } else {
+        const z = zones.find(q => s >= q.inFrom - 12 && s <= q.outTo + 12)!;
+        pl = L0 + z.lat - 3.3; pr = L1 - z.lat + 3.3;
+      }
     }
     if (kind === 'station') {
       // 相対式ホーム（両側）の外
       pl = L0 - 7.4; pr = L1 + 7.4;
+    }
+    for (const t of thirds) if (s >= t.from && s <= t.to) {
+      pl = Math.min(pl, t.lat(s) - 2.9); pr = Math.max(pr, t.lat(s) + 2.9);
     }
     if (route.singleTrack && kind !== 'station') {
       // 単線: 駅の右の線・副線（とその片面ホーム）の外側に立てる
@@ -274,6 +298,10 @@ export function buildCatenary(ctx: GameContext): void {
         if (bz && s >= bz.platFrom - 5 && s <= bz.platTo + 5) edge = 1.7 + bz.width + .6;
         if (lat > 0) pr = Math.max(pr, lat + edge); else pl = Math.min(pl, lat - edge);
       }
+    }
+    if (route.singleTrack) {
+      const [left, right] = railEdges(s);
+      pl = Math.min(pl, left - 3.3); pr = Math.max(pr, right + 3.3);
     }
     return { s, i, kind, stg, mw: CW + (kind === 'tunnel' ? SYS_T : SYS), pl, pr };
   });
@@ -373,7 +401,8 @@ export function buildCatenary(ctx: GameContext): void {
       const g = groups[groups.length - 1];
       if (g && Math.abs(w.c - g[0].c) < 1.3) g.push(w); else groups.push([w]);
     }
-    const deck = sp.kind === 'viaduct' || sp.kind === 'bridge';
+    const under = T.structureAt(sp.s, 0);
+    const deck = under?.kind === 'viaduct' || under?.kind === 'bridge';
     if (sp.kind === 'tunnel') {
       // 天井から吊る剛な金具（碍子は白）
       for (const g of groups) {
@@ -476,8 +505,12 @@ export function buildCatenary(ctx: GameContext): void {
     let s = sp.s + away * 14;
     for (let k = 0; k < 4 && avoid(s); k++) s += away * 4;
     if (T.structureAt(s, 2)?.kind === 'tunnel') continue;
-    const kind = kindAt(s), deck = kind === 'viaduct' || kind === 'bridge';
-    const x = an.side < 0 ? (deck ? L0 - 3.15 : L0 - 3.3) : (deck ? L1 + 3.15 : L1 + 3.3), d = -an.side;
+    const kind = kindAt(s), under = T.structureAt(s, 0), deck = under?.kind === 'viaduct' || under?.kind === 'bridge';
+    const [left, right] = railEdges(s);
+    const el = route.stations.some(q => q.elevated && !q.loop && s >= q.platform.from - 10 && s <= q.platform.to + 10);
+    const edge = el ? 6.8 : route.theme === 'coast' && deck ? 2.9 : 3.3;
+    // 引留め柱も本線だけでなく待避線・副線・第3線の外へ置く。
+    const x = an.side < 0 ? left - edge : right + edge, d = -an.side;
     const b = chunks.at(s), F = frame(s); b.parent = F;
     const style = styleOf(kind === 'loop' || kind === 'station' ? 'hbeam' : kind), y0 = baseY(s, x, deck), top = sp.mw + .7;
     pole(b, style, x, y0, top, deck);

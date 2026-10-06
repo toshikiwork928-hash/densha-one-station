@@ -30,6 +30,14 @@ for (const route of [shiokaze, shiokazeUp]) {
   assert.equal(route.stations[9].stopS - route.stations[0].stopS, 10600);
   const geometry = buildTrack(route);
   assert.equal(geometry.length, 11200, '汐風線の線形総延長');
+  for (const crossing of route.crossings ?? []) {
+    const half = (crossing.roadWidth ?? 6) / 2;
+    for (const station of route.stations) assert.ok(crossing.s + half < station.platform.from || crossing.s - half > station.platform.to,
+      `${route.id}/${crossing.id}踏切道路がホームを横切らない`);
+    for (const structure of route.structures ?? []) assert.ok(crossing.s + half < structure.from || crossing.s - half > structure.to,
+      `${route.id}/${crossing.id}踏切道路が高架・橋梁に重ならない`);
+    assert.ok(Math.abs(geometry.trackAt(crossing.s).y) < .01, `${route.id}/${crossing.id}踏切は地上`);
+  }
   for (const station of route.stations) {
     const { from, to } = station.platform, phi = geometry.trackAt(from).phi;
     assert.ok(Math.abs(geometry.trackAt(to).phi - phi) < 1e-9, `${route.id}/${station.name}ホーム両端の方位一致`);
@@ -64,9 +72,10 @@ for (const source of [shiokaze, shiokazeUp, mountain, mountainUp]) {
     });
     const result = (globalThis as any).window.__qa.run(service, 'all', 3600);
     console.log(JSON.stringify({ route: source.id, service, state: ctx.state.state, s: ctx.state.train.s, time: result.t,
-      ats: ctx.state.penalties.atsBrake, stops: ctx.state.stops.length, final: result.log.slice(-3) }));
+      ats: ctx.state.penalties.atsBrake, overspeed: ctx.state.overspeed, stops: ctx.state.stops.length, final: result.log.slice(-3) }));
     assert.equal(ctx.state.state, 'result', `${source.id}/${service}完走`);
     assert.equal(ctx.state.penalties.atsBrake, 0, `${source.id}/${service}正常運転でATS非常制動なし`);
+    assert.equal(result.overspeed, 0, `${source.id}/${service}全区間（終着ATS速度曲線含む）で速度超過減点なし`);
     assert.ok(Math.abs(ctx.state.train.s - ctx.route.stations.at(-1)!.stopS) < 15, `${source.id}/${service}終着停止`);
   }
 }

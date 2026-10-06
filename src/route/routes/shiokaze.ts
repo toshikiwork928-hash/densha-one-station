@@ -118,8 +118,8 @@ export const shiokaze: Route = {
   crossings: [
     { id: 'north-matsubara-south', s: 1840, roadWidth: 6 },
     { id: 'north-matsubara-north', s: 2250, roadWidth: 6 },
-    { id: 'park-south', s: 5620, roadWidth: 7 },
-    { id: 'matsubara-south', s: 6630, roadWidth: 6 },
+    { id: 'park-south', s: 5950, roadWidth: 7 },
+    { id: 'matsubara-south', s: 6860, roadWidth: 6 },
     { id: 'matsubara-north', s: 6970, roadWidth: 6 },
   ],
   structures: [

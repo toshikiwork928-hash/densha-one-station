@@ -9,6 +9,7 @@ import { isMountain } from './mountain-terrain';
 import type { TreeSpot } from './town-jp';
 import { ChunkedBatch, M, P } from './batch';
 import { cullByDistance } from './cull';
+import { coastalThirdTrack } from './coastal-stations';
 
 /** 景観カテゴリ別のモデル集合 */
 export interface SceneryModels {
@@ -180,7 +181,11 @@ export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot
   const latOf = (sd: number, d: number) => sd < 0 ? L0 - d : L1 + d;
   // 配置を集めて材質ごとの BatchedMesh へ（scenery-batch.ts）
   const items: SceneryItem[] = [];
+  const thirds = route.stations.flatMap(st => { const t = coastalThirdTrack(route, st); return t ? [t] : []; });
   const put = (model: PreparedModel, s: number, lat: number, yaw: number, k: number, y?: number) => {
+    const radius = Math.hypot(model.size.x, model.size.z) * k / 2;
+    // 描画専用線も分岐端まで敷地を確保。樹冠の幅と前後方向の張り出しを含む。
+    if (thirds.some(t => s > t.from - radius && s < t.to + radius && Math.abs(lat - t.lat(s)) < radius + 2.1)) return;
     const t = trackAt(s);
     items.push({ model, pl: { p: new THREE.Vector3(t.x + t.rx * lat, y ?? T.groundY(s), t.z + t.rz * lat), yaw: -t.phi + yaw, k } });
   };
