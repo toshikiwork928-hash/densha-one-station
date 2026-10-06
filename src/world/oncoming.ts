@@ -97,11 +97,11 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
   const dest = route.stations[0]?.name ?? route.prevName ?? '';
   const sets = new Map<string, SetView[]>();
   const labelOf = (o: { spec: OncomingSpec; kind: TrainKind }) => o.spec.label ?? TRAIN_KINDS[o.kind].service;
-  const keyOf = (o: { spec: OncomingSpec; kind: TrainKind }) => `${o.kind}:${o.spec.cars}:${labelOf(o)}:${o.spec.dest ?? dest}`;
+  const keyOf = (o: { spec: OncomingSpec; kind: TrainKind }) => `${o.spec.unitKinds?.join('+') ?? o.kind}:${o.spec.units?.join('+') ?? o.spec.cars}:${labelOf(o)}:${o.spec.dest ?? dest}`;
   const build = (o: { spec: OncomingSpec; kind: TrainKind }): SetView => {
     const key = keyOf(o);
     const group = new THREE.Group(); group.visible = false; group.name = `oncoming-${o.kind}`; scene.add(group);
-    const list = createTrainSet(o.kind, o.spec.cars, ctx.renderer, { dest: o.spec.dest ?? dest, label: labelOf(o) });
+    const list = createTrainSet(o.kind, o.spec.cars, ctx.renderer, { dest: o.spec.dest ?? dest, label: labelOf(o), units: o.spec.units, unitKinds: o.spec.unitKinds });
     for (const c of list) group.add(c.object);
     const v: SetView = { key, group, cars: list, length: list.reduce((a, c) => a + c.length, 0), inUse: false };
     const arr = sets.get(key) ?? []; arr.push(v); sets.set(key, arr);

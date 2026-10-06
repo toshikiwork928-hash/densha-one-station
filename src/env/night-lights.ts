@@ -79,7 +79,7 @@ export function createNightLights(ctx: GameContext): NightLights {
     const rl = len * .6, sc = (s0 + s1) / 2;
     sides.forEach(([lat, floors, shift], k) => {
       for (let z = -rl / 2 + 3; z <= rl / 2 - 3; z += 8) {
-        bulbs.push({ s: sc + (shift ?? 0) + z, lat, y: 4.1, w: .18, d: 1.6 });
+        if (!sta.indoor) bulbs.push({ s: sc + (shift ?? 0) + z, lat, y: 4.1, w: .18, d: 1.6 }); // 屋内式は大屋根の蛍光灯（world/indoor-station.ts）
         for (const f of floors) pools.push({ s: sc + (shift ?? 0) + z, lat: f, y: 1.13, r: 7 });
       }
       if (k === 0) platSpots.push({ sc, pos: [-.22, .22].map(q => track.at(sc + rl * q, lat, 3.9)) });

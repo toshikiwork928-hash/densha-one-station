@@ -6,15 +6,17 @@ import { GeoBatch, M, P } from './batch';
 import { cullByDistance } from './cull';
 import { getTerrain } from './terrain';
 import { buildTower } from './coastal-tower';
+import { buildTwinTower } from './izumiotsu-towers';
 import { BUMPER_D, DIVERGE_D, hagoromoSpec } from './hagoromo-branch';
 
 type Landmark = {
-  kind: 'road-overpass' | 'tram-overpass' | 'steel-bridge' | 'branch' | 'tower';
+  kind: 'road-overpass' | 'tram-overpass' | 'steel-bridge' | 'branch' | 'tower' | 'twin-tower';
   s: number;
   length?: number;
   label?: string;
   side?: 1 | -1;
   direction?: 1 | -1;
+  reversed?: boolean;
 };
 const UP = new THREE.Vector3(0, 1, 0);
 const COLOR = { concrete: 0xb8b7ad, steel: 0x647773, road: 0x51565a, line: 0xe5e3cd, rail: 0x9caaa9, ballast: 0x7c786d };
@@ -41,7 +43,7 @@ function crossing(ctx: GameContext, b: GeoBatch, st: Landmark, tram: boolean): v
   const side = st.side ?? -1, span = st.length ?? (tram ? 125 : 155), width = tram ? 7.8 : 19;
   // 路線データの side は下りの斜交の向き。上りは進行方向が逆で、reverseRoute が side を反転しているので、
   // そのまま使うと橋が物理的に鏡像になる（斜交が逆、橋上の電車の位置も反対）。同じ物理配置になるよう、上りは座標を 180° 回して斜交を保つ。
-  const up = ctx.route.id.endsWith('-up'), sgn = up ? -1 : 1, skew = (up ? -side : side) * .26;
+  const up = st.reversed ?? ctx.route.id.endsWith('-up'), sgn = up ? -1 : 1, skew = (up ? -side : side) * .26;
   // 上りの自線（横位置 0）は下りの対向線（横位置 4）の位置。橋の中心は物理的に同じ点へ。
   const base = track.at(st.s, up ? Math.max(...ctx.route.tracks) : 0, 0);
   // 主線の吊架線・門形ビームも通せる余裕を取る。
@@ -193,6 +195,7 @@ export function buildCoastalLandmarks(ctx: GameContext): void {
   const material = new THREE.MeshLambertMaterial({ vertexColors: true });
   for (const st of list) {
     if (st.kind === 'tower') { buildTower(ctx, st); continue; }
+    if (st.kind === 'twin-tower') { buildTwinTower(ctx, st); continue; } // 泉大津駅前の2棟並びのタワー
     const batch = new GeoBatch(), group = new THREE.Group();
     group.name = `coastal-${st.kind}-${Math.round(st.s)}`;
     if (st.kind === 'road-overpass' || st.kind === 'tram-overpass') crossing(ctx, batch, st, st.kind === 'tram-overpass');

@@ -2,7 +2,7 @@
 // 急行・特急で通過する2面4線駅の待避線に止まっている先行の普通（st.precedingS が待避線にいる間）
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
-import { islandOffset, loopShape, loopZones, serviceOf } from '../route/service';
+import { destOf, islandOffset, loopShape, loopZones, serviceOf } from '../route/service';
 import type { TrainKind } from '../route/types';
 import { placeCar } from './emu';
 import { bogieOffset, createTrainSet, type TrainCar } from './train-models';
@@ -15,13 +15,13 @@ const NEAR = 60;
 export function createOvertaking(ctx: GameContext): void {
   const { scene, track, route, events } = ctx, st = ctx.state;
   const cache = new Map<string, SetView>();
-  const dest = route.stations[route.stations.length - 1]?.name ?? '';
-  const view = (kind: TrainKind, units: number[], label: string): SetView => {
-    const key = `${kind}:${units.join('+')}:${label}`;
+  const destAll = route.stations[route.stations.length - 1]?.name ?? '';
+  const view = (kind: TrainKind, units: number[], label: string, unitKinds?: TrainKind[], dest = destAll): SetView => {
+    const key = `${unitKinds?.join('+') ?? kind}:${units.join('+')}:${label}:${dest}`;
     let v = cache.get(key);
     if (!v) {
       const group = new THREE.Group(); group.name = 'overtake-' + key; group.visible = false; scene.add(group);
-      const cars = createTrainSet(kind, units.reduce((a, n) => a + n, 0), ctx.renderer, { dest, label, units });
+      const cars = createTrainSet(kind, units.reduce((a, n) => a + n, 0), ctx.renderer, { dest, label, units, unitKinds });
       for (const c of cars) group.add(c.object);
       v = { group, cars }; cache.set(key, v);
     }
@@ -57,7 +57,7 @@ export function createOvertaking(ctx: GameContext): void {
     if (o && o.phase === 'run') {
       if (lastStation !== o.station) { lastStation = o.station; hornDone = false; }
       const svc = serviceOf(route, o.passedBy)!;
-      const v = view(svc.kind, svc.units, svc.name);
+      const v = view(svc.kind, svc.units, svc.name, svc.unitKinds, destOf(route, svc));
       v.group.visible = true;
       const connecting = o.stage === 'stopped' && o.localStopped, side = mainSide(o.station);
       for (const c of v.cars) c.setDoors(connecting, side); // 停車して接続中は本線ホーム側のドアを開ける
@@ -76,7 +76,7 @@ export function createOvertaking(ctx: GameContext): void {
     lastH = h;
     const z = zones.find(q => !route.stations[q.index].enterLoop && local.waits?.some(w => w.station === q.index && w.passedBy === st.sel.service) && h > q.inFrom && h < q.outTo + 400);
     if (!z || Math.abs(h - ps) > 1500) return;
-    const v = view(local.kind, local.units, local.name);
+    const v = view(local.kind, local.units, local.name, local.unitKinds, destOf(route, local));
     v.group.visible = true;
     // 待避線に停車している間はドアを開ける（動き出したら閉める）
     const still = Math.abs(h - prevH) < 1e-3;

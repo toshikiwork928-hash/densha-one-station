@@ -7,6 +7,8 @@
 import * as THREE from 'three';
 import { shiokaze, shiokazeUp } from '../src/route/routes/shiokaze';
 import { mountain, mountainUp } from '../src/route/routes/mountain';
+import { kishiwada, kishiwadaUp } from '../src/route/routes/kishiwada';
+import { through, throughUp } from '../src/route/routes/through';
 import { buildTrack } from '../src/route/track';
 import { applyService } from '../src/route/service';
 import type { Route, ServiceId } from '../src/route/types';
@@ -69,7 +71,9 @@ function build(ctx: GameContext): void {
 const all = process.argv.includes('--all');
 const option = (name: string) => process.argv.find(a => a.startsWith(`--${name}=`))?.split('=')[1];
 const routeFilter = option('route'), serviceFilter = option('service');
-const cases: [Route, ServiceId[]][] = [[shiokaze, ['local', 'express', 'limited']], [shiokazeUp, ['local', 'express', 'limited']], [mountain, ['local']], [mountainUp, ['local']]];
+const cases: [Route, ServiceId[]][] = [[shiokaze, ['local', 'express', 'limited']], [shiokazeUp, ['local', 'express', 'limited']], [mountain, ['local']], [mountainUp, ['local']],
+  [kishiwada, ['local', 'express', 'southern']], [kishiwadaUp, ['local', 'express', 'southern']],
+  [throughUp, ['local', 'southern']], [through, ['local', 'southern']]];
 let total = 0;
 let checked = 0;
 for (const [src, services] of cases) {

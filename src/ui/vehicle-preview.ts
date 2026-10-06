@@ -4,6 +4,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import type { GameContext } from '../core/context';
 import type { ServiceSpec, TrainKind } from '../route/types';
 import { createTrainSet } from '../world/train-models';
+import { destOf, kindsKey } from '../route/service';
 
 export function createVehiclePreview(ctx: GameContext) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -33,9 +34,9 @@ export function createVehiclePreview(ctx: GameContext) {
   let modelKey = '', dirty = true, width = 0, height = 0;
 
   // ジオメトリ・テクスチャは共有、材質は複製。ゲーム側の夜間照明には触らない。
-  function model(kind: TrainKind, count: number, units: number[], label?: string) {
+  function model(kind: TrainKind, count: number, units: number[], label?: string, unitKinds?: TrainKind[], dest?: string) {
     const group = new THREE.Group(), owned = new Map<THREE.Material, THREE.Material>();
-    const cars = createTrainSet(kind, count, ctx.renderer, { units, label, dest: ctx.route.stations.at(-1)?.name });
+    const cars = createTrainSet(kind, count, ctx.renderer, { units, label, unitKinds, dest: dest ?? ctx.route.stations.at(-1)?.name });
     const total = cars.reduce((a, c) => a + c.length, 0);
     let z0 = -total / 2;
     cars.forEach(car => {
@@ -75,10 +76,10 @@ export function createVehiclePreview(ctx: GameContext) {
 
   function rebuild() {
     if (!svc) return;
-    const key = `${svc.kind}:${svc.units.join('+')}:${svc.name}:${full}`;
+    const key = `${kindsKey(svc)}:${svc.units.join('+')}:${svc.name}:${full}`;
     if (key === modelKey) return;
     modelKey = key; root.clear(); for (const m of materials) m.dispose();
-    const m = model(svc.kind, full ? svc.cars : 1, full ? svc.units : [1], svc.name);
+    const m = model(svc.kind, full ? svc.cars : 1, full ? svc.units : [1], svc.name, full ? svc.unitKinds : undefined, destOf(ctx.route, svc));
     root.add(m.group); materials = m.owned;
     const box = new THREE.Box3().setFromObject(root); box.getCenter(center); box.getSize(size);
     zoom = 1; dirty = true;

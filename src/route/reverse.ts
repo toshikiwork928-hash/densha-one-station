@@ -124,6 +124,7 @@ export function reverseRoute(down: Route, opt: {
     ...(down.meets ? { meets: down.meets.map(mt => ({ ...mt, station: ri(mt.station) })) } : {}),
     crossings,
     structures,
-    coastalLandmarks: down.coastalLandmarks?.map(l => ({ ...l, s: m(l.s), side: -(l.side ?? -1) as 1 | -1, direction: -(l.direction ?? -1) as 1 | -1 })),
+    ...(down.seaSide ? { seaSide: -down.seaSide as 1 | -1 } : {}),
+    coastalLandmarks: down.coastalLandmarks?.map(l => ({ ...l, reversed: !(l.reversed ?? down.id.endsWith('-up')), s: m(l.s), side: -(l.side ?? -1) as 1 | -1, direction: -(l.direction ?? -1) as 1 | -1 })),
   };
 }

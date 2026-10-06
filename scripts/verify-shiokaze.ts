@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { shiokaze, shiokazeUp } from '../src/route/routes/shiokaze';
 import { mountain, mountainUp } from '../src/route/routes/mountain';
+import { kishiwada, kishiwadaUp } from '../src/route/routes/kishiwada';
+import { through, throughUp } from '../src/route/routes/through';
+import { approachText, departText } from '../src/audio/announce-text';
+import { applyService } from '../src/route/service';
 import { buildTrack } from '../src/route/track';
 import { loopZone, loopShape } from '../src/route/service';
 import { coastalThirdTracks } from '../src/world/coastal-stations';
@@ -175,3 +179,119 @@ for (const service of ['local', 'express'] as const) {
   assert.equal(result.overspeed, 0);
 }
 console.log('普通6両・急行8両の待避運行成功');
+
+// 南海本線 泉大津〜岸和田（特急サザン）: 線形・踏切・駅の形と、4種別×上下の完走
+for (const route of [kishiwada, kishiwadaUp]) {
+  assert.equal(route.stations.length, 5);
+  assert.equal(route.stations[4].stopS - route.stations[0].stopS, 5600, '泉大津〜岸和田 5.6km');
+  const geometry = buildTrack(route);
+  for (const crossing of route.crossings ?? []) {
+    const half = (crossing.roadWidth ?? 6) / 2;
+    for (const station of route.stations) assert.ok(crossing.s + half < station.platform.from || crossing.s - half > station.platform.to, `${route.id}/${crossing.id}踏切道路がホームを横切らない`);
+    for (const structure of route.structures ?? []) assert.ok(crossing.s + half < structure.from || crossing.s - half > structure.to, `${route.id}/${crossing.id}踏切道路が高架・橋梁に重ならない`);
+    assert.ok(Math.abs(geometry.trackAt(crossing.s).y) < .01, `${route.id}/${crossing.id}踏切は地上`);
+  }
+  for (const station of route.stations) {
+    const { from, to } = station.platform, phi = geometry.trackAt(from).phi;
+    for (let s = from; s <= to; s += 5) assert.ok(Math.abs(geometry.trackAt(s).phi - phi) < 1e-9, `${route.id}/${station.name}ホーム全体が直線`);
+    const loop = loopZone(station);
+    if (loop) for (let s = loop.inFrom; s <= loop.outTo; s += 5) assert.ok(Math.abs(geometry.trackAt(s).phi - geometry.trackAt(loop.inFrom).phi) < 1e-9, `${route.id}/${station.name}分岐区間が直線`);
+    const y = geometry.trackAt(from).y;
+    for (let s = from; s <= to; s += 10) assert.ok(Math.abs(geometry.trackAt(s).y - y) < 1e-6, `${route.id}/${station.name}ホームが水平`);
+    assert.equal(y > 1, !!station.elevated, `${route.id}/${station.name}高架/地上`);
+  }
+  // 泉大津の形は堺〜泉大津と同じ（島式2面4線・待避線の位置）
+  const izumi = route.stations.find(s => s.name === '泉大津')!, izumiS = shiokaze.stations[0];
+  assert.deepEqual(izumi.loop, izumiS.loop, '泉大津の待避線は既存と同じ');
+  assert.equal(izumi.platform.to - izumi.platform.from, izumiS.platform.to - izumiS.platform.from);
+  assert.ok(route.stations.find(s => s.name === '岸和田')!.indoor, '岸和田は屋内式');
+}
+{
+  const t = buildTrack(kishiwada), u = buildTrack(kishiwadaUp);
+  for (let s = 0; s <= t.length; s += 50) assert.ok(Math.abs(t.trackAt(s).y - u.trackAt(u.length - s).y) < 1e-6, '泉大津〜岸和田 復路の標高一致');
+}
+// 通し（堺〜岸和田）: 区間データと同じ線形・駅位置・標高をつないだもの
+for (const [route, parts] of [[throughUp, [shiokazeUp, kishiwada]], [through, [kishiwadaUp, shiokaze]]] as const) {
+  const [a, b] = parts, t = buildTrack(route), ta = buildTrack(a), tb = buildTrack(b);
+  assert.equal(route.stations.length, 14);
+  assert.ok(Math.abs(route.stations[13].stopS - route.stations[0].stopS - 16200) < 1e-6, `${route.id} 堺〜岸和田 16.2km`);
+  const off = a.stations.at(-1)!.platform.from - b.stations[0].platform.from;
+  // 境目の前後で、区間データと同じ線路の形（相対位置・方位・標高）
+  const rel = (tr: typeof t, s0: number, s1: number) => { const p = tr.trackAt(s0), q = tr.trackAt(s1); return [Math.hypot(q.x - p.x, q.z - p.z), q.phi - p.phi, q.y - p.y]; };
+  for (const [s0, s1] of [[off, off + 3000], [off + 500, route.stations[13].stopS]]) {
+    const [d, dp, dy] = rel(t, s0, s1), [e, ep, ey] = rel(tb, s0 - off, s1 - off);
+    assert.ok(Math.abs(d - e) < .05 && Math.abs(dp - ep) < 1e-6 && Math.abs(dy - ey) < 1e-6, `${route.id} b の区間の形が一致`);
+  }
+  {
+    const [d, dp, dy] = rel(t, 0, off), [e, ep, ey] = rel(ta, 0, off);
+    assert.ok(Math.abs(d - e) < .05 && Math.abs(dp - ep) < 1e-6 && Math.abs(dy - ey) < 1e-6, `${route.id} a の区間の形が一致`);
+  }
+  for (const st of route.stations) {
+    const { from, to } = st.platform, phi = t.trackAt(from).phi;
+    for (let q = from; q <= to; q += 5) assert.ok(Math.abs(t.trackAt(q).phi - phi) < 1e-9, `${route.id}/${st.name}ホーム全体が直線`);
+  }
+  assert.equal(route.coastalLandmarks!.filter(l => l.kind === 'twin-tower').length, 1, 'タワーは1組');
+  const ids = route.signals!.map(g => g.id);
+  assert.equal(new Set(ids).size, ids.length, '信号 id の重複なし');
+}
+// 放送: サザンの始発の行先案内と、終点でない終着駅（列車は和歌山市行き）
+{
+  const r = structuredClone(kishiwada), sv = applyService(r, 'southern')!;
+  const dep = departText(r, 0, false, sv);
+  assert.ok(dep.includes('この電車は、一部座席指定、特急サザンワカヤマシ行きです。'), dep);
+  assert.ok(dep.includes('次は、キシワダに停まります。'), dep);
+  assert.ok(!approachText(r, 4, sv).includes('終点'), 'サザンの岸和田は終点ではない');
+  const loc = applyService(r, 'local')!;
+  assert.ok(approachText(r, 4, loc).includes('終点'), '普通は岸和田止まり');
+  const up = structuredClone(kishiwadaUp), su = applyService(up, 'southern')!;
+  assert.ok(departText(up, 0, false, su).includes('特急サザンナンバ行き'), '上りのサザンは難波行き');
+  assert.deepEqual(su.unitKinds, ['commuter-old', 'southern-10000'], '上りのサザンは 7100系が先頭');
+  assert.deepEqual(applyService(structuredClone(kishiwada), 'southern')!.unitKinds, ['southern-10000', 'commuter-old'], '下りのサザンは 10000系が先頭');
+}
+// 普通の待避駅では、到着前の放送でも待ち合わせ・通過待ちを案内する（堺〜泉大津: 高石で特急の通過待ち）
+{
+  const r = structuredClone(shiokaze), sv = applyService(r, 'local')!;
+  assert.ok(approachText(r, 3, sv).endsWith('タカイシで特急の通過待ちをします。'), approachText(r, 3, sv));
+  assert.ok(approachText(r, 5, sv).endsWith('ハマデラコウエンで急行の通過待ちをします。'), approachText(r, 5, sv));
+  assert.ok(!approachText(r, 1, sv).includes('待'), '待避しない駅は案内なし');
+}
+for (const source of [kishiwada, kishiwadaUp, throughUp, through]) {
+  for (const service of ['local', 'express', 'limited', 'southern'] as const) {
+    const ctx = context(source, service), game = createGame(ctx);
+    const finalSta = ctx.route.stations.at(-1)!, finalZone = loopZone(finalSta)!;
+    let zoneMax = 0;
+    const observedWaits = new Set<number>(), stopT: Record<number, number> = {}, arriveT: Record<number, number> = {};
+    attachAutodrive(ctx, (sec, dt = 1 / 30, hook) => {
+      for (let t = 0; t < sec; t += dt) {
+        if (hook?.()) break; game.update(dt);
+        const st = ctx.state;
+        if (st.overtake?.localStopped && !st.overtake.cleared) observedWaits.add(st.overtake.station);
+        // 優等列車は普通が止まってから着く（到着点 = 停止位置。通過列車は普通の停止位置を通過）
+        const o = st.overtake;
+        if (o && !o.cleared) {
+          const arrive = o.stopAt ?? ctx.route.stations[o.station].stopS;
+          if (o.localStopped && stopT[o.station] == null) stopT[o.station] = st.t;
+          if (o.head >= arrive - .1 && arriveT[o.station] == null) arriveT[o.station] = st.t;
+        }
+        if (st.train.s > finalZone.inFrom + 20 && st.train.s < finalZone.outTo) zoneMax = Math.max(zoneMax, st.train.v * 3.6);
+      }
+    });
+    const result = (globalThis as any).window.__qa.run(service, 'all', 3600);
+    if (ctx.state.penalties.atsBrake) console.log(result.log.filter((l: string) => /ATS|信号|R|EB|非常/.test(l)).slice(0, 12).join(' | '));
+    console.log(JSON.stringify({ route: source.id, service, state: ctx.state.state, time: result.t, ats: ctx.state.penalties.atsBrake, overspeed: ctx.state.overspeed, stops: ctx.state.stops.length }));
+    assert.equal(ctx.state.state, 'result', `${source.id}/${service}完走`);
+    assert.equal(ctx.state.penalties.atsBrake, 0, `${source.id}/${service}ATS非常制動なし`);
+    assert.equal(result.overspeed, 0, `${source.id}/${service}速度超過なし`);
+    assert.ok(Math.abs(ctx.state.train.s - finalSta.stopS) < 15, `${source.id}/${service}終着停止`);
+    assert.equal(ctx.state.stops.length, ctx.route.services!.find(s => s.id === service)!.stops.length - 1, `${source.id}/${service}停車駅数`);
+    if (service === 'local') assert.ok(zoneMax <= 46, `${source.id}普通は終着の待避線へ45km/hで入線`);
+    const waits = [...new Set(ctx.route.services!.find(v => v.id === 'local')!.waits?.map(w => w.station) ?? [])];
+    assert.deepEqual([...observedWaits], service === 'local' ? waits : [], `${source.id}/${service}普通の待避`);
+    for (const k of Object.keys(stopT)) {
+      const gap = arriveT[+k] - stopT[+k];
+      console.log(`  待避 ${ctx.route.stations[+k].name}: 普通の停止から優等列車の到着まで ${gap.toFixed(1)}秒`);
+      assert.ok(gap >= 3, `${source.id}/${ctx.route.stations[+k].name} 優等列車は普通が止まってから着く`);
+    }
+  }
+}
+console.log('泉大津〜岸和田・堺〜岸和田（4種別×上下）・サザンの放送チェック成功');

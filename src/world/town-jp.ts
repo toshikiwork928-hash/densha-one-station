@@ -6,7 +6,7 @@ import type { GameContext } from '../core/context';
 import { createRng, type Rng } from '../core/rng';
 import { ChunkedBatch, GeoBatch, M, P, basePart, onLight } from './batch';
 import { cullByDistance } from './cull';
-import { loopZone } from '../route/service';
+import { loopZone, seaSideOf } from '../route/service';
 import { coastalThirdTracks } from './coastal-stations';
 import { towerZones } from './coastal-tower';
 import { getTerrain, hash } from './terrain';
@@ -365,7 +365,7 @@ export function buildTown(ctx: GameContext): TownResult {
   // 山岳線: 町並み・田畑・道路は平地（川沿いの町・平野）で、地面が線路と同じ高さの所だけ
   const MT = isMountain(T) ? T : null;
   const coastal = !!route.coastalLandmarks?.length && !MT;
-  const parkSide = route.coastalLandmarks?.find(l => l.kind === 'branch')?.side ?? -1;
+  const parkSide = seaSideOf(route);
   const parkAt = (sd: number, s: number) => coastal && sd === parkSide && !T.isCity(s);
   const overpasses = (route.coastalLandmarks ?? []).filter(l => l.kind === 'road-overpass' || l.kind === 'tram-overpass');
   // 斜交する床版の線路方向投影と建物の奥行きに、余裕を含める。

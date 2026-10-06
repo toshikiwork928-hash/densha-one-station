@@ -152,6 +152,14 @@ const bases = new WeakMap<Route, Base>();
 export const serviceOf = (route: Route, id: ServiceId | undefined): ServiceSpec | undefined =>
   route.services?.find(s => s.id === id) ?? route.services?.[0];
 
+/** 海の側（進行方向に対して -1 = 左、1 = 右）。route.seaSide、無ければ高架支線の側（汐風線の従来の決め方） */
+export const seaSideOf = (route: Route): 1 | -1 => route.seaSide ?? route.coastalLandmarks?.find(l => l.kind === 'branch')?.side ?? -1;
+
+/** 列車の行先（行先表示・放送）。種別に本来の行先（サザンの和歌山市など）があればそれ、無ければコースの終点 */
+export const destOf = (route: Route, svc?: ServiceSpec): string => svc?.destination ?? route.stations[route.stations.length - 1]?.name ?? '';
+/** 編成の車種の並びのキー（キャッシュ用。例 'southern-10000+commuter-old'） */
+export const kindsKey = (svc: ServiceSpec): string => svc.unitKinds?.join('+') ?? svc.kind;
+
 /** 編成の合計両数 */
 export const carsOf = (units: readonly number[]): number => units.reduce((a, n) => a + n, 0);
 /** 編成の表示（4+2 など。1ユニットは両数のみ） */

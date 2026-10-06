@@ -4,7 +4,7 @@ import type { GameContext } from '../core/context';
 import { $, fmtClock } from '../core/dom';
 import { ASPECT_LABEL, ASPECT_LIMIT } from '../game/preceding';
 import { departureTime } from '../game/state';
-import { serviceOf, unitsLabel } from '../route/service';
+import { destOf, serviceOf, unitsLabel } from '../route/service';
 import { drawMeter } from './meter';
 import { terminalSpeedLimit } from '../game/terminal-ats';
 
@@ -53,7 +53,7 @@ export function attachHud(ctx: GameContext): void {
   function renderService() {
     const v = route.services ? serviceOf(route, st.sel.service) : undefined;
     sx.svc.hidden = !v;
-    if (v) sx.svc.innerHTML = `<span class="svcBadge svc-${v.id}">${v.name}</span> ${route.stations[route.stations.length - 1].name}行 <span class="sub">${v.cars}両${v.units.length > 1 ? `（${unitsLabel(v.units)}）` : ''}</span>`;
+    if (v) sx.svc.innerHTML = `<span class="svcBadge svc-${v.id}">${v.name}</span> ${destOf(route, v)}行 <span class="sub">${v.cars}両${v.units.length > 1 ? `（${unitsLabel(v.units)}）` : ''}</span>`;
   }
 
   // 表示対象の駅（次の停車駅。終了後は最後に判定した駅）
@@ -73,9 +73,12 @@ export function attachHud(ctx: GameContext): void {
     renderTimetable();
   }
 
+  /** 時刻表の表示行数の上限（堺〜泉大津の10駅と同じ大きさ）。駅が多いコースは、次の停車駅の2駅前から表示し、過ぎた駅は上へ送って消す */
+  const TT_ROWS = 10;
   function renderTimetable() {
     const rows: string[] = [];
-    for (let i = st.fromIndex; i <= st.endIndex; i++) {
+    const first = Math.max(st.fromIndex, Math.min(targetIndex() - 2, st.endIndex - TT_ROWS + 1)), last = Math.min(st.endIndex, first + TT_ROWS - 1);
+    for (let i = first; i <= last; i++) {
       const x = route.stations[i], c = route.startClock;
       const arr = i === st.fromIndex ? '' : fmtHM(c + x.scheduledArrival).slice(0, -3) + `<small>${fmtHM(c + x.scheduledArrival).slice(-2)}</small>`;
       const dep = x.pass ? 'レ' : i === st.endIndex ? '' : fmtHM(c + departureTime(route, i)).slice(0, -3) + `<small>${fmtHM(c + departureTime(route, i)).slice(-2)}</small>`;

@@ -125,21 +125,25 @@ export function paintCommuterFace(v: CommuterVariant): SheetMaps {
     // 上部の前照灯箱まわり
     s.rect(-.42, .42, 3.47, 3.72, '#0d0f11', .2, .2);
   } else {
+    // 実効幅は端部の丸み（r = .3）を除いた ±1.15。前面窓・表示器はその内側に収める（外周が車体の角で見切れない）
+    s.base('#c9cdd3', L.rough, L.metal); // 前面は明るい灰色
     s.rect(-HW, HW, L.frontBand[0], L.frontBand[1], BLUE, .35, .1);
     s.rect(-HW, HW, L.frontLine[0], L.frontLine[1], ORANGE, .35, .1);
-    // 前面窓（黒ゴム枠）
-    s.glass(.6, 1.26, 2.24, 3.08, '#22262b', .06);
-    s.glass(-1.26, -.6, 2.24, 3.08, '#22262b', .06);
-    // 貫通扉（黒い幌枠の内側）
-    s.rect(-.5, .5, 1.2, 3.2, '#1d2024', .5, 0, .12);
-    s.rect(-.4, .4, 1.25, 3.1, L.door, L.rough, L.metal, .05);
-    s.rect(-.4, .4, L.frontBand[0], L.frontBand[1], BLUE, .35, .1);
-    s.rect(-.4, .4, L.frontLine[0], L.frontLine[1], ORANGE, .35, .1);
-    s.glass(-.28, .28, 2.3, 2.98, '#22262b', .05);
-    // 架空の車番
-    s.text('5203', -.95, 1.81, .26, '#f4f6fa', 600);
-    // 行先表示器の枠
-    s.rect(.56, 1.3, 3.14, 3.44, '#15171a', .3, 0, .02);
+    s.rect(-HW, HW, 1.4, 1.43, '#f3f5f8', .35, .1); // 細い白線
+    // 前面窓（角の丸い四角・黒ゴム枠）
+    s.glass(.58, 1.06, 2.2, 3.08, '#22262b', .07);
+    s.glass(-1.06, -.58, 2.2, 3.08, '#22262b', .07);
+    // 貫通扉と、その周りの幌の枠（灰色の太い枠）
+    s.rect(-.5, .5, 1.2, 3.22, '#7f858c', .5, .1, .06);
+    s.rect(-.37, .37, 1.27, 3.12, L.door, L.rough, L.metal, .04);
+    s.rect(-.37, .37, L.frontBand[0], L.frontBand[1], BLUE, .35, .1);
+    s.rect(-.37, .37, L.frontLine[0], L.frontLine[1], ORANGE, .35, .1);
+    s.glass(-.25, .25, 2.3, 2.98, '#22262b', .05);
+    // 車号は青い帯の中（白文字）
+    s.text('7185', -.82, 1.81, .2, '#f4f6fa', 600);
+    // 行先表示器（左窓の上）の枠
+    s.rect(.52, 1.12, 3.16, 3.4, '#15171a', .3, 0, .02);
+    s.emit(-HW, HW, Y0, YTOP + .1, '#000'); // 夜は運転台の窓を光らせない
   }
   return s.textures();
 }
@@ -156,6 +160,8 @@ export function buildCommuterCar(v: CommuterVariant, kind: CarKind, Lb: number):
   for (const sx of [-1, 1]) add(sx * (HW - .03), 3.56, 0, .04, .04, Lb - (head ? .6 : 0), 0x8d939a, 0, 0, 0);
   addEndWall(b, hz, YTOP, HW, v === 'new' ? 0xb9bec4 : 0xbfc3c9);
   let face: THREE.BufferGeometry | undefined, led: THREE.BufferGeometry | undefined, led2: THREE.BufferGeometry | undefined;
+  let marks: CarParts['marks'];
+  const mkL = new GeoBatch(), mkR = new GeoBatch();
   if (head) {
     face = capGeo(HALF, { z: zf, inset: L.r }, YTOP, HW, -1);
     const z = zf - .005;
@@ -186,23 +192,31 @@ export function buildCommuterCar(v: CommuterVariant, kind: CarKind, Lb: number):
       // ワイパー
       for (const sx of [-1, 1]) add(sx * .95, 2.38, z - .03, .55, .025, .025, 0x111111, 0, 0, sx * .35);
     } else {
-      // 貫通扉まわりの黒い幌枠
-      add(0, 3.24, z - .05, 1.06, .1, .1, 0x1a1c20);
-      for (const sx of [-1, 1]) add(sx * .5, 2.2, z - .05, .1, 2.06, .1, 0x1a1c20);
+      // 貫通扉まわりの幌の枠（灰色の太い枠）
+      const hood = 0x7f858c;
+      add(0, 3.26, z - .05, 1.08, .12, .1, hood);
+      for (const sx of [-1, 1]) add(sx * .44, 2.2, z - .05, .12, 2.1, .1, hood);
       add(0, 1.2, z - .12, .9, .05, .24, 0x8f959b);
-      // 前照灯・標識灯: 前面下部の左右に黒いライトケース（丸い前照灯 + 小さな標識灯を縦に並べる）
+      // 前照灯: 前面最上部の中央。屋根の縁の上に、丸い2灯が横に並ぶ灯具
+      add(0, 3.62, zf + .1, .86, .2, .34, 0x7a8087);
+      add(0, 3.62, zf - .065, .8, .17, .02, 0x15171a);
       for (const sx of [-1, 1]) {
-        add(sx * .97, 1.46, z - .03, .42, .4, .07, 0x15171a);
-        add(sx * .97, 1.46, z - .07, .46, .03, .02, 0x8f959b); // ケースの縁
-        b.add('paint', P.cyl, M(sx * .97, 1.56, z - .075, 0, .26, .04, .26, Math.PI / 2), 0xdadde1);
-        lit.add('l', P.cyl, M(sx * .97, 1.56, z - .1, 0, .2, .02, .2, Math.PI / 2), 0xffffff);
-        glows.push(new THREE.Vector3(sx * .97, 1.56, z - .25));
-        add(sx * .97, 1.33, z - .075, .3, .1, .03, 0x6e5a30);
-        tl.add('l', P.box, M(sx * .97, 1.33, z - .1, 0, .26, .07, .02), 0xffffff);
+        b.add('paint', P.cyl, M(sx * .2, 3.62, zf - .08, 0, .22, .03, .22, Math.PI / 2), 0xdadde1);
+        lit.add('l', P.cyl, M(sx * .2, 3.62, zf - .1, 0, .17, .02, .17, Math.PI / 2), 0xffffff);
+        glows.push(new THREE.Vector3(sx * .2, 3.62, zf - .25));
       }
-      // 屋根の前端の小さな庇（前面窓の上）
-      add(0, roofTop - .16, zf - .01, 1.9, .04, .05, 0x9ea3a9);
-      led = mergeLed([[.93, 3.29, .66]], z - .01, .22);
+      // 標識灯（列車識別灯）: 下部の左右端に小さな四角い灯具。点灯は makeCar（普通 = 左のみ / 優等 = 両方 / 後尾 = 赤）
+      const mk: [GeoBatch, number][] = [[mkL, 1], [mkR, -1]];
+      for (const [bt, sx] of mk) {
+        add(sx * .98, 1.28, z - .04, .3, .24, .06, 0x15171a);
+        add(sx * .98, 1.28, z - .075, .33, .02, .02, 0x8f959b);
+        bt.add('l', P.box, M(sx * .98, 1.28, z - .075, 0, .2, .16, .02), 0xffffff);
+      }
+      marks = { l: mkL.geometry('l')!, r: mkR.geometry('l')! };
+      // 行先表示器（左窓の上）: 枠・庇・奥行きを付けて1面に種別 + 行先
+      add(.82, 3.28, z - .015, .62, .27, .03, 0x15171a);
+      add(.82, 3.425, z - .03, .66, .03, .06, 0x2a2d31);
+      led = mergeLed([[.82, 3.28, .54]], z - .05, .2);
       // 簡易スカート・連結器・ホース
       add(0, .78, zf + .05, 2.4, .42, .1, 0x8e9399, -.1);
       add(0, .9, zf - .15, .3, .24, .5, 0x22252a);
@@ -235,7 +249,7 @@ export function buildCommuterCar(v: CommuterVariant, kind: CarKind, Lb: number):
     if (kind === 'head') add(0, roofTop + .05, zf + .9, .5, .06, .5, 0x8a8f95);
   }
   if (kind === 'pan') (v === 'new' ? addSingleArm : addLozenge)(b, -hz + 4.0, roofTop - .02);
-  return { shell, face, paint: b.geometry('paint')!, glass: gl.geometry('l') ?? undefined, led, led2, head: lit.geometry('l') ?? undefined, tail: tl.geometry('l') ?? undefined, glows };
+  return { shell, face, paint: b.geometry('paint')!, glass: gl.geometry('l') ?? undefined, led, led2, head: lit.geometry('l') ?? undefined, tail: tl.geometry('l') ?? undefined, marks, glows };
 }
 
 /** 行先 LED 面（[x, y, 幅]）を -Z 向きで */

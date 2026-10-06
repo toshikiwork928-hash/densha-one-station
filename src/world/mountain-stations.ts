@@ -148,12 +148,14 @@ function haltStation(ctx: GameContext, T: MountainTerrain, sta: Station, y: Stat
   P3.box(sc, side * 3.95, wy + 2.75, 1.8, .14, 6.6, ROOF, 0, -side * .12);
   P3.box(sc, side * 4.25, wy + .45, .45, .08, 4.6, 0x7a5a3a); // ベンチ
   // 駅名標（2 枚）・灯具の柱
-  const tex = nameTex(sta, prev, next), mat = new THREE.MeshLambertMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: .05, side: THREE.DoubleSide });
+  // 板の表は線路側へ向ける（stations.ts の buildStation と同じ: 左側のホームは表の右が進行方向＝次の駅、右側は前の駅）
+  const tex = side < 0 ? nameTex(sta, prev, next) : nameTex(sta, next, prev);
+  const mat = new THREE.MeshLambertMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: .05, side: THREE.DoubleSide });
   for (const z of [-len * .3, len * .3]) {
     const s = sc + z, p = P3.pos(s, side * 3.9), t = ctx.track.trackAt(s);
     for (const dz of [-1.5, 1.5]) P3.box(s + dz, side * 3.9, T.trackY(s) + 1.9, .08, 1.6, .08, 0x777d84);
     const m = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 1.0), mat);
-    m.position.set(p.x, T.trackY(s) + 3.0, p.z); m.rotation.y = -t.phi + side * (Math.PI / 2 - .55); ctx.scene.add(m);
+    m.position.set(p.x, T.trackY(s) + 3.0, p.z); m.rotation.y = -t.phi - side * (Math.PI / 2 - .55); ctx.scene.add(m);
   }
   onLight(ctx, f => { mat.emissiveIntensity = .05 + f * .75; });
   for (let s = s0 + 8; s < s1; s += 22) P3.box(s, side * 4.5, T.trackY(s) + 2.6, .12, 3.0, .12, 0x8a9096);

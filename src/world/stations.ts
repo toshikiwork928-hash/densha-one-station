@@ -9,6 +9,7 @@ import { canvasTex } from './canvas-tex';
 import { getTerrain } from './terrain';
 import { buildMountainStations } from './mountain-stations';
 import { T3_GAP, hagoromoSpec } from './hagoromo-branch';
+import { buildIndoorStations } from './indoor-station';
 import { buildElevatedConcourse, buildHeritageFacade, buildCoastalSpecialStations, coastalThirdTracks } from './coastal-stations';
 
 const platMat = new THREE.MeshLambertMaterial({ color: 0xc9c5bc });
@@ -28,8 +29,9 @@ export function person(b: GeoBatch, rnd: () => number, x: number, z: number, ry:
   if (rnd() < .4) b.add('body', P.box, M(x + .28 * Math.cos(ry), legH + .05, z - .28 * Math.sin(ry), ry, .1, .3, .35), [0x222222, 0x6a4a2a, 0xb0a090][Math.floor(rnd() * 3)]); // かばん
 }
 
+/** 駅名標のテクスチャ。左に「← prevName」、右に「nextName →」（板を表から見て）。userData に左右の駅名（点検用） */
 export function nameTex(sta: Station, prevName: string, nextName: string): THREE.CanvasTexture {
-  return canvasTex(1024, 300, (g, w, h) => {
+  const tex = canvasTex(1024, 300, (g, w, h) => {
     g.fillStyle = '#fff'; g.fillRect(0, 0, w, h);
     g.fillStyle = '#e0588c'; g.fillRect(0, 196, w, 22);
     g.fillStyle = '#111'; g.textAlign = 'center'; g.font = `800 112px ${FONT}`; g.fillText(sta.name, w / 2, 130);
@@ -37,6 +39,8 @@ export function nameTex(sta: Station, prevName: string, nextName: string): THREE
     g.font = `600 40px ${FONT}`; g.textAlign = 'left'; g.fillText('← ' + prevName, 30, 268);
     g.textAlign = 'right'; g.fillText(nextName + ' →', w - 30, 268);
   });
+  tex.userData.nameSign = { left: prevName, right: nextName };
+  return tex;
 }
 
 /** lat = ホームに面する線路の横位置（2面4線駅は待避線）、side = ホームの側、minimal = 駅舎・駅前広場を作らない（対向側ホーム） */
@@ -141,7 +145,8 @@ export function buildStation(ctx: GameContext, sta: Station, prevName: string, n
   b.build({ body: bodyMat }, grp);
 
   // 駅名標（ホーム）・駅舎の看板
-  const tex = nameTex(sta, prevName, nextName);
+  // 板の表の右は、左側ホーム（sx = 1）では進行方向（次の駅）、右側ホームでは後ろ（前の駅）を向く
+  const tex = sx > 0 ? nameTex(sta, prevName, nextName) : nameTex(sta, nextName, prevName);
   const signMat = new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: .05 });
   for (const z of signs) {
     const bb = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 1.0), signMat);
@@ -167,7 +172,7 @@ export function buildStation(ctx: GameContext, sta: Station, prevName: string, n
 /** 島式ホーム（幅 PW、両側に線路）。lat = ホーム中心の横位置。駅名標は rev で前後を入れ替え（対向側） */
 const PW0 = 6;
 export function buildIsland(ctx: GameContext, sta: Station, prevName: string, nextName: string, lat: number, PW = PW0,
-  opt: { /** 跨線橋への階段口 */ stairs?: boolean; /** 上屋の長さ（ホーム長に対する割合） */ roof?: number } = {}): THREE.Group {
+  opt: { /** 跨線橋への階段口 */ stairs?: boolean; /** 上屋の長さ（ホーム長に対する割合） */ roof?: number; /** 屋内式の駅: ホーム上屋と柱を作らない（大屋根が覆う。world/indoor-station.ts） */ indoor?: boolean } = {}): THREE.Group {
   const { rng: rnd, track } = ctx;
   const s0 = sta.platform.from, s1 = sta.platform.to;
   const len = s1 - s0, sc = (s0 + s1) / 2, t = track.trackAt(sc);
@@ -183,12 +188,14 @@ export function buildIsland(ctx: GameContext, sta: Station, prevName: string, ne
   }
   // 上屋（中央の柱1列）
   const rl = len * (opt.roof ?? .7);
-  box(0, 4.35, 0, PW - .8, .14, rl, 0x6b7680);
-  box(0, 4.22, 0, PW - 1, .12, rl, 0xdcdcd8);
-  for (const sx of [-1, 1]) box(sx * (PW / 2 - .45), 4.15, 0, .1, .35, rl, 0x6b7680);
-  for (let z = -rl / 2 + 4; z <= rl / 2 - 4; z += 10) {
-    box(0, 2.65, z, .22, 3.1, .22, 0x8a9096);
-    box(0, 4.1, z, PW - 1.2, .16, .14, 0x8a9096);
+  if (!opt.indoor) {
+    box(0, 4.35, 0, PW - .8, .14, rl, 0x6b7680);
+    box(0, 4.22, 0, PW - 1, .12, rl, 0xdcdcd8);
+    for (const sx of [-1, 1]) box(sx * (PW / 2 - .45), 4.15, 0, .1, .35, rl, 0x6b7680);
+    for (let z = -rl / 2 + 4; z <= rl / 2 - 4; z += 10) {
+      box(0, 2.65, z, .22, 3.1, .22, 0x8a9096);
+      box(0, 4.1, z, PW - 1.2, .16, .14, 0x8a9096);
+    }
   }
   // ベンチ（背中合わせ）・自販機・時計
   for (let z = -rl / 2 + 8; z <= rl / 2 - 8; z += 16) for (const sx of [-1, 1]) {
@@ -213,7 +220,8 @@ export function buildIsland(ctx: GameContext, sta: Station, prevName: string, ne
     b.parent = null;
   }
   b.build({ body: bodyMat }, grp);
-  const tex = nameTex(sta, prevName, nextName), tex2 = nameTex(sta, nextName, prevName);
+  // 左（-X）を向く面は表の右が後ろ（前の駅）、右（+X）を向く面は表の右が進行方向（次の駅）
+  const tex = nameTex(sta, nextName, prevName), tex2 = nameTex(sta, prevName, nextName);
   const signMats = [tex, tex2].map(tx => new THREE.MeshLambertMaterial({ map: tx, emissive: 0xffffff, emissiveMap: tx, emissiveIntensity: .05 }));
   for (const z of signs) for (const [k, sx] of [[0, -1], [1, 1]] as const) {
     // 進行方向から読めるよう両面を少し線路側へ向ける（左側の線路 = 下り側の駅名標）
@@ -226,7 +234,7 @@ export function buildIsland(ctx: GameContext, sta: Station, prevName: string, ne
 
 /** 島式駅の駅舎（自線側の最も外の線路 loopLat の外）と跨線橋。centers = 跨線橋が階段でつながる島式ホームの中心の横位置。compact = 駅舎・広場を小さくする（島式1面2線） */
 function buildIslandConcourse(ctx: GameContext, sta: Station, loopLat: number, centers: number[], compact = false): void {
-  if (sta.elevated) { buildElevatedConcourse(ctx, sta, centers, loopLat); return; }
+  if (sta.elevated) { buildElevatedConcourse(ctx, sta, centers, loopLat, { noScreen: sta.indoor }); return; }
   const { track } = ctx;
   const sc = (sta.platform.from + sta.platform.to) / 2, t = track.trackAt(sc);
   const grp = new THREE.Group(); grp.position.copy(track.at(sc, 0, 0)); grp.rotation.y = -t.phi; ctx.scene.add(grp);
@@ -277,9 +285,9 @@ export function buildStations(ctx: GameContext): void {
     if (sta.layout === 'hamadera') {
       const [izumi, sakai] = coastalThirdTracks(ctx.route, sta);
       // 泉大津方面: 本線と副線の間が島式ホーム（2線）。堺方面: 待避線の外側に片面ホーム。両方向で鏡像の同じ駅。
-      buildIsland(ctx, sta, izumi.main === 0 ? prev : next, izumi.main === 0 ? next : prev,
+      buildIsland(ctx, sta, prev, next,
         (izumi.main + izumi.outer) / 2, Math.abs(izumi.outer - izumi.main) - 3.2, { stairs: false });
-      buildStation(ctx, sta, sakai.main === 0 ? prev : next, sakai.main === 0 ? next : prev,
+      buildStation(ctx, sta, prev, next,
         { lat: sakai.outer, side: sakai.outer < sakai.main ? 'L' : 'R', minimal: true });
       return;
     }
@@ -294,8 +302,9 @@ export function buildStations(ctx: GameContext): void {
     if (sta.loop) {
       // 島式2面4線: 自線（本線と待避線の間）と対向線（同）に島式ホーム
       const L1 = Math.max(...ctx.route.tracks), lp = sta.loop.lat;
-      buildIsland(ctx, sta, prev, next, lp / 2);
-      buildIsland(ctx, sta, next, prev, L1 - lp / 2);
+      buildIsland(ctx, sta, prev, next, lp / 2, PW0, { indoor: sta.indoor });
+      // 駅名標の左右は板の向きで決まる（buildIsland / buildStation の中で決める）ので、呼び出しは常に 前の駅・次の駅 の順
+      buildIsland(ctx, sta, prev, next, L1 - lp / 2, PW0, { indoor: sta.indoor });
       buildIslandConcourse(ctx, sta, lp, [lp / 2, L1 - lp / 2]);
       return;
     }
@@ -304,8 +313,8 @@ export function buildStations(ctx: GameContext): void {
       const h = hagoromoSpec(ctx.route);
       if (h) {
         const sc2 = (sta.platform.from + sta.platform.to) / 2, dy2 = T.groundY(sc2) - T.trackY(sc2);
-        buildIsland(ctx, sta, h.mainIsland === 0 ? prev : next, h.mainIsland === 0 ? next : prev, h.island, T3_GAP - 3.2, { roof: .8 });
-        buildStation(ctx, sta, h.mainOuter === 0 ? prev : next, h.mainOuter === 0 ? next : prev, { lat: h.mainOuter, side: h.side < 0 ? 'R' : 'L', minimal: true, elevatedDy: dy2 });
+        buildIsland(ctx, sta, prev, next, h.island, T3_GAP - 3.2, { roof: .8 });
+        buildStation(ctx, sta, prev, next, { lat: h.mainOuter, side: h.side < 0 ? 'R' : 'L', minimal: true, elevatedDy: dy2 });
         buildElevatedConcourse(ctx, sta, [h.island, h.mainOuter - h.side * 4.1], -4.3, { noScreen: true });
         return;
       }
@@ -315,6 +324,7 @@ export function buildStations(ctx: GameContext): void {
     buildStation(ctx, sta, prev, next, { elevatedDy: dy });
     // 相対式ホーム: 対向線側にもホーム（上りの運転で使う）
     const L1 = Math.max(...ctx.route.tracks);
-    if (L1 > 0) buildStation(ctx, sta, next, prev, { lat: L1, side: sta.platform.side === 'L' ? 'R' : 'L', minimal: true, elevatedDy: dy, shift: sta.platformOpp });
+    if (L1 > 0) buildStation(ctx, sta, prev, next, { lat: L1, side: sta.platform.side === 'L' ? 'R' : 'L', minimal: true, elevatedDy: dy, shift: sta.platformOpp });
   });
+  buildIndoorStations(ctx); // 屋内式の駅の大屋根・室内（Station.indoor）
 }

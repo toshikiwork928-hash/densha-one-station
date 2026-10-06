@@ -3,6 +3,8 @@
 // 山岳線（単線）は先の下り勾配の分だけ計画減速度を下げる（抑速ブレーキなしで制限を守る運転）。上り勾配では車両性能で遅くなる
 import { writeFileSync } from 'node:fs';
 import { shiokaze, shiokazeUp } from '../src/route/routes/shiokaze';
+import { kishiwada, kishiwadaUp } from '../src/route/routes/kishiwada';
+import { through, throughUp } from '../src/route/routes/through';
 import { mountain, mountainUp } from '../src/route/routes/mountain';
 import { meetDwell } from '../src/game/meet';
 import { waitDwell } from '../src/game/overtake';
@@ -96,13 +98,45 @@ const body = (r: Record<string, string>) => `{
   limited: ${r.limited},
 }`;
 writeFileSync('src/route/routes/shiokaze-timetable.ts', `// 南海本線の時刻表（scripts/timetable.ts が生成。手で直さない）
-import type { ServiceId, ServiceSpec } from '../types';
+import type { ServiceSpec } from '../types';
 
 /** 下り（桜ヶ丘 → 岬口） */
-export const TT: Record<ServiceId, ServiceSpec['timetable']> = ${body(dn)};
+export const TT: Record<'local' | 'express' | 'limited', ServiceSpec['timetable']> = ${body(dn)};
 
 /** 上り（岬口 → 桜ヶ丘） */
-export const TT_UP: Record<ServiceId, ServiceSpec['timetable']> = ${body(upT)};
+export const TT_UP: Record<'local' | 'express' | 'limited', ServiceSpec['timetable']> = ${body(upT)};
+`);
+
+// 南海本線 泉大津〜岸和田（特急サザンを含む）
+const kDn = table(kishiwada), kUp = table(kishiwadaUp);
+const kBody = (r: Record<string, string>) => `{
+  local: ${r.local},
+  express: ${r.express},
+  limited: ${r.limited},
+  southern: ${r.southern},
+}`;
+writeFileSync('src/route/routes/kishiwada-timetable.ts', `// 南海本線 泉大津〜岸和田の時刻表（scripts/timetable.ts が生成。手で直さない）
+import type { ServiceSpec } from '../types';
+
+type Id = 'local' | 'express' | 'limited' | 'southern';
+/** 下り（泉大津 → 岸和田） */
+export const KT: Record<Id, ServiceSpec['timetable']> = ${kBody(kDn)};
+
+/** 上り（岸和田 → 泉大津） */
+export const KT_UP: Record<Id, ServiceSpec['timetable']> = ${kBody(kUp)};
+`);
+
+// 南海本線 堺〜岸和田（通し）。下り = 堺 → 岸和田（throughUp）、上り = 岸和田 → 堺（through）
+const nDn = table(throughUp), nUp = table(through);
+writeFileSync('src/route/routes/through-timetable.ts', `// 南海本線 堺〜岸和田（通し）の時刻表（scripts/timetable.ts が生成。手で直さない）
+import type { ServiceSpec } from '../types';
+
+type Id = 'local' | 'express' | 'limited' | 'southern';
+/** 下り（堺 → 岸和田） */
+export const NT: Record<Id, ServiceSpec['timetable']> = ${kBody(nDn)};
+
+/** 上り（岸和田 → 堺） */
+export const NT_UP: Record<Id, ServiceSpec['timetable']> = ${kBody(nUp)};
 `);
 
 // --shiokaze-only は南海本線だけ更新。別作業中の山岳線の生成物を触らない。

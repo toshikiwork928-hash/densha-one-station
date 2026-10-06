@@ -162,6 +162,8 @@ export function createState(route: Route, sel?: Selection): GameState {
 
 export function resetState(st: GameState, route: Route): void {
   const sel: Selection = st.sel ?? { stageId: '', mode: 'normal', service: route.services?.find(x => x.id === 'express')?.id ?? route.services?.[0]?.id ?? 'express', vehicles: {} };
+  // 別のコースで選んだ種別がこのコースに無い（例: 泉大津〜岸和田のサザン → 堺〜泉大津）ときは急行、無ければ先頭の種別
+  if (route.services?.length && !route.services.some(x => x.id === sel.service)) sel.service = route.services.find(x => x.id === 'express')?.id ?? route.services[0].id;
   applyVehicles(route, sel.vehicles);
   applyService(route, sel.service); // 停車駅・時刻・編成長を種別に合わせてから区間を決める
   if (!sel.stageId) sel.stageId = stagesOf(route)[0]?.id ?? 'all';

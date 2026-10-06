@@ -11,6 +11,8 @@ import { ChunkedBatch, M, P } from './batch';
 import { cullByDistance } from './cull';
 import { coastalThirdTracks } from './coastal-stations';
 import { towerZones } from './coastal-tower';
+import { twinTowerZones } from './izumiotsu-towers';
+import { seaSideOf } from '../route/service';
 
 /** 景観カテゴリ別のモデル集合 */
 export interface SceneryModels {
@@ -96,7 +98,7 @@ export function buildBackdrop(ctx: GameContext): void {
 
 /** 沿岸市街地の概形。港・海岸線の位置は測量値ではなく、線路から遠いシルエット。 */
 function buildCoastalBackdrop(ctx: GameContext, from: number, to: number, at: (s: number, lat: number, y: number) => THREE.Vector3): void {
-  const seaSide = ctx.route.coastalLandmarks?.find(l => l.kind === 'branch')?.side ?? -1;
+  const seaSide = seaSideOf(ctx.route);
   const positions: number[] = [], indices: number[] = [];
   // 海は線路から900m以遠。近景の道路・住宅・支線を水面で覆わない。
   const step = 240, n = Math.ceil((to - from) / step);
@@ -200,6 +202,9 @@ export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot
   const overpasses = (route.coastalLandmarks ?? []).filter(l => l.kind === 'road-overpass' || l.kind === 'tram-overpass');
   const blockedBuilding = (s: number, half = 0) => overpasses.some(l => Math.abs(s - l.s) < 45 + half);
   const towers = towerZones(route);
+  // 泉大津駅前の2棟のタワーの敷地には、奥の商業ビル・遠景ビルも置かない
+  const twins = twinTowerZones(route);
+  const twinNear = (sd: number, s: number, half: number) => twins.some(t => t.side === sd && s + half > t.from && s - half < t.to);
 
   for (const side of [-1, 1]) {
     // 市街地の奥: 商業ビル・中層ビル
@@ -207,7 +212,7 @@ export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot
       if (!T.isCity(s) || blocked(s)) { s += 10; continue; }
       const mid = rnd() < .4, model = pick(mid ? M.mid : M.city), k = mid ? KIT_SCALE.mid : KIT_SCALE.city;
       const half = Math.max(model.size.x, model.size.z) * k / 2;
-      if (blockedBuilding(s, half)) { s += 10; continue; }
+      if (blockedBuilding(s, half) || twinNear(side, s, half)) { s += 10; continue; }
       if (!level(s, latOf(side, 70 + half))) { s += 10; continue; }
       put(model, s, latOf(side, 70 + half + rnd() * 10), facing(side), k);
       s += half * 2 + 3 + rnd() * 6;
@@ -216,7 +221,8 @@ export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot
     for (let s = TS0; s < TS1 + 400;) {
       if (!nearCity(s, 250) || blocked(s)) { s += 20; continue; }
       const fm = pick(M.far), fl = latOf(side, 100 + rnd() * 140); // 乱数の消費順は従来どおり
-      if (blockedBuilding(s, Math.max(fm.size.x, fm.size.z) * KIT_SCALE.far * 1.5 / 2)) { s += 20; continue; }
+      const fhalf = Math.max(fm.size.x, fm.size.z) * KIT_SCALE.far * 1.5 / 2;
+      if (blockedBuilding(s, fhalf) || twinNear(side, s, fhalf)) { s += 20; continue; }
       if (level(s, fl)) put(fm, s, fl, rnd() * 6, KIT_SCALE.far * (1 + rnd() * .5));
       s += 12 + rnd() * 25;
     }

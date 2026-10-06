@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import { onLight } from './batch';
 import { placeCar } from './emu';
+import { destOf, kindsKey } from '../route/service';
 import { bogieOffset, carLenOf, createTrainSet, setTrainNight, type TrainCar } from './train-models';
 
 export { formation } from './train-models';
@@ -24,12 +25,11 @@ export function createPlayerTrain(ctx: GameContext): PlayerTrain {
     const svc = ctx.service;
     const kind = svc?.kind ?? 'commuter-new', units = svc?.units;
     const n = svc?.cars ?? Math.max(2, Math.round(route.trainLength / carLenOf(kind)));
-    const key = `${kind}:${units?.join('+') ?? n}:${svc?.name ?? ''}`;
+    const key = `${svc ? kindsKey(svc) : kind}:${units?.join('+') ?? n}:${svc?.name ?? ''}`;
     if (key === built) return;
     built = key;
     for (const c of cars) group.remove(c.object);
-    const last = route.stations[route.stations.length - 1]?.name ?? '';
-    cars = createTrainSet(kind, n, ctx.renderer, { dest: last, label: svc?.name, units });
+    cars = createTrainSet(kind, n, ctx.renderer, { dest: destOf(route, svc), label: svc?.name, units, unitKinds: svc?.unitKinds });
     for (const c of cars) group.add(c.object);
   }
   build();

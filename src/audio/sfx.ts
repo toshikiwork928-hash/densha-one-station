@@ -112,12 +112,12 @@ export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
     if (p && !fromDwell) delay = p.station.melody() + .5;
     // 待避から発車するときは「お待たせしました」から（優等列車の通過・待ち合わせを待った駅）
     const ot = ctx.state.overtake;
-    const text = departText(ctx.route, e.index, !!ot && ot.station === e.index && ot.localStopped);
+    const text = departText(ctx.route, e.index, !!ot && ot.station === e.index && ot.localStopped, ctx.service);
     if (text) announce(text, delay);
   });
   events.on('stationApproach', e => {
     if (e.stage !== 'announce') return;
-    announce(approachText(ctx.route, e.index));
+    announce(approachText(ctx.route, e.index, ctx.service));
   });
   events.on('arrive', e => {
     if (e.judgement.kind === 'overrun') return;

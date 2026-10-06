@@ -8,6 +8,7 @@ import type { Route } from '../route/types';
 import { GeoBatch, P, M, onLight } from './batch';
 import { cullByDistance } from './cull';
 import { getTerrain } from './terrain';
+import { twinTowerZones } from './izumiotsu-towers';
 
 type Tower = NonNullable<Route['coastalLandmarks']>[number];
 
@@ -21,7 +22,8 @@ const LINK = { z: 36, u0: 6.4, u1: 14 };
 
 /** 低層棟・タワー周辺には住宅・道路・街路樹を置かない範囲（s）。向きに依らず中心対称。 */
 export function towerZones(route: Route): { side: 1 | -1; from: number; to: number }[] {
-  return (route.coastalLandmarks ?? []).filter(l => l.kind === 'tower').map(l => ({ side: l.side ?? 1, from: l.s - 62, to: l.s + 62 }));
+  const single = (route.coastalLandmarks ?? []).filter(l => l.kind === 'tower').map(l => ({ side: l.side ?? 1, from: l.s - 62, to: l.s + 62 }));
+  return [...single, ...twinTowerZones(route)];
 }
 
 function seeded(seed: number): () => number {

@@ -1,5 +1,5 @@
 // 待避: 普通が2面4線駅の待避線に停車中、後続の優等列車が本線を通過していく（その駅に停車する種別は本線ホームに停車して接続してから先に発車）。
-// 優等列車は普通の停車の約10秒後に着き、出口分岐器を抜けて見えなくなるまで出発信号は停止現示（game/signals.ts が st.overtake を見る）。
+// 優等列車は普通の停車の約10秒後に着き（普通が完全に止まるまでは到着点の手前で待つ）、出口分岐器を抜けて見えなくなるまで出発信号は停止現示（game/signals.ts が st.overtake を見る）。
 // 優等列車は普通が駅に近づく間に後方から追い付く形で現れる（普通が停まる前に本線ホームを通り過ぎないよう間隔を保つ）
 import type { GameContext } from '../core/context';
 import { carLenOf, loopZone, serviceOf, stopOffset } from '../route/service';
@@ -22,6 +22,10 @@ const FOLLOW_GAP = 100;
 const FOLLOW_DECEL = .9;
 /** 普通の停止見込み時間の誤差を見て、この秒数だけ早めに出現させる（間隔を保つので早めても追突しない） */
 const SPAWN_EARLY = 2;
+/** 普通が完全に止まるまで、優等列車は到着点（停止位置・通過は普通の停止位置）のこの秒数手前（巡航速度換算）で待つ。止まってから数秒後に着く */
+const HOLD_LEAD = 6;
+/** 待っていた優等列車が動き出すときの加速度 [m/s²]（巡航速度へ戻るまで） */
+const RESUME_ACCEL = 1.2;
 
 export interface Passer {
   v: number; len: number; stopAt: number | null; back: number;
@@ -130,19 +134,25 @@ export function createOvertake(ctx: GameContext): Overtake {
       if (!o.localStopped && st.train.s < z.inTo + route.trainLength && o.head < tail) {
         vHold = Math.sqrt(2 * FOLLOW_DECEL * Math.max(0, tail - o.head - FOLLOW_GAP));
       }
+      // 普通が完全に止まるまでは、到着点の HOLD_LEAD 秒手前より先へ進まない（ゆっくり止まっても先に着かない）
+      if (!o.localStopped) {
+        const arrive = o.stopAt ?? route.stations[o.station].stopS;
+        vHold = Math.min(vHold, Math.sqrt(2 * FOLLOW_DECEL * Math.max(0, arrive - PASS_KMH / 3.6 * HOLD_LEAD - o.head)));
+      }
+      const vUp = o.v + RESUME_ACCEL * dt; // 抑えた後の再加速
       if (o.stopAt != null) {
         // 停車する優等列車: 停止位置に合わせて減速 → 停車 → 加速
         const vc = PASS_KMH / 3.6;
         if (o.stage === 'cruise' && o.stopAt - o.head <= o.v * o.v / (2 * DECEL)) o.stage = 'brake';
         if (o.stage === 'brake') {
           const rem = Math.max(0, o.stopAt - o.head);
-          o.v = Math.min(Math.sqrt(2 * DECEL * rem), vHold);
+          o.v = Math.min(Math.sqrt(2 * DECEL * rem), vHold, vUp);
           if (rem < .05) { o.head = o.stopAt; o.v = 0; o.stage = 'stopped'; }
         } else if (o.stage === 'stopped') {
           if (o.localStopped && (o.dwellLeft -= dt) <= 0) o.stage = 'accel';
         } else if (o.stage === 'accel') o.v = Math.min(vc, o.v + ACCEL * dt);
-        else o.v = Math.min(vc, vHold);
-      } else o.v = Math.min(PASS_KMH / 3.6, vHold);
+        else o.v = Math.min(vc, vHold, vUp);
+      } else o.v = Math.min(PASS_KMH / 3.6, vHold, vUp);
       o.head += o.v * dt;
       if (!o.cleared && o.head - o.len > z.outTo + CLEAR_DIST) {
         o.cleared = true;

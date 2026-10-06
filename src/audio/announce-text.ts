@@ -8,8 +8,21 @@ export const toKatakana = (s: string): string => s.replace(/[ぁ-ゖ]/g, c => St
 /** 読み上げ用の駅名 */
 export const spoken = (s: Station): string => toKatakana(s.kana ?? s.name);
 
-/** 路線の終点か */
-export const isTerminus = (route: Route, index: number): boolean => index === route.stations.length - 1;
+/** 路線の終点か（列車の本来の行先がコースの終点より先＝サザンの和歌山市など、のときは終点ではない） */
+export const isTerminus = (route: Route, index: number, svc?: ServiceSpec): boolean =>
+  index === route.stations.length - 1 && (!svc?.destination || svc.destination === route.stations[index].name);
+
+/** 読み上げ用の行先（列車の本来の行先、無ければコースの終点） */
+const spokenDest = (route: Route, svc?: ServiceSpec): string =>
+  svc?.destination ? toKatakana(svc.destinationKana ?? svc.destination) : spoken(route.stations[route.stations.length - 1]);
+
+/** 始発駅の発車後の行先案内。サザンは「一部座席指定」、行先のある優等列車は種別も言う */
+function destText(route: Route, svc?: ServiceSpec): string {
+  const dest = spokenDest(route, svc);
+  if (svc?.id === 'southern') return `この電車は、一部座席指定、特急サザン${dest}行きです。`;
+  if (svc?.destination) return `この電車は、${svc.name}、${dest}行きです。`;
+  return `この電車は、${dest}行きです。`;
+}
 
 /** index より後の最初の停車駅 */
 function nextStop(route: Route, index: number): { sta: Station; index: number } | null {
@@ -18,22 +31,22 @@ function nextStop(route: Route, index: number): { sta: Station; index: number } 
 }
 
 /** 発車後の放送。始発駅の発車直後のみ挨拶と行先、待避後の発車は最初に「お待たせしました」 */
-export function departText(route: Route, index: number, afterWait: boolean): string {
+export function departText(route: Route, index: number, afterWait: boolean, svc?: ServiceSpec): string {
   const parts: string[] = [];
   if (afterWait) parts.push('お待たせしました。');
-  if (index === 0) parts.push(`ご乗車ありがとうございます。この電車は、${spoken(route.stations[route.stations.length - 1])}行きです。`);
+  if (index === 0) parts.push(`ご乗車ありがとうございます。${destText(route, svc)}`);
   const nx = nextStop(route, index);
   if (nx) parts.push(nx.index === index + 1 ? `次は、${spoken(nx.sta)}、${spoken(nx.sta)}です。` : `次は、${spoken(nx.sta)}に停まります。`);
   return parts.join('');
 }
 
-/** 駅の手前（800m）の放送。終点の手前は御礼を添える */
-export function approachText(route: Route, index: number): string {
+/** 駅の手前（800m）の放送。終点の手前は御礼を添える。普通が待避する駅では、到着前にも待ち合わせ・通過待ちを案内する */
+export function approachText(route: Route, index: number, svc?: ServiceSpec): string {
   const sta = route.stations[index], side = sta.platform.side === 'L' ? '左' : '右';
   const track = sta.enterLoop && sta.loopTrack ? `${sta.loopTrack}に到着します。` : '';
-  return isTerminus(route, index)
-    ? `本日もご乗車いただきありがとうございました。まもなく終点、${spoken(sta)}、${track}お出口は${side}側です。`
-    : `まもなく、${spoken(sta)}、${track}お出口は${side}側です。`;
+  if (isTerminus(route, index, svc)) return `本日もご乗車いただきありがとうございました。まもなく終点、${spoken(sta)}、${track}お出口は${side}側です。`;
+  const wait = waitPhrase(route, svc, index).replace(/^当駅で/, `${spoken(sta)}で`);
+  return `まもなく、${spoken(sta)}、${track}お出口は${side}側です。${wait}`;
 }
 
 /** 普通がこの駅で優等列車を待つときの放送（待ち合わせ = 優等列車が停車、通過待ち = 通過） */

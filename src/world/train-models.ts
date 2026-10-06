@@ -6,6 +6,7 @@ import { envMap, glowTexture, ledDestTexture, ledTexture, ledTypeTexture, type C
 import { buildCommuterCar, paintCommuterFace, paintCommuterSide, HW, YTOP } from './trains/commuter';
 import { buildLimitedCar, paintLimitedSide, HW_L } from './trains/limited';
 import { build2300Car, paint2300Face, paint2300Side } from './trains/c2300';
+import { buildSouthernCar, ledSouthernTexture, paintSouthernFace, paintSouthernSide } from './trains/southern';
 import { CAR_LEN, carLenOf } from '../route/service';
 
 /** 1両分の生成結果。原点 = 車体中心・レール面高さ、前 = -Z */
@@ -24,6 +25,8 @@ export interface TrainSetOptions {
   label?: string;
   /** 連結するユニット（両数）。例 [4, 2]。未指定は 4両ずつ + 端数（特急形は1ユニット） */
   units?: number[];
+  /** ユニットごとの車種（units と同じ並び）。未指定・不足分は kind。例 サザン = ['southern-10000', 'commuter-old'] */
+  unitKinds?: TrainKind[];
 }
 
 /** 編成を生成（先頭車 index 0、最後尾は逆向きの先頭車） */
@@ -34,6 +37,7 @@ export const TRAIN_KINDS: Record<TrainKind, { label: string; service: string }> 
   'commuter-old': { label: '通勤形（鋼製・貫通扉）', service: '急行' },
   limited: { label: '特急形', service: '特急' },
   'commuter-2300': { label: '山岳線用（18m・2扉・2両ユニット）', service: '各停' },
+  'southern-10000': { label: '特急形（サザン座席指定車・2扉）', service: '特急' },
 };
 
 export { CAR_LEN, carLenOf };
@@ -102,6 +106,15 @@ function kindKit(kind: TrainKind, renderer: THREE.WebGLRenderer): KindKit {
       paint, glass, base: { env: 1.2, paintEnv: 1.2 },
       openMats: [], open: h => openMat(k!, h, () => sheetMat(paintLimitedSide(LB, h, true), env, true, 1.2)),
     };
+  } else if (kind === 'southern-10000') {
+    const paint = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .35, metalness: .5, envMap: env, envMapIntensity: .8 });
+    k = {
+      geo: c => geos.get(c) ?? (geos.set(c, buildSouthernCar(c, LB)), geos.get(c)!),
+      side: { head: sheetMat(paintSouthernSide(LB, true), env, false, .9), mid: sheetMat(paintSouthernSide(LB, false), env, false, .9) },
+      face: sheetMat(paintSouthernFace(), env, false, .9),
+      paint, glass, base: { env: .9, paintEnv: .8 },
+      openMats: [], open: h => openMat(k!, h, () => sheetMat(paintSouthernSide(LB, h, true), env, false, .9)),
+    };
   } else if (kind === 'commuter-2300') {
     const paint = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .5, metalness: .35, envMap: env, envMapIntensity: .6 });
     k = {
@@ -143,6 +156,13 @@ function ledMatPart(part: 'type' | 'dest', label: string, dest: string): THREE.M
   return m;
 }
 
+function ledSouthernMat(label: string, dest: string): THREE.MeshBasicMaterial {
+  const key = `south:${label}|${dest}`;
+  let m = ledMats.get(key);
+  if (!m) { m = new THREE.MeshBasicMaterial({ map: ledSouthernTexture(label, dest), toneMapped: false }); ledMats.set(key, m); }
+  return m;
+}
+
 function ledMat(label: string, dest: string): THREE.MeshBasicMaterial {
   const key = `${label}|${dest}`;
   let m = ledMats.get(key);
@@ -154,7 +174,10 @@ function ledMat(label: string, dest: string): THREE.MeshBasicMaterial {
 type Role = 'front' | 'rear' | 'mid' | 'jointFront' | 'jointRear';
 const blankLed = new THREE.MeshBasicMaterial({ color: 0x060606 });
 
-function makeCar(kit: KindKit, kind: CarKind, role: Role, led: THREE.Material, led2?: THREE.Material): { car: THREE.Group; setDoors: TrainCar['setDoors'] } {
+/** 優等列車（急行・特急・サザン）の表示。標識灯は普通 = 前から見て左のみ、優等 = 両方点灯 */
+const isExpress = (label: string) => /急|特|サザン/.test(label);
+
+function makeCar(kit: KindKit, kind: CarKind, role: Role, led: THREE.Material, led2: THREE.Material | undefined, express: boolean): { car: THREE.Group; setDoors: TrainCar['setDoors'] } {
   const g = kit.geo(kind), car = new THREE.Group(), body = new THREE.Group();
   const closed = kind === 'head' ? kit.side.head : kit.side.mid;
   // 外板は +X 側 / -X 側の2グループ（材質配列 [+X, -X]）。+X = 車の進行方向右。後ろ向きの運転台付き車（body を PI 回転）は左右が入れ替わる
@@ -172,6 +195,12 @@ function makeCar(kit: KindKit, kind: CarKind, role: Role, led: THREE.Material, l
     if (role === 'front' && g.head) body.add(new THREE.Mesh(g.head, shared.headOn));
     if (role !== 'front' && g.head) body.add(new THREE.Mesh(g.head, shared.off!));
     if (role === 'rear' && g.tail) body.add(new THREE.Mesh(g.tail, shared.tailOn));
+    if (g.marks) {
+      // 標識灯: 先頭は左（前から見て +X 側）だけ点灯、優等は両方。最後尾は両方赤。ユニット連結部は消灯
+      const lens = (left: boolean) => role === 'front' ? (left || express ? shared.headOn : shared.off!) : role === 'rear' ? shared.tailOn : shared.off!;
+      body.add(new THREE.Mesh(g.marks.l, lens(true)));
+      body.add(new THREE.Mesh(g.marks.r, lens(false)));
+    }
     if (role === 'front') for (const p of g.glows) {
       const s = new THREE.Sprite(shared.glow); s.position.copy(p); s.scale.setScalar(1.4); s.name = 'glow'; body.add(s);
     }
@@ -195,17 +224,22 @@ function makeCar(kit: KindKit, kind: CarKind, role: Role, led: THREE.Material, l
 }
 
 export const createTrainSet: CreateTrainSet = (kind, cars, renderer, opts = {}) => {
-  const kit = kindKit(kind, renderer), label = opts.label ?? TRAIN_KINDS[kind].service, dest = opts.dest ?? '堺';
-  // 前面の表示器: 8300系（commuter-new）は左に種別・右に行先の2面、それ以外は1面に種別と行先
-  const led = kind === 'commuter-new' ? ledMatPart('type', label, dest) : ledMat(label, dest), led2 = kind === 'commuter-new' ? ledMatPart('dest', label, dest) : undefined;
-  const units = opts.units?.length ? opts.units : defaultUnits(kind, Math.max(1, cars)), len = carLenOf(kind);
+  const label = opts.label ?? TRAIN_KINDS[kind].service, dest = opts.dest ?? '堺';
+  const shown = label === '特急サザン' ? 'サザン' : label, express = isExpress(label);
+  // 前面の表示器: 8300系・2300系は左に種別・右に行先の2面、10000系は赤地の種別と白地の行先の1面、それ以外は1面に種別と行先
+  const leds = (k: TrainKind) => k === 'commuter-new' || k === 'commuter-2300'
+    ? { led: ledMatPart('type', shown, dest), led2: ledMatPart('dest', shown, dest) }
+    : k === 'southern-10000' ? { led: ledSouthernMat(label, dest), led2: undefined } : { led: ledMat(shown, dest), led2: undefined };
+  const units = opts.units?.length ? opts.units : defaultUnits(kind, Math.max(1, cars));
   const out: TrainCar[] = [];
   units.forEach((m, u) => {
+    // ユニットごとの車種（サザンは 10000系 + 7100系）。未指定は編成の kind
+    const uk = opts.unitKinds?.[u] ?? kind, kit = kindKit(uk, renderer), len = carLenOf(uk), { led, led2 } = leds(uk);
     const first = u === 0, last = u === units.length - 1;
     formation(m).forEach((k, i) => {
       const lastCar = i === m - 1;
       const role: Role = i === 0 ? (first ? 'front' : 'jointFront') : lastCar ? (last ? 'rear' : 'jointRear') : 'mid';
-      const c = makeCar(kit, m === 1 ? 'head' : k, role, led, led2);
+      const c = makeCar(kit, m === 1 ? 'head' : k, role, led, led2, express);
       out.push({ object: c.car, length: len, setDoors: c.setDoors });
     });
   });

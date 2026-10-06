@@ -3,7 +3,7 @@ import { notchName } from '../core/config';
 import type { GameContext } from '../core/context';
 import { $, fmtClock } from '../core/dom';
 import { addHistory, getBest, getHistory, resetRecords, saveSelection, selectionForLine, submitScore } from '../game/ranking';
-import { LINES, ROUTES, type LineEntry } from '../route';
+import { LINES, ROUTES, sectionOf, type LineEntry } from '../route';
 import { lineOfRoute } from './lines';
 import type { GameResult } from '../game/scoring';
 import { safetyDeductions } from '../game/scoring';
@@ -21,6 +21,7 @@ const KIND_INFO: Record<TrainKind, { name: string; desc: string }> = {
   'commuter-new': { name: '8300系（新型通勤車）', desc: 'ステンレス・すそ絞り車体・VVVF。加速 3.0km/h/s' },
   'commuter-old': { name: '7100系（旧型通勤車）', desc: '鋼製・直線車体・抵抗制御。加速 2.5km/h/s、高速域は弱め' },
   'commuter-2300': { name: '2300系（山岳線用）', desc: '18m 車体・2両ユニット・VVVF。急勾配・急曲線向け' },
+  'southern-10000': { name: '10000系（サザン座席指定車）', desc: '鋼製・2扉・リクライニング席。7100系と併結の抵抗制御' },
   limited: { name: '50000系（特急車）', desc: '流線形の先頭・定出力域が広く高速が得意' },
 };
 
@@ -88,7 +89,7 @@ export function attachOverlay(ctx: GameContext): void {
       passes.length ? `<b>${passes.join('・')} は通過</b>` : '',
     ].filter(Boolean).join('、');
     const best = getBest(route.id, stage.id, st.sel.mode, st.sel.service);
-    const svc = serviceOf(route, st.sel.service);
+    const svc = serviceOf(route, st.sel.service), section = sectionOf(route.id);
     const svcs = (route.services ?? []).map(v => `<button data-service="${v.id}" class="svc-${v.id} ${v.id === svc?.id ? 'on' : ''}">${v.name}<small>${svcDesc(route, v)}</small></button>`).join('');
     const wait = svc?.waits?.filter(w => w.station > stage.from && w.station < stage.to)
       .map(w => { const p = serviceOf(route, w.passedBy); return `<b>${route.stations[w.station].name}で${p?.name ?? ''}の${p?.stops.includes(w.station) ? '待ち合わせ' : '通過待ち'}</b>（出発信号が進行になってから発車）`; }).join('、') ?? '';
@@ -101,7 +102,8 @@ export function attachOverlay(ctx: GameContext): void {
     <div class="route"><span>${first.name}</span><span class="bar"></span><span>${last.name}</span></div>
     <div class="tabs" role="tablist">${TABS.map(([k, n]) => `<button type="button" role="tab" data-tab="${k}">${n}</button>`).join('')}</div>
     <div class="tabPane" data-pane="stage">
-      <div class="selLbl">方向</div><div class="sel" id="selDir">${line.dirs.map(d => `<button data-dir="${d.id}" class="${d.id === route.id ? 'on' : ''}">${d.label}<small>${d.desc}</small></button>`).join('')}</div>
+      ${line.sections ? `<div class="selLbl">区間</div><div class="sel" id="selSection">${line.sections.map(x => `<button data-section="${x.id}" class="${x.id === section?.id ? 'on' : ''}">${x.name}<small>${x.desc}</small></button>`).join('')}</div>` : ''}
+      <div class="selLbl">方向</div><div class="sel" id="selDir">${(section?.dirs ?? line.dirs).map(d => `<button data-dir="${d.id}" class="${d.id === route.id ? 'on' : ''}">${d.label}<small>${d.desc}</small></button>`).join('')}</div>
       ${svcs ? `<div class="selLbl">種別（Tab）</div><div class="sel" id="selService">${svcs}</div>` : ''}
       <div class="selLbl">ステージ（← →）</div><div class="sel" id="selStage">${stages}</div>
       <div class="selLbl">モード（↑ ↓）</div><div class="sel" id="selMode">${modes}</div>
@@ -143,6 +145,16 @@ export function attachOverlay(ctx: GameContext): void {
       const to = LINES.find(l => l.id === b.dataset.line);
       if (to && to.id !== line.id) switchLine(to);
     });
+    // 区間の切替: 同じ名前の方向（上り/下り）があればそれ、無ければ区間の既定の方向で再読込
+    card.querySelectorAll<HTMLButtonElement>('[data-section]').forEach(b => b.onclick = () => {
+      const to = line.sections?.find(x => x.id === b.dataset.section);
+      if (!to || to.id === section?.id) return;
+      const cur = (section?.dirs ?? line.dirs).find(d => d.id === route.id);
+      const dir = to.dirs.find(d => d.label === cur?.label) ?? to.dirs[0];
+      saveSelection({ ...st.sel, stageId: '', routeId: dir.id });
+      card.innerHTML = `<p class="brief" style="text-align:center">${to.name}を読み込み中…</p>`;
+      location.reload();
+    });
     card.querySelectorAll<HTMLButtonElement>('[data-dir]').forEach(b => b.onclick = () => {
       if (b.dataset.dir === route.id) return;
       // 方向が変わると線路・駅・景観を作り直すので再読込（種別・車両・モードは引き継ぐ）
@@ -171,15 +183,16 @@ export function attachOverlay(ctx: GameContext): void {
   /** 車両タブ: 選択中の種別の車種・両数 */
   function vehiclePane(svc: ServiceSpec | undefined): string {
     if (!svc) return '<p class="sub">この路線は車両を選べません。</p>';
-    const kinds = svc.kindOptions ?? [svc.kind], forms = svc.formationOptions ?? [svc.units];
-    const kb = kinds.map(k => `<button data-kind="${k}" class="vehicle-choice ${k === svc.kind ? 'on' : ''}" aria-pressed="${k === svc.kind}" ${kinds.length < 2 ? 'disabled' : ''}><img class="vehicle-face" data-face-kind="${k}" alt="${KIND_INFO[k].name}の正面" width="64" height="64"><span>${KIND_INFO[k].name}<small>${KIND_INFO[k].desc}</small></span></button>`).join('');
+    const mixed = !svc.kindOptions && svc.unitKinds ? [...new Set(svc.unitKinds)] : undefined; // 車種混成の編成（サザン）は構成する車種を並べる（選択なし）
+    const kinds = svc.kindOptions ?? mixed ?? [svc.kind], forms = svc.formationOptions ?? [svc.units];
+    const kb = kinds.map(k => `<button data-kind="${k}" class="vehicle-choice ${mixed || k === svc.kind ? 'on' : ''}" aria-pressed="${!!mixed || k === svc.kind}" ${kinds.length < 2 || mixed ? 'disabled' : ''}><img class="vehicle-face" data-face-kind="${k}" alt="${KIND_INFO[k].name}の正面" width="64" height="64"><span>${KIND_INFO[k].name}<small>${KIND_INFO[k].desc}</small></span></button>`).join('');
     const formLabel = (u: number[]) => `${carsOfUnits(u)}両${u.length > 1 ? `<small>${unitsLabel(u)}（${u.length}編成を連結）</small>` : ''}`;
     const cb = forms.map(u => `<button data-units="${u.join('+')}" class="${u.join('+') === svc.units.join('+') ? 'on' : ''}" ${forms.length < 2 ? 'disabled' : ''}>${formLabel(u)}</button>`).join('');
-    return `<div class="selLbl"><span class="svcBadge svc-${svc.id}">${svc.name}</span> の車両${kinds.length < 2 ? '（固定）' : ''}</div>
+    return `<div class="selLbl"><span class="svcBadge svc-${svc.id}">${svc.name}</span> の車両${kinds.length < 2 || mixed ? '（固定）' : ''}</div>
       <div class="sel col" id="selKind">${kb}</div>
       <div class="vehicle-preview"></div>
       <div class="selLbl">編成${forms.length < 2 ? '（固定）' : ''}</div><div class="sel" id="selCars">${cb}</div>
-      <p class="sub">${svc.cars}両編成${svc.units.length > 1 ? `（${svc.units.map(n => n + '両').join(' + ')}を連結）` : ''}。駅では「${svc.cars >= 8 ? '6・8' : svc.cars}両」の停止位置目標に先頭を合わせる。</p>`;
+      <p class="sub">${svc.cars}両編成${svc.units.length > 1 ? `（${svc.unitKinds ? svc.units.map((n, i) => `${KIND_INFO[svc.unitKinds![i] ?? svc.kind].name.replace(/（.*/, '')}${n}両`).join(' + ') : svc.units.map(n => n + '両').join(' + ')}を連結）` : ''}。駅では「${svc.cars >= 8 ? '6・8' : svc.cars}両」の停止位置目標に先頭を合わせる。</p>`;
   }
 
   /** 記録タブ: 自己ベスト（種別×区間）と最近のプレイ */

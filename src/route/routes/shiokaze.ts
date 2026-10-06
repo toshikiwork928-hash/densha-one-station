@@ -152,6 +152,8 @@ export const shiokaze: Route = {
     { kind: 'branch', s: stations[4].platform.from, length: 760, side: -1, direction: -1, label: '高師浜線' },
     // 羽衣駅直結のタワー: 泉大津寄りのホーム端（上り線の右側）。direction=1 は +z が s 増加方向。上りでは reverseRoute が反転する。
     { kind: 'tower', s: stations[4].platform.from - 24, side: 1, direction: 1, label: '羽衣駅直結タワー' },
+    // 泉大津駅前の2棟並びのタワーマンション（泉大津〜岸和田 kishiwada.ts と同じ物理位置）。駅中心（110m）から岸和田側（s の負の向き）へ約 135m、内陸（右）。direction = 岸和田側の向き
+    { kind: 'twin-tower', s: 110 - 135, side: 1, direction: -1, label: '泉大津駅前タワー' },
   ],
   // 終着の低速進入 ATS（game/terminal-ats.ts）は無効。普通は堺3番線・泉大津1番線（待避線側）へ入線し、分岐器制限 45km/h で速度を落とす。
   terminalApproach: false,

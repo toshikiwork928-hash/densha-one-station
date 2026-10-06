@@ -95,7 +95,7 @@ export class Sheet {
     const g = this.c; g.strokeStyle = col; g.lineWidth = px; g.beginPath(); g.moveTo(this.X(u0), this.Y(y0)); g.lineTo(this.X(u1), this.Y(y1)); g.stroke();
   }
   text(s: string, u: number, y: number, sizeM: number, col: string, weight = 700) {
-    const g = this.c; g.fillStyle = col; g.font = `${weight} ${Math.round(sizeM * this.H / (this.Y(0) - this.Y(1)))}px ${FONT}`;
+    const g = this.c; g.fillStyle = col; g.font = `${weight} ${Math.round(sizeM * Math.abs(this.Y(0) - this.Y(1)))}px ${FONT}`;
     g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(s, this.X(u), this.Y(y));
   }
   textures(): SheetMaps { return { map: canvasTexture(this.cc, true), emissive: canvasTexture(this.ec, true), rm: canvasTexture(this.rc, false) }; }
@@ -197,7 +197,7 @@ export function capGeo(half: V2[], rg: Ring, ytop: number, hw: number, facing: -
 export function ledTexture(label: string, dest: string): THREE.CanvasTexture {
   const [k, g] = cv(512, 128);
   g.fillStyle = '#0b0b0b'; g.fillRect(0, 0, 512, 128);
-  const col: Record<string, string> = { 普通: '#e8e8e8', 急行: '#ff5a3a', 特急: '#ff4a6a', 準急: '#5ad06a', 快速: '#ff9a2a' };
+  const col: Record<string, string> = { 普通: '#e8e8e8', 急行: '#ff5a3a', 特急: '#ff4a6a', サザン: '#ff3b3b', 準急: '#5ad06a', 快速: '#ff9a2a' };
   const kc = col[label] ?? '#ffb347';
   g.textAlign = 'center'; g.textBaseline = 'middle';
   g.fillStyle = kc; g.font = `800 58px ${FONT}`; g.fillText(label, 78, 66, 140);
@@ -213,7 +213,7 @@ export function ledTexture(label: string, dest: string): THREE.CanvasTexture {
 export function ledTypeTexture(label: string): THREE.CanvasTexture {
   const [k, g] = cv(256, 64);
   g.fillStyle = '#0b0b0b'; g.fillRect(0, 0, 256, 64);
-  const col: Record<string, string> = { 普通: '#e8e8e8', 急行: '#ff5a3a', 特急: '#ff4a6a', 準急: '#5ad06a', 快速: '#ff9a2a' };
+  const col: Record<string, string> = { 普通: '#e8e8e8', 急行: '#ff5a3a', 特急: '#ff4a6a', サザン: '#ff3b3b', 準急: '#5ad06a', 快速: '#ff9a2a' };
   g.textAlign = 'center'; g.textBaseline = 'middle';
   g.fillStyle = col[label] ?? '#ffb347'; g.font = `800 46px ${FONT}`; g.fillText(label, 128, 34, 220);
   g.fillStyle = 'rgba(0,0,0,.45)';
@@ -262,6 +262,8 @@ export interface CarParts {
   led2?: THREE.BufferGeometry;
   head?: THREE.BufferGeometry;
   tail?: THREE.BufferGeometry;
+  /** 標識灯（列車識別灯）のレンズ。l = 前から見て左（+X）、r = 右。先頭は普通 = 左のみ点灯・優等 = 両方、最後尾は両方赤、連結部は消灯（makeCar） */
+  marks?: { l: THREE.BufferGeometry; r: THREE.BufferGeometry };
   /** 前照灯グローの位置 */
   glows: THREE.Vector3[];
 }

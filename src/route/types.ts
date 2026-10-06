@@ -42,6 +42,8 @@ export interface Station {
   elevated?: boolean;
   /** 頭端式（行き止まり）の終端駅。線路はホームの先（下りなら platform.to 側、route.extent の端）で車止めに終わる */
   headEnd?: boolean;
+  /** 屋内式の駅（岸和田）: ホーム全体を屋根と壁で覆い、ホームに入ると外が見えない（駅の前後の開口部だけ）。world が室内として描き、環境光・音をトンネル同様に扱う */
+  indoor?: boolean;
   /** 相対式2面2線で上下のホームを前後にずらす駅（踏切を挟んだ対面ホーム）。対向線側のホームは platform から s 方向へこの距離だけずれる（上下とも同じ符号） */
   platformOpp?: number;
 }
@@ -68,10 +70,11 @@ export interface StationIsland {
 export interface MeetSpec { station: number; kind: TrainKind; cars: number; /** 巡航速度 [km/h] */ kmh: number; label?: string; dest?: string }
 
 /** 運行種別（プレイヤーが選ぶ） */
-export type ServiceId = 'local' | 'express' | 'limited';
+/** southern = 特急サザン（10000系 + 7100系の8両。座席指定車と自由席車の併結） */
+export type ServiceId = 'local' | 'express' | 'limited' | 'southern';
 /** 車両の見た目の種類（world/train-models.ts が生成） */
-/** commuter-2300 = 山岳線用の 2300系（18m 車体・2両ユニット） */
-export type TrainKind = 'commuter-new' | 'commuter-old' | 'limited' | 'commuter-2300';
+/** commuter-2300 = 山岳線用の 2300系（18m 車体・2両ユニット）、southern-10000 = 特急サザンの座席指定車（10000系、4両ユニット） */
+export type TrainKind = 'commuter-new' | 'commuter-old' | 'limited' | 'commuter-2300' | 'southern-10000';
 export interface ServiceSpec {
   id: ServiceId;
   /** 表示名（普通 / 急行 / 特急） */
@@ -80,7 +83,13 @@ export interface ServiceSpec {
   cars: number;
   /** 編成を組むユニット（両数）。4両・2両のユニットを連結する（例: 6両 = [4, 2]、8両 = [4, 4] または [4, 2, 2]） */
   units: number[];
+  /** 先頭車の車種（性能・1両の長さもこれ） */
   kind: TrainKind;
+  /** ユニットごとの車種（units と同じ並び、先頭のユニットから）。未指定なら全ユニット kind。サザン（10000系 + 7100系）のような車種混成の編成用 */
+  unitKinds?: TrainKind[];
+  /** 列車の本来の行先（行先表示・放送）。未指定ならコースの終点駅名。かなは destinationKana */
+  destination?: string;
+  destinationKana?: string;
   /** 停車駅（stations の index）。それ以外は通過 */
   stops: number[];
   /** 停車駅ごとの定刻到着・発車 [s]（stations の index をキー） */
@@ -120,6 +129,9 @@ export interface OncomingSpec {
   lat: number;
   /** 車両の種類（未指定なら world/oncoming.ts が順に 普通/急行/特急 を割り当て） */
   kind?: TrainKind;
+  /** ユニットごとの車種・両数（サザン = ['southern-10000', 'commuter-old'] と [4, 4]）。未指定は kind と cars から従来どおり */
+  unitKinds?: TrainKind[];
+  units?: number[];
   /** 種別表示（普通/急行/特急）と行先 */
   label?: string;
   dest?: string;
@@ -140,11 +152,15 @@ export interface Route {
   /** コース終着駅への接近を連続速度照査（実路線ATSの仕様そのものではない）。南海本線は無効（false）。 */
   terminalApproach?: boolean;
   /** 描画専用の沿岸線ランドマーク。進行反転時は位置・左右・分岐向きを反転する。 */
-  coastalLandmarks?: { kind: 'road-overpass' | 'tram-overpass' | 'steel-bridge' | 'branch' | 'tower'; s: number; length?: number; label?: string; side?: 1 | -1; direction?: 1 | -1 }[];
+  coastalLandmarks?: { kind: 'road-overpass' | 'tram-overpass' | 'steel-bridge' | 'branch' | 'tower' | 'twin-tower'; s: number; length?: number; label?: string; side?: 1 | -1; direction?: 1 | -1;
+    /** 区間データの向きが反転済み（reverseRoute で作った側）。未指定なら route.id の '-up' で判定。通しコース（route/concat.ts）は区間ごとに持ち越す */
+    reversed?: boolean }[];
   id: string;
   name: string;
   /** 路線（線区）の識別子。同じ線区の下り・上りで共通（例 'shiokaze'、'mountain'）。メニューの路線選択に使う */
   lineId?: string;
+  /** 海の側（進行方向に対して。-1 = 左、1 = 右）。未指定なら高架支線の側（従来どおり） */
+  seaSide?: 1 | -1;
   /** 沿線の景観テーマ（既定 'coast' = 南海本線の街並み・海沿い、'mountain' = 山岳線） */
   theme?: 'coast' | 'mountain';
   /** 単線区間（駅の交換設備以外は1線）。true なら route.tracks は自線のみ、行き違いは駅の交換設備で行う */
@@ -179,6 +195,8 @@ export interface Route {
   meets?: MeetSpec[];
   /** 停止位置目標 stopS の基準両数（既定 6）。短い編成は (基準 − 両数) × 1両の長さ / 2 だけ手前に止まる */
   stopBaseCars?: number;
+  /** 先行の普通との時隔 [s] の路線ごとの上書き（待避駅が無く、優等列車が途中で普通に追いつかないように広げる） */
+  precedingHeadway?: Partial<Record<ServiceId, number>>;
   /** 運行種別（未指定なら従来どおり stations の pass/scheduledArrival を使う） */
   services?: ServiceSpec[];
   /** [A] 閉そく信号（自線左側）。aspect は A のロジックが決める */

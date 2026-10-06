@@ -15,6 +15,7 @@ import { buildEnvPanel, refreshEnvPanels, type EnvPanelApi } from './title-ui';
 import { createWindshield } from './windshield';
 import { qualitySpec } from './settings';
 import { beginQualityChange } from '../render/recovery';
+import { seaSideOf } from '../route/service';
 
 export interface EnvSystem {
   get(): EnvSettings;
@@ -28,7 +29,7 @@ export function attachEnvSystem(ctx: GameContext): EnvSystem {
   let settings = loadSettings();
 
   // 既存の背景色は霧色と共有。スカイドームが上に描かれる
-  const branchSide = ctx.route.coastalLandmarks?.find(l => l.kind === 'branch')?.side ?? -1;
+  const branchSide = seaSideOf(ctx.route);
   const coastalEast = ctx.route.coastalLandmarks?.length ? new THREE.Vector2(-branchSide, 0) : undefined;
   const sky = createSkyDome(scene, QUALITY_SPEC[settings.quality].cloudOctaves, ctx.route.theme, coastalEast); // 沿岸は東の低丘だけ、山岳線は従来の稜線
   const precip = createPrecip(scene);
@@ -165,6 +166,7 @@ export function attachEnvSystem(ctx: GameContext): EnvSystem {
   // ---- 毎フレーム ----
   const focus = new THREE.Vector3(), trainVel = new THREE.Vector3(), fogCol = new THREE.Color();
   let tagTimer = 0, fbTimer = 0;
+  const hasIndoor = ctx.route.stations.some(st => st.indoor);
   events.on('frame', ({ dt, time }) => {
     const k = 1 - Math.exp(-dt * 1.6);
     lerpLook(cur, target, k);
@@ -189,7 +191,7 @@ export function attachEnvSystem(ctx: GameContext): EnvSystem {
     const tr = ctx.state.train, tp = track.trackAt(tr.s);
     focus.copy(track.at(tr.s + 35, 0, 0));
     shadows.update(focus, cur.sunDir);
-    lights.update(cur.lamps, Math.max(cur.headlight, tb));
+    lights.update(hasIndoor ? Math.max(cur.lamps, tb) : cur.lamps, Math.max(cur.headlight, tb)); // 屋内式の駅の中はホーム照明を点ける
 
     // 降水（トンネル内は止める）
     trainVel.set(tp.rz, 0, -tp.rx).multiplyScalar(tr.v);

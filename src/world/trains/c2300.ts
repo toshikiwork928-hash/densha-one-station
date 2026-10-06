@@ -123,7 +123,7 @@ export function build2300Car(kind: CarKind, Lb: number): CarParts {
   const roofTop = YTOP_23;
   for (const sx of [-1, 1]) add(sx * (HW_23 - .03), ROOF_Y + .02, 0, .04, .04, Lb - (head ? .5 : 0), 0x8d939a);
   addEndWall(b, hz, YTOP_23, HW_23, 0xb9bec4);
-  let face: THREE.BufferGeometry | undefined, led: THREE.BufferGeometry | undefined;
+  let face: THREE.BufferGeometry | undefined, led: THREE.BufferGeometry | undefined, led2: THREE.BufferGeometry | undefined;
   if (head) {
     face = capGeo(HALF, { z: zf, inset: R }, YTOP_23, HW_23, -1);
     const z = zf - .005;
@@ -140,8 +140,9 @@ export function build2300Car(kind: CarKind, Lb: number): CarParts {
       lit.add('l', P.box, M(sx * 1.08, 1.57, z - .015, 0, .14, .1, .02), 0xffb040); // 標識灯（外側）
       tl.add('l', P.box, M(sx * .88, 1.57, z - .02, 0, .18, .1, .02), 0xffffff); // 尾灯（内側）
     }
-    // 行先 LED（窓まわりの黒の上部、正面から見て左）
-    led = mergeLed([[.87, 3.32, .66]], z - .01, .15);
+    // 行先 LED（窓まわりの黒の上部）: 正面から見て左 = 種別、右 = 行先の2面
+    led = mergeLed([[.86, 3.32, .58]], z - .01, .15);
+    led2 = mergeLed([[-.86, 3.32, .58]], z - .01, .15);
     // スカート（細身・黒灰）・連結器・ホース
     for (const sx of [-1, 1]) b.add('paint', P.box, M(sx * .82, .72, zf - .06, sx * .2, .95, .56, .07, -.18), 0x3a3e44);
     add(0, .5, zf - .08, 1.0, .1, .1, 0x3a3e44, -.18);
@@ -167,5 +168,5 @@ export function build2300Car(kind: CarKind, Lb: number): CarParts {
   add(0, roofTop + .03, 0, .45, .06, Lb - 2.4, 0x868b91); // 屋根上の配線ダクト
   // パンタは全車（連結面寄り）。中間車扱いでも付ける
   addSingleArm(b, hz - 3.2, roofTop - .02);
-  return { shell, face, paint: b.geometry('paint')!, led, head: lit.geometry('l') ?? undefined, tail: tl.geometry('l') ?? undefined, glows };
+  return { shell, face, paint: b.geometry('paint')!, led, led2, head: lit.geometry('l') ?? undefined, tail: tl.geometry('l') ?? undefined, glows };
 }
