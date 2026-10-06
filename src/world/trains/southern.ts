@@ -1,11 +1,13 @@
-// 特急サザンの座席指定車「10000系」（架空塗装）: 鋼製 20m 級・メタリックシルバー・窓下に濃い青の帯と細い橙線
-//  先頭車: 乗務員扉 → 客用の折戸1か所 → 独立した客室窓8枚。青と橙の帯は運転台寄りで斜めに跳ね上がって前面へ回り込む
+// 特急サザンの座席指定車「10000系」（架空塗装）: 鋼製 20m 級・メタリックシルバー。帯の形は 7100系と同じ
+//  （窓上の太い青＋細い橙、窓下の細い青＋橙。先頭車は運転台寄りで窓上の帯が斜めに下がって前面の帯へつながる）
+//  先頭車: 乗務員扉 → 客用の折戸1か所 → 独立した客室窓8枚
 //  中間車: 連続した1枚の横長窓・車端側に小窓2枚・片方の車端寄りに折戸1か所
-//  前面: 貫通型。上半分は黒（縦長の前面窓 + 窓付き貫通扉）、下半分は濃い青 → 太い橙帯 → 白線 → 銀の裾。行先表示器は中央上部の1面、灯具は下部左右の銀枠（1枠に2灯）
+//  前面: 貫通型。上半分は黒（前面窓は貫通扉の横から前面の両端まで延び、角の丸みへ回り込む + 窓付き貫通扉）、
+//  下半分は濃い青 → 太い橙帯 → 白線 → 銀の裾。行先表示器は中央上部の1面、灯具は下部左右の銀枠（1枠に2灯）
 import * as THREE from 'three';
 import { GeoBatch, M, P } from '../batch';
 import {
-  Y0, adder, addEndWall, addSingleArm, addUnderfloor, capGeo, cv, faceSheet, roundRings, shellGeo, sideSheet,
+  Y0, adder, addEndWall, addSingleArm, addUnderfloor, capGeo, cv, faceSheet, roundRings, shellGeo, sideSheet, sweepBand,
   type CarKind, type CarParts, type Ring, type SheetMaps, type V2,
 } from './common';
 import { mergeLed } from './commuter';
@@ -19,26 +21,29 @@ const HALF: V2[] = [[HW_S - .03, Y0], [HW_S, 1.4], ...ROOF];
 const R_S = .38;
 const BLUE = '#1a2f86', ROYAL = '#1f3fae', ORANGE = '#f2895a';
 const WIN: V2 = [2.0, 2.95];
-/** 側面の帯: 下の橙線 / 青 / 上の橙線 */
-const LO: V2 = [1.42, 1.47], BAND: V2 = [1.49, 1.9], UP: V2 = [1.925, 1.96];
+/** 側面の帯（7100系 commuter.ts の old と同じ並び）: 窓上 = 太い青（TOP_BAND）とその下の細い橙（TOP_LINE）、窓下 = 細い青（LOW_BAND）とその下の橙（LOW_LINE） */
+const TOP_BAND: V2 = [3.4, 3.65], TOP_LINE: V2 = [3.26, 3.37], LOW_BAND: V2 = [1.44, 1.53], LOW_LINE: V2 = [1.34, 1.43];
+/** 前面の帯（側面の帯は運転台寄りでここまで下がる）: 青 = 前面の下半分、橙 = その下 */
+const FRONT_BAND: V2 = [1.49, 2.05], FRONT_LINE: V2 = [1.33, 1.49];
+/** 前面窓の上下端（前面と、角の丸みに回り込む部分で共通） */
+const FWIN: V2 = [2.15, 3.1];
 /** 先頭車: 前端から乗務員扉・客用折戸の中心。中間車: 折戸の中心（前端から） */
-const CREW_Z = .62, CREW_W = .62, HEAD_DOOR = 2.5, MID_DOOR = 1.35, DOOR_W = 1.0;
+const CREW_Z = .8, CREW_W = .6, HEAD_DOOR = 2.5, MID_DOOR = 1.35, DOOR_W = 1.0;
 
 /** 側面（head = 先頭車。前端 -Z 側に乗務員扉）。open = 折戸を開けた状態 */
 export function paintSouthernSide(Lb: number, head: boolean, open = false): SheetMaps {
   const s = sideSheet(Lb, YTOP_S), hz = Lb / 2;
   const grd = s.c.createLinearGradient(0, 0, 0, s.H); grd.addColorStop(0, '#dfe2e7'); grd.addColorStop(1, '#bcc1c8');
   s.base(grd, .3, .7);
-  s.rect(-hz - 1, hz + 1, 3.52, YTOP_S + .1, '#c4c8ce', .4, .6); // 屋根
+  s.rect(-hz - 1, hz + 1, 3.7, YTOP_S + .1, '#c4c8ce', .4, .6); // 屋根
   const hband = (b: V2, col: string, z0 = -hz - 1, z1 = hz + 1) => s.rect(z0, z1, b[0], b[1], col, .3, .2);
-  const bands = (z0 = -hz - 1, z1 = hz + 1) => { hband(LO, ORANGE, z0, z1); hband(BAND, BLUE, z0, z1); hband(UP, ORANGE, z0, z1); };
   if (head) {
-    // 運転台寄りで帯が斜め上へ跳ね上がる（青 = 窓下の帯、橙 = その上下の細線）
-    const zs = -hz + 1.65, dz = .9, top = 2.95, zc = zs - dz;
-    s.rect(-hz - 1, hz + 1, LO[0], LO[1], ORANGE, .3, .2);
-    s.poly([[-hz - .1, BAND[0]], [hz + .1, BAND[0]], [hz + .1, BAND[1]], [zs, BAND[1]], [zc, top], [-hz - .1, top]], BLUE, .3, .2);
-    s.poly([[hz + .1, UP[0]], [zs, UP[0]], [zc, top + .025], [-hz - .1, top + .025], [-hz - .1, top + .06], [zc, top + .06], [zs, UP[1]], [hz + .1, UP[1]]], ORANGE, .3, .2);
-  } else bands();
+    // 7100系と同じ: 乗務員扉の後ろで、前面の帯（青・橙）から窓上の帯へ斜めに立ち上がる。窓下の帯は客用扉から後ろ
+    const zs = -hz + CREW_Z + CREW_W / 2 + .06, k = .62;
+    sweepBand(s, Lb, FRONT_LINE, TOP_LINE, zs + .12, k, ORANGE, .3, .2);
+    sweepBand(s, Lb, FRONT_BAND, TOP_BAND, zs, k, BLUE, .3, .2, -.12);
+    hband(LOW_BAND, BLUE, -hz + HEAD_DOOR); hband(LOW_LINE, ORANGE, -hz + HEAD_DOOR);
+  } else { hband(TOP_BAND, BLUE); hband(TOP_LINE, ORANGE); hband(LOW_BAND, BLUE); hband(LOW_LINE, ORANGE); }
   /** 折戸（片引きの2枚折り）: 閉 = 銀の扉に細い窓2枚、開 = 暗い車内 + 戸袋の縁 */
   const fold = (zc: number) => {
     const w = DOOR_W;
@@ -53,29 +58,27 @@ export function paintSouthernSide(Lb: number, head: boolean, open = false): Shee
       s.emit(zc + w / 2 - .12, zc + w / 2, 1.16, 3.05, '#000');
       return;
     }
-    s.rect(zc - w / 2, zc + w / 2, 1.16, 3.05, '#cfd3d9', .3, .65);
-    // 帯は扉の上でも切れずに続く
-    s.rect(zc - w / 2, zc + w / 2, LO[0], LO[1], ORANGE, .3, .2);
-    s.rect(zc - w / 2, zc + w / 2, BAND[0], BAND[1], BLUE, .3, .2);
-    s.rect(zc - w / 2, zc + w / 2, UP[0], UP[1], ORANGE, .3, .2);
+    s.rect(zc - w / 2, zc + w / 2, 1.16, 3.05, '#cfd3d9', .3, .65); // 扉は車体と同じ銀（7100系と同じく窓下の帯は扉で切れる）
     s.rect(zc - .012, zc + .012, 1.16, 3.05, '#6a7078');
     for (const sg of [-1, 1]) s.glass(zc + sg * .24 - .15, zc + sg * .24 + .15, WIN[0], WIN[1], '#5a6067', .05);
   };
   const smallWin = (zc: number, w: number) => s.glass(zc - w / 2, zc + w / 2, WIN[0], WIN[1], '#3f454b', .05);
   if (head) {
-    // 乗務員扉（青）
+    // 前面窓が角の丸み（前端から R_S）へ回り込む: 前面の黒い上半分とガラスを側面の前端にも塗る
+    s.rect(-hz - .1, -hz + R_S + .02, FRONT_BAND[1], 3.5, '#0b0d10', .12, .3);
+    s.glass(-hz - .1, -hz + R_S - .02, FWIN[0], FWIN[1], '', .02, ['#2a3440', '#0e1319']);
+    s.emit(-hz - .1, -hz + R_S + .02, FRONT_BAND[1], 3.5, '#000');
+    // 乗務員扉（銀。帯は扉の上にも描く）
     const cz = -hz + CREW_Z;
     s.rect(cz - CREW_W / 2 - .03, cz + CREW_W / 2 + .03, 1.13, 3.08, '#8f959c', .5, .3);
-    s.rect(cz - CREW_W / 2, cz + CREW_W / 2, 1.16, 3.05, BLUE, .3, .2);
-    s.glass(cz - .2, cz + .2, WIN[0], WIN[1], '#5a6067', .03);
+    s.rect(cz - CREW_W / 2, cz + CREW_W / 2, 1.16, 3.05, '#cfd3d9', .3, .65);
+    s.rect(cz - CREW_W / 2, cz + CREW_W / 2, FRONT_BAND[0], FRONT_BAND[1], BLUE, .3, .2);
+    s.rect(cz - CREW_W / 2, cz + CREW_W / 2, FRONT_LINE[0], FRONT_LINE[1], ORANGE, .3, .2);
+    s.glass(cz - .2, cz + .2, WIN[0] + .15, WIN[1], '#5a6067', .03);
     fold(-hz + HEAD_DOOR);
     // 客室窓 8枚（独立した窓）
     const n = 8, gap = .42, z0 = -hz + HEAD_DOOR + DOOR_W / 2 + .5, z1 = hz - .55, pitch = (z1 - z0 + gap) / n, w = pitch - gap;
     for (let i = 0; i < n; i++) s.glass(z0 + i * pitch, z0 + i * pitch + w, WIN[0], WIN[1], '#3a4046', .07, ['#34414f', '#141b23']);
-    // 架空のロゴ枠（文字なし）: 青い帯の一部
-    const lz = hz - 3.9;
-    s.rect(lz, lz + 2.1, 1.53, 1.86, '#e6eaf0', .35, .1, .06);
-    s.rect(lz + .05, lz + 2.05, 1.565, 1.825, '#2748b8', .3, .2, .05);
   } else {
     fold(-hz + MID_DOOR);
     // 連続した1枚の大きな横長窓（黒い帯状）+ 車端側に小窓2枚
@@ -99,8 +102,8 @@ export function paintSouthernFace(): SheetMaps {
   s.rect(-H, H, 1.33, 1.49, ORANGE, .3, .15);
   s.rect(-H, H, 1.27, 1.31, '#f3f5f8', .3, .1);
   s.rect(-H, H, Y0, 1.25, '#c9cdd3', .35, .7);
-  // 縦長の前面窓（角が丸い・黒っぽいガラス）
-  for (const sg of [-1, 1]) s.glass(sg < 0 ? -.97 : .5, sg < 0 ? -.5 : .97, 2.15, 3.1, '#060708', .09, ['#2a3440', '#0e1319']);
+  // 前面窓: 貫通扉の枠の横から前面の両端まで（シートの端 ±H まで塗り、角の丸みの部分は側面シートが続ける）
+  for (const sg of [-1, 1]) s.glass(sg < 0 ? -H : .5, sg < 0 ? -.5 : H, FWIN[0], FWIN[1], '', .02, ['#2a3440', '#0e1319']);
   // 貫通扉（黒い枠・窓付き・下は青）
   s.rect(-.47, .47, 1.34, 3.12, '#060708', .25, .2, .03);
   s.rect(-.4, .4, 1.4, 3.05, '#17191d', .3, .3, .02);
