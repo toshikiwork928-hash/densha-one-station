@@ -53,6 +53,16 @@ export function buildPrecedingKeys(route: Route, service?: ServiceId): Preceding
       arrT[i] = arr; depT[i] = arr + dw;
     });
   }
+  // 自列車に抜かれる普通は、対象駅の通過予定時刻より60秒前までに到着させる。
+  // 反対種別の待避で普通の時刻が伸びても、目の前の本線上で競合させない。
+  const player = route.services?.find(x => x.id === service);
+  const waits = local?.waits?.filter(w => w.passedBy === service) ?? [];
+  const advance = Math.max(0, ...waits.map(w => (arrT[w.station] ?? 0) - (player?.timetable[w.station]?.arr ?? 0) + 60));
+  if (advance > 0) {
+    for (const key of keys) if (key.t > -1e5) key.t -= advance;
+    for (const i of Object.keys(arrT)) arrT[Number(i)] -= advance;
+    for (const i of Object.keys(depT)) depT[Number(i)] -= advance;
+  }
   // 終着後は先へ抜けて消える
   const last = keys[keys.length - 1];
   keys.push({ t: last.t + 140, s: last.s + 2500 }, { t: 1e6, s: last.s + 2500 });

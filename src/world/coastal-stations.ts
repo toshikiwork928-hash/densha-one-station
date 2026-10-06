@@ -5,16 +5,19 @@ import { GeoBatch, M, P, onLight } from './batch';
 import { canvasTex } from './canvas-tex';
 import { cullByDistance } from './cull';
 import { getTerrain } from './terrain';
+import { loopShape, loopZone } from '../route/service';
 
-/** 海浜公園の描画専用第3線。床版・架線・建築限界検査も同じ中心線を使う。 */
+/** 海浜公園の泉大津方面待避線。両方向で同じ物理3線を床版・架線・検査に共有する。 */
 export function coastalThirdTrack(route: Route, sta: Station) {
   if (sta.layout !== 'hamadera') return undefined;
-  const reverse = route.id.endsWith('-up'), main = reverse ? Math.max(...route.tracks) : Math.min(...route.tracks);
-  const outer = main + (reverse ? 9.2 : -9.2), from = sta.platform.from - 90, to = sta.platform.to + 90;
-  return { main, outer, from, to, lat: (s: number) => {
-    const t = Math.min(1, Math.max(0, Math.min((s - from) / 90, (to - s) / 90)));
-    return main + (outer - main) * t * t * (3 - 2 * t);
-  } };
+  const reverse = route.id.endsWith('-up'), main = reverse ? Math.min(...route.tracks) : Math.max(...route.tracks);
+  const outer = main + (reverse ? -9.2 : 9.2);
+  // 桜ヶ丘方面 loopZone の前後非対称な余白（入口10m、出口70m）を岬口方面では鏡像にする。
+  const z = reverse ? loopZone({ ...sta, loop: sta.loop ?? { lat: -9.2, turnoutLength: 90, turnoutLimitKmh: 45 } })! : {
+    inFrom: sta.platform.from - 160, inTo: sta.platform.from - 70,
+    outFrom: sta.platform.to + 10, outTo: sta.platform.to + 100, lat: 9.2, limit: 45,
+  };
+  return { main, outer, from: z.inFrom, to: z.outTo, lat: (s: number) => main + (outer - main) * loopShape(z, s) };
 }
 
 /** 高架島式駅の地上改札・駅床・ホーム支持。寸法は実測ではなく構内形式の近似。 */
@@ -73,7 +76,7 @@ export function buildHeritageFacade(ctx: GameContext, sta: Station): void {
   ctx.scene.add(group); cullByDistance(ctx, group, 1000);
 }
 
-/** 描画専用の支線ホーム・第3線。プレイヤーの進路や信号には含めない。 */
+/** 支線ホームと海浜公園の第3線。第3線は桜ヶ丘方面の普通の待避にも使う。 */
 export function buildCoastalSpecialStations(ctx: GameContext, sta: Station): void {
   if (sta.layout !== 'hagoromo' && sta.layout !== 'hamadera') return;
   const sc = (sta.platform.from + sta.platform.to) / 2, len = sta.platform.to - sta.platform.from;
@@ -137,20 +140,18 @@ export function buildCoastalSpecialStations(ctx: GameContext, sta: Station): voi
       for (let q = s; q < z; q += 1) strip(point(q, position(q) - 1, .19), point(q, position(q) + 1, .19), .14, .12, 0x5b554a);
     }
     const outerSide = outer < main ? -1 : 1;
-    for (let s = sta.platform.from - 10; s <= sta.platform.to + 10; s += 25) {
-      const t = ctx.track.trackAt(s), p = point(s, outer + outerSide * 2.5, 0);
+    for (let s = third.from + 5; s < third.to; s += 25) {
+      const lat = position(s), t = ctx.track.trackAt(s), p = point(s, lat + outerSide * 2.5, 0);
       wb.add('body', P.boxB, M(p.x, p.y, p.z, -t.phi, .16, 6.9, .16), 0x8c9691);
-      const arm = point(s, outer + outerSide * 1.15, 6.4);
+      const arm = point(s, lat + outerSide * 1.15, 6.4);
       wb.add('body', P.box, M(arm.x, arm.y, arm.z, -t.phi, 2.8, .12, .12), 0x8c9691);
-      strip(point(s, outer, 5.72), point(Math.min(sta.platform.to + 10, s + 25), outer, 5.72), .03, .03, 0x68716a);
+      const end = Math.min(third.to, s + 25);
+      strip(point(s, lat, 5.72), point(end, position(end), 5.72), .03, .03, 0x68716a);
     }
     const trackGroup = new THREE.Group(); trackGroup.name = 'coastal-third-track';
     wb.build({ body: new THREE.MeshLambertMaterial({ vertexColors: true }) }, trackGroup);
     ctx.scene.add(trackGroup); cullByDistance(ctx, trackGroup, 1000);
-    const center = (main + outer) / 2;
-    box(center, .55, 0, Math.abs(outer - main) - 3.2, 1.1, len, 0xc9c5bc);
-    box(outer - outerSide * 1.9, 1.115, 0, .3, .025, len, 0xe5bf31);
-    box(center, 4.5, 0, 4.4, .14, len * .62, 0x63716d);
+    // ホームは stations.ts で島式1面＋相対式1面として一度だけ作る。
   }
   b.build({ body: new THREE.MeshLambertMaterial({ vertexColors: true }) }, group);
   ctx.scene.add(group); cullByDistance(ctx, group, 1000);

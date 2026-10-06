@@ -8,7 +8,7 @@ import { GeoBatch, M, P, onLight } from './batch';
 import { canvasTex } from './canvas-tex';
 import { getTerrain } from './terrain';
 import { buildMountainStations } from './mountain-stations';
-import { buildElevatedConcourse, buildHeritageFacade, buildCoastalSpecialStations } from './coastal-stations';
+import { buildElevatedConcourse, buildHeritageFacade, buildCoastalSpecialStations, coastalThirdTrack } from './coastal-stations';
 
 const platMat = new THREE.MeshLambertMaterial({ color: 0xc9c5bc });
 const bodyMat = new THREE.MeshLambertMaterial({ vertexColors: true });
@@ -275,6 +275,16 @@ export function buildStations(ctx: GameContext): void {
     const next = st[i + 1]?.name ?? ctx.route.nextName ?? '';
     if (sta.layout === 'hamadera') buildHeritageFacade(ctx, sta);
     buildCoastalSpecialStations(ctx, sta);
+    if (sta.layout === 'hamadera') {
+      const third = coastalThirdTrack(ctx.route, sta)!;
+      // 桜ヶ丘方面だけ島式2線、反対方向は相対式1線。両方向で鏡像の同じ駅。
+      buildIsland(ctx, sta, third.main === 0 ? prev : next, third.main === 0 ? next : prev,
+        (third.main + third.outer) / 2, Math.abs(third.outer - third.main) - 3.2, { stairs: false });
+      const other = ctx.route.tracks.find(l => l !== third.main)!;
+      buildStation(ctx, sta, other === 0 ? prev : next, other === 0 ? next : prev,
+        { lat: other, side: other < third.main ? 'L' : 'R', minimal: true });
+      return;
+    }
     if (sta.island) {
       // 島式1面2線: 下り線と上り線の間に島式ホーム1本（線路は駅の前後で両側へ開く）。幅 = 線間 + 2×spread − 3.4（ホーム端から線路中心 1.7m）
       const L0 = Math.min(...ctx.route.tracks), L1 = Math.max(...ctx.route.tracks), sp = sta.island.spread;
@@ -293,7 +303,7 @@ export function buildStations(ctx: GameContext): void {
     }
     const sc = (sta.platform.from + sta.platform.to) / 2;
     const dy = sta.elevated ? T.groundY(sc) - T.trackY(sc) : 0;
-    const special = sta.layout === 'hamadera' || sta.layout === 'hagoromo';
+    const special = sta.layout === 'hagoromo';
     buildStation(ctx, sta, prev, next, { elevatedDy: dy, minimal: special });
     if (sta.layout === 'hagoromo') buildElevatedConcourse(ctx, sta, [-4.1, 8.1], 0);
     // 相対式ホーム: 対向線側にもホーム（上りの運転で使う）

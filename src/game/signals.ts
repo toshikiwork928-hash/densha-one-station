@@ -63,7 +63,7 @@ export function createSignalSystem(ctx: GameContext, forceEB: () => void, meet?:
   function refreshAspects() {
     // 自列車が通過する待避線駅では、自列車が抜けるまで先行を待避線に止めておく
     for (const h of holds) {
-      if (st.train.s < h.zone.outTo && st.t - precDelay > h.depT) precDelay = st.t - h.depT;
+      if (st.train.s - route.trainLength < h.zone.outTo && st.t - precDelay > h.depT) precDelay = st.t - h.depT;
     }
     st.precedingS = precedingHead(plan.keys, st.t - precDelay);
     const trains: [number, number][] = [...precTrains(), [st.train.s, route.trainLength]];
@@ -185,7 +185,8 @@ export function createSignalSystem(ctx: GameContext, forceEB: () => void, meet?:
         const precStops = local ? local.stops.includes(k) : true;
         if (precStops) precZones.push(z);
         // 自列車が本線を通る（通過・本線ホームに停車）駅では、先行の普通を待避線に止めて先に行かせない
-        if (!sta.enterLoop && precStops && plan.depT[k] != null) {
+        const scheduledWait = local?.waits?.some(w => w.station === k && w.passedBy === st.sel.service);
+        if (!sta.enterLoop && precStops && scheduledWait && plan.depT[k] != null) {
           const passT = sta.scheduledArrival + (sta.pass ? 0 : sta.dwell ?? 20);
           holds.push({ zone: z, depT: plan.depT[k], passT });
           // 待避駅より先から始めるステージでは、定刻どおり待避した後の位置にしておく

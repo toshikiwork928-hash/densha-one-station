@@ -43,9 +43,9 @@ export function createOvertaking(ctx: GameContext): void {
   /** 本線のホーム側 / 待避線のホーム側（島式: 本線は進行方向左、待避線は右。自列車が待避線に入る駅は platform.side が 'R' に変わる） */
   const mainSide = (i: number): 'L' | 'R' => { const sta = route.stations[i]; return sta.enterLoop ? (sta.platform.side === 'R' ? 'L' : 'R') : sta.platform.side; };
   const flip = (x: 'L' | 'R'): 'L' | 'R' => x === 'L' ? 'R' : 'L';
-  let hornDone = false, wasNear = false, lastH = 0;
+  let hornDone = false, wasNear = false, lastH = 0, lastStation = -1;
 
-  events.on('reset', () => { hornDone = false; });
+  events.on('reset', () => { hornDone = false; lastStation = -1; });
   events.on('frame', () => {
     for (const v of cache.values()) v.group.visible = false;
     const playing = st.state === 'run' || st.state === 'dwell' || st.state === 'result';
@@ -55,6 +55,7 @@ export function createOvertaking(ctx: GameContext): void {
     // 後続の通過列車（本線 = 横位置 0）
     const o = st.overtake;
     if (o && o.phase === 'run') {
+      if (lastStation !== o.station) { lastStation = o.station; hornDone = false; }
       const svc = serviceOf(route, o.passedBy)!;
       const v = view(svc.kind, svc.units, svc.name);
       v.group.visible = true;
@@ -73,7 +74,7 @@ export function createOvertaking(ctx: GameContext): void {
     if (!local || st.sel.service === 'local') return;
     const h = st.precedingS, prevH = lastH;
     lastH = h;
-    const z = zones.find(q => !route.stations[q.index].enterLoop && local.stops.includes(q.index) && h > q.inFrom && h < q.outTo + 400);
+    const z = zones.find(q => !route.stations[q.index].enterLoop && local.waits?.some(w => w.station === q.index && w.passedBy === st.sel.service) && h > q.inFrom && h < q.outTo + 400);
     if (!z || Math.abs(h - ps) > 1500) return;
     const v = view(local.kind, local.units, local.name);
     v.group.visible = true;

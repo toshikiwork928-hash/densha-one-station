@@ -10,7 +10,7 @@ export const TT: Record<ServiceId, ServiceSpec['timetable']> = {
 
 /** 上り（岬口 → 桜ヶ丘） */
 export const TT_UP: Record<ServiceId, ServiceSpec['timetable']> = {
-  local: { 0: { arr: 0, dep: 0 }, 1: { arr: 105, dep: 130 }, 2: { arr: 230, dep: 255 }, 3: { arr: 340, dep: 365 }, 4: { arr: 445, dep: 470 }, 5: { arr: 545, dep: 570 }, 6: { arr: 685, dep: 750 }, 7: { arr: 850, dep: 875 }, 8: { arr: 955, dep: 980 }, 9: { arr: 1095 } },
+  local: { 0: { arr: 0, dep: 0 }, 1: { arr: 105, dep: 130 }, 2: { arr: 230, dep: 255 }, 3: { arr: 340, dep: 365 }, 4: { arr: 450, dep: 515 }, 5: { arr: 595, dep: 620 }, 6: { arr: 735, dep: 800 }, 7: { arr: 900, dep: 925 }, 8: { arr: 1005, dep: 1030 }, 9: { arr: 1145 } },
   express: { 0: { arr: 0, dep: 0 }, 1: { arr: 85 }, 2: { arr: 145 }, 3: { arr: 190 }, 4: { arr: 235 }, 5: { arr: 290, dep: 315 }, 6: { arr: 415 }, 7: { arr: 465 }, 8: { arr: 510 }, 9: { arr: 615 } },
   limited: { 0: { arr: 0, dep: 0 }, 1: { arr: 75 }, 2: { arr: 130 }, 3: { arr: 170 }, 4: { arr: 215 }, 5: { arr: 245 }, 6: { arr: 315 }, 7: { arr: 360 }, 8: { arr: 405 }, 9: { arr: 510 } },
 };

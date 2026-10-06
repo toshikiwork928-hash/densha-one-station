@@ -98,7 +98,7 @@ export const shiokaze: Route = {
       id: 'local', name: '普通', cars: 4, units: [4], kind: 'commuter-new',
       kindOptions: ['commuter-new', 'commuter-old'], formationOptions: [[4], [4, 2]],
       lineLimit: 90, useLoop: true, stops: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], timetable: TT.local,
-      waits: [{ station: 3, passedBy: 'express' }],
+      waits: [{ station: 3, passedBy: 'limited' }],
     },
     {
       id: 'express', name: '急行', cars: 6, units: [4, 2], kind: 'commuter-old',
@@ -144,3 +144,16 @@ export const shiokazeUp: Route = reverseRoute(shiokaze, {
   id: 'shiokaze-up', name: '汐風線 岬口 → 桜ヶ丘', timetable: TT_UP,
   oncomingStops: STOP_SCENES, signs: approachSigns,
 });
+
+// 桜ヶ丘方面のみ海浜公園の3線目で急行を待避。4線駅の白浜台では両方向とも特急を待つ。
+const park = shiokazeUp.stations.findIndex(s => s.name === '海浜公園');
+const bay = shiokazeUp.stations.findIndex(s => s.name === '白浜台');
+shiokazeUp.stations[park].loop = { ...LOOP };
+shiokazeUp.services!.find(s => s.id === 'local')!.waits = [
+  { station: park, passedBy: 'express' }, { station: bay, passedBy: 'limited' },
+];
+// 逆転後に追加した分岐器より手前へ場内信号を移す。
+const parkZone = loopZone(shiokazeUp.stations[park])!;
+shiokazeUp.signals = shiokazeUp.signals!.filter(s => s.s < parkZone.inFrom - 60 || s.s > parkZone.inTo);
+shiokazeUp.signals.push({ id: `entry-${park}`, s: parkZone.inFrom - 60 });
+shiokazeUp.signals!.sort((a, b) => a.s - b.s);

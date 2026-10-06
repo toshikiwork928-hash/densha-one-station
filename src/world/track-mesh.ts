@@ -51,7 +51,8 @@ export interface LoopTrack { z: LoopZone & { index: number }; base: number; off:
 /** 待避線の一覧（自線側は左、対向線側は右へ鏡像） */
 export function loopTracks(ctx: GameContext): LoopTrack[] {
   const L0 = Math.min(...ctx.route.tracks), L1 = Math.max(...ctx.route.tracks);
-  return loopZones(ctx.route).flatMap(z => [
+  // 海浜公園は一方向だけの第3線。両側へ鏡像の4線を生成しない。
+  return loopZones(ctx.route).filter(z => ctx.route.stations[z.index].layout !== 'hamadera').flatMap(z => [
     { z, base: L0, off: z.lat },
     ...(L1 !== L0 ? [{ z, base: L1, off: -z.lat }] : []),
   ].map(o => ({ ...o, lat: (s: number) => o.base + o.off * loopShape(z, s) })));
