@@ -12,8 +12,8 @@ export const NT: Record<Id, ServiceSpec['timetable']> = {
 
 /** 上り（岸和田 → 堺） */
 export const NT_UP: Record<Id, ServiceSpec['timetable']> = {
-  local: { 0: { arr: 0, dep: 0 }, 1: { arr: 90, dep: 115 }, 2: { arr: 210, dep: 235 }, 3: { arr: 335, dep: 360 }, 4: { arr: 485, dep: 510 }, 5: { arr: 595, dep: 620 }, 6: { arr: 700, dep: 725 }, 7: { arr: 820, dep: 885 }, 8: { arr: 1005, dep: 1030 }, 9: { arr: 1105, dep: 1170 }, 10: { arr: 1255, dep: 1280 }, 11: { arr: 1370, dep: 1395 }, 12: { arr: 1495, dep: 1520 }, 13: { arr: 1625 } },
-  express: { 0: { arr: 0, dep: 0 }, 1: { arr: 70 }, 2: { arr: 145, dep: 170 }, 3: { arr: 255 }, 4: { arr: 355, dep: 380 }, 5: { arr: 445 }, 6: { arr: 490 }, 7: { arr: 540 }, 8: { arr: 635, dep: 660 }, 9: { arr: 715 }, 10: { arr: 755 }, 11: { arr: 810 }, 12: { arr: 870 }, 13: { arr: 945 } },
-  limited: { 0: { arr: 0, dep: 0 }, 1: { arr: 65 }, 2: { arr: 115 }, 3: { arr: 170 }, 4: { arr: 250 }, 5: { arr: 285 }, 6: { arr: 325 }, 7: { arr: 370 }, 8: { arr: 445 }, 9: { arr: 485 }, 10: { arr: 520 }, 11: { arr: 575 }, 12: { arr: 630 }, 13: { arr: 705 } },
-  southern: { 0: { arr: 0, dep: 0 }, 1: { arr: 70 }, 2: { arr: 120 }, 3: { arr: 175 }, 4: { arr: 255 }, 5: { arr: 290 }, 6: { arr: 335 }, 7: { arr: 380 }, 8: { arr: 455 }, 9: { arr: 495 }, 10: { arr: 530 }, 11: { arr: 585 }, 12: { arr: 645 }, 13: { arr: 720 } },
+  local: { 0: { arr: 0, dep: 0 }, 1: { arr: 90, dep: 115 }, 2: { arr: 210, dep: 235 }, 3: { arr: 335, dep: 360 }, 4: { arr: 485, dep: 510 }, 5: { arr: 595, dep: 620 }, 6: { arr: 700, dep: 725 }, 7: { arr: 820, dep: 885 }, 8: { arr: 1005, dep: 1030 }, 9: { arr: 1105, dep: 1170 }, 10: { arr: 1255, dep: 1280 }, 11: { arr: 1370, dep: 1395 }, 12: { arr: 1495, dep: 1520 }, 13: { arr: 1620 } },
+  express: { 0: { arr: 0, dep: 0 }, 1: { arr: 70 }, 2: { arr: 145, dep: 170 }, 3: { arr: 255 }, 4: { arr: 355, dep: 380 }, 5: { arr: 445 }, 6: { arr: 490 }, 7: { arr: 540 }, 8: { arr: 635, dep: 660 }, 9: { arr: 715 }, 10: { arr: 755 }, 11: { arr: 810 }, 12: { arr: 870 }, 13: { arr: 955 } },
+  limited: { 0: { arr: 0, dep: 0 }, 1: { arr: 65 }, 2: { arr: 115 }, 3: { arr: 170 }, 4: { arr: 250 }, 5: { arr: 285 }, 6: { arr: 325 }, 7: { arr: 370 }, 8: { arr: 445 }, 9: { arr: 485 }, 10: { arr: 520 }, 11: { arr: 575 }, 12: { arr: 630 }, 13: { arr: 710 } },
+  southern: { 0: { arr: 0, dep: 0 }, 1: { arr: 70 }, 2: { arr: 120 }, 3: { arr: 175 }, 4: { arr: 255 }, 5: { arr: 290 }, 6: { arr: 335 }, 7: { arr: 380 }, 8: { arr: 455 }, 9: { arr: 495 }, 10: { arr: 530 }, 11: { arr: 585 }, 12: { arr: 645 }, 13: { arr: 725 } },
 };

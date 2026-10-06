@@ -46,6 +46,14 @@ export function hagoromoSpec(route: Route): HagoromoSpec | null {
 
 const smooth = (x: number) => { const t = Math.max(0, Math.min(1, x)); return t * t * (3 - 2 * t); };
 
+/** 支線が本線から離れる所で、本線の床版の縁が3番線の外側から本線側へ戻る区間（s の範囲）。ここの本線側の高欄は3番線を横切る壁になるので描かない（支線の高欄は coastal-landmarks.ts の branch が PARAPET から描く） */
+export function hagoromoParapetGap(route: Route): { side: -1 | 1; from: number; to: number } | null {
+  const h = hagoromoSpec(route);
+  if (!h) return null;
+  const a = h.sOf(DIVERGE_D + 55), b = h.sOf(DIVERGE_D + 85);
+  return { side: h.side, from: Math.min(a, b), to: Math.max(a, b) };
+}
+
 /** 島式ホーム側の床版外縁の横位置（本線高架の床版を広げる量）。広げる必要がなければ null */
 export function hagoromoDeckEdge(route: Route, s: number): { side: -1 | 1; lat: number } | null {
   const h = hagoromoSpec(route);

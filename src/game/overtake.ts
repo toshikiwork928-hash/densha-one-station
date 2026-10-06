@@ -139,6 +139,8 @@ export function createOvertake(ctx: GameContext): Overtake {
         const arrive = o.stopAt ?? route.stations[o.station].stopS;
         vHold = Math.min(vHold, Math.sqrt(2 * FOLLOW_DECEL * Math.max(0, arrive - PASS_KMH / 3.6 * HOLD_LEAD - o.head)));
       }
+      // 普通の最後尾が入口分岐器を抜けて待避線に入り切るまでは（手前で止まった場合も）、分岐器の手前で待つ
+      if (tail < z.inTo + 2) vHold = Math.min(vHold, Math.sqrt(2 * FOLLOW_DECEL * Math.max(0, z.inFrom - 30 - o.head)));
       const vUp = o.v + RESUME_ACCEL * dt; // 抑えた後の再加速
       if (o.stopAt != null) {
         // 停車する優等列車: 停止位置に合わせて減速 → 停車 → 加速

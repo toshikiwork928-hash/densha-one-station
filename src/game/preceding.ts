@@ -70,7 +70,8 @@ export function buildPrecedingKeys(route: Route, service?: ServiceId): Preceding
   }
   // 終着後は先へ抜けて消える。終着駅の待避線に入る普通（南海本線）はそのまま待避線に留まる（本線の閉そくを占有しない）
   const last = keys[keys.length - 1];
-  if (local?.useLoop && route.stations[route.stations.length - 1]?.loop) keys.push({ t: 1e6, s: last.s });
+  const lastSta = route.stations[route.stations.length - 1];
+  if (local?.useLoop && lastSta?.loop && !lastSta.loopPriority) keys.push({ t: 1e6, s: last.s });
   else keys.push({ t: last.t + 140, s: last.s + 2500 }, { t: 1e6, s: last.s + 2500 });
   return { keys, depT, arrT };
 }

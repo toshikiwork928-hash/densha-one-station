@@ -28,7 +28,8 @@ const stations: Station[] = names.map(([name, kana], i) => {
     elevated: ![2, 5, 6].includes(i),
     layout: [0, 3, 9].includes(i) ? 'loop' : i === 4 ? 'hagoromo' : i === 5 ? 'hamadera' : 'relative',
     ...([0, 3, 9].includes(i) ? { loop: { ...LOOP } } : {}),
-    ...(i === 0 ? { loopTrack: '1番線' } : i === 9 ? { loopTrack: '3番線' } : {}),
+    // 堺（上り）は下り側の1・2番線と同じ並び: 普通は本線側の3番線、急行・特急は外側の4番線（左右対称の2面4線ではない）
+    ...(i === 0 ? { loopTrack: '1番線' } : i === 9 ? { loopTrack: '4番線', mainTrack: '3番線', loopPriority: true } : {}),
     ...(i === 5 ? { loop: { ...PARK_LOOP } } : {}),
     // 湊は島式1面2線（高架）。線路は駅の前後でホームの両側へ開く。
     ...(i === 8 ? { island: { spread: 3.2, length: 100 } } : {}),
@@ -47,9 +48,10 @@ const STOP_SCENES: StopScene[] = [
   { station: 3, kind: 'commuter-new', cars: 4, kmh: 74, loop: true },
   { station: 3, kind: 'limited', cars: 6, kmh: 90, follow: true, through: true },
   { station: 4, kind: 'commuter-old', cars: 6, kmh: 74 },
-  { station: 6, kind: 'commuter-old', cars: 6, kmh: 74 },
+  // 7100系の既定の種別表示は「急行」なので、急行が停まらない駅（諏訪ノ森・湊）では普通と明示する
+  { station: 6, kind: 'commuter-old', cars: 6, kmh: 74, label: '普通' },
   { station: 7, kind: 'commuter-new', cars: 4, kmh: 74 },
-  { station: 8, kind: 'commuter-old', cars: 6, kmh: 74 },
+  { station: 8, kind: 'commuter-old', cars: 6, kmh: 74, label: '普通' },
 ];
 
 /** 出発・場内信号と駅間の閉そく信号。駅の分岐器・島式駅の S字区間から離して配置。 */
@@ -146,7 +148,7 @@ export const shiokaze: Route = {
   coastalLandmarks: [
     { kind: 'road-overpass', s: 1720, length: 155, side: -1, label: '湾岸バイパス' },
     { kind: 'road-overpass', s: 2440, length: 155, side: 1, label: '臨海連絡道路' },
-    { kind: 'tram-overpass', s: 6310, length: 125, label: '阪堺電軌' },
+    { kind: 'tram-overpass', s: 6310, length: 864, label: '阪堺電軌' },
     { kind: 'steel-bridge', s: 7465, length: 150, label: '石津川橋梁' },
     // 羽衣の3番線（高師浜線）。s = 島式ホームの泉大津側の端。3線並行のまま約300m高架を進み、のち海側（西）へ離れる（配線略図 011_03）。
     { kind: 'branch', s: stations[4].platform.from, length: 760, side: -1, direction: -1, label: '高師浜線' },
@@ -159,10 +161,17 @@ export const shiokaze: Route = {
   terminalApproach: false,
 };
 
+// 浜寺公園の泉大津方面（対向側）は本線と副線の島式ホーム。ラッシュ時に足す対向の普通が本線に停まると、後ろから来る対向列車が本線で詰まって追突しそうに見える。
+// 出現しない印の編成を置いて、ラッシュ用の自動追加を避ける（上りの浜寺公園と同じ扱い）
+shiokaze.oncoming.push({ spawnAt: 1e9, startS: 0, cars: 4, carLen: 20, gap: .8, kmh: 74, lat: 4, kind: 'commuter-new', stop: { station: 5, headS: 0 } });
+
 export const shiokazeUp: Route = reverseRoute(shiokaze, {
   id: 'shiokaze-up', name: '南海本線 堺 → 泉大津', timetable: TT_UP,
   oncomingStops: STOP_SCENES, signs: approachSigns,
 });
+
+// 堺（下りの始発）は通常の並び（普通 = 外側の1番線、優等 = 本線の2番線）
+{ const sakai = shiokazeUp.stations[0]; delete sakai.loopPriority; sakai.loopTrack = '1番線'; sakai.mainTrack = undefined; }
 
 // 諏訪ノ森: reverseRoute が写した下りの自線側ホームは、上りでは対向線側のホーム。自線側（泉大津方面）ホームは対向線側より OPP_SHIFT だけ手前にある。
 {

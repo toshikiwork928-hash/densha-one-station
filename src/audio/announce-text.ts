@@ -43,7 +43,7 @@ export function departText(route: Route, index: number, afterWait: boolean, svc?
 /** 駅の手前（800m）の放送。終点の手前は御礼を添える。普通が待避する駅では、到着前にも待ち合わせ・通過待ちを案内する */
 export function approachText(route: Route, index: number, svc?: ServiceSpec): string {
   const sta = route.stations[index], side = sta.platform.side === 'L' ? '左' : '右';
-  const track = sta.enterLoop && sta.loopTrack ? `${sta.loopTrack}に到着します。` : '';
+  const tr = sta.enterLoop ? sta.loopTrack : sta.mainTrack, track = tr ? `${tr}に到着します。` : '';
   if (isTerminus(route, index, svc)) return `本日もご乗車いただきありがとうございました。まもなく終点、${spoken(sta)}、${track}お出口は${side}側です。`;
   const wait = waitPhrase(route, svc, index).replace(/^当駅で/, `${spoken(sta)}で`);
   return `まもなく、${spoken(sta)}、${track}お出口は${side}側です。${wait}`;
@@ -67,6 +67,6 @@ export function connectPhrase(route: Route, svc: ServiceSpec | undefined, index:
 /** 到着後の放送（駅名のあとに待避・乗り換え案内） */
 export function arriveText(route: Route, svc: ServiceSpec | undefined, index: number): string {
   const sta = route.stations[index];
-  const track = sta.enterLoop && sta.loopTrack ? `${sta.loopTrack}、` : '';
+  const tr = sta.enterLoop ? sta.loopTrack : sta.mainTrack, track = tr ? `${tr}、` : '';
   return `${spoken(sta)}、${track}${spoken(sta)}です。${waitPhrase(route, svc, index)}${connectPhrase(route, svc, index)}`;
 }

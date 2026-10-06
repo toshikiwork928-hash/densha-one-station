@@ -138,9 +138,9 @@ export function createSignalSystem(ctx: GameContext, forceEB: () => void, meet?:
       }
       // 終着の待避線入線（普通）: 番線と分岐器制限を予告する（終着 ATS は無効でも出す）
       const tsta = route.stations[st.target];
-      if (st.target === route.stations.length - 1 && tsta?.enterLoop && tsta.loopTrack && tsta.stopS - s <= 1200 && !st.flags.terminalTrackNotice) {
+      if (st.target === route.stations.length - 1 && tsta && (tsta.enterLoop ? tsta.loopTrack : tsta.mainTrack) && tsta.stopS - s <= 1200 && !st.flags.terminalTrackNotice) {
         st.flags.terminalTrackNotice = true;
-        banner(`${tsta.name} ${tsta.loopTrack}へ入線。分岐器制限 ${tsta.loop?.turnoutLimitKmh ?? 45}km/h`, 6);
+        banner(tsta.enterLoop ? `${tsta.name} ${tsta.loopTrack}へ入線。分岐器制限 ${tsta.loop?.turnoutLimitKmh ?? 45}km/h` : `${tsta.name} ${tsta.mainTrack}へ入線`, 6);
       }
       if (st.train.v * 3.6 > terminalLimit + 3) brake(`終着進入 ${Math.floor(terminalLimit)}km/h 照査超過`);
       // 停止現示への接近

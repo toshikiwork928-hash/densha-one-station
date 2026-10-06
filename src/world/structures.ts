@@ -9,7 +9,7 @@ import { TUNNEL_CENTER, TUNNEL_HALF, TUNNEL_WALL_H, getTerrain, gridAlong } from
 import { BAND_CULL, isMountain } from './mountain-terrain';
 import { cullByDistance } from './cull';
 import { buildMountainSpan, buildRockSheds } from './mountain-structures';
-import { hagoromoDeckEdge } from './hagoromo-branch';
+import { hagoromoDeckEdge, hagoromoParapetGap } from './hagoromo-branch';
 
 const concrete = new THREE.MeshLambertMaterial({ color: 0xc4c0b6, side: THREE.DoubleSide });
 
@@ -106,12 +106,16 @@ export function buildStructures(ctx: GameContext): void {
       scene.add(extrudeFn(track, s => { const [a, b] = bounds(s); return [[a, .02], [a, -1.1], [b, -1.1], [b, .02]]; }, st.from, st.to, 2, concrete));
       scene.add(extrudeFn(track, s => { const [a, b] = bounds(s); return [[a + .25, .02], [b - .25, .02]]; }, st.from, st.to, 2, concrete));
       const wallH = bridge ? .55 : 1.15;
+      const gap = hagoromoParapetGap(route);
       for (const side of [-1, 1]) {
-        scene.add(extrudeFn(track, s => {
+        // 羽衣の支線が離れる所は、支線側の高欄を切る（床版の縁が3番線を横切って戻る区間）
+        const spans = gap && gap.side === side && gap.from < st.to && gap.to > st.from
+          ? [[st.from, gap.from], [gap.to, st.to]].filter(([a, b]) => b - a > 1) : [[st.from, st.to]];
+        for (const [s0, s1] of spans) scene.add(extrudeFn(track, s => {
           const [left, right] = bounds(s), a = side < 0 ? left : right - .25, b = a + .25;
           const h = wallH;
           return [[a, .02], [a, h], [b, h], [b, .02]];
-        }, st.from, st.to, 2, concrete));
+        }, s0, s1, 2, concrete));
       }
       // 橋台（盛土との境）
       for (const s of [st.from, st.to]) {

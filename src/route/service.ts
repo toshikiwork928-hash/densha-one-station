@@ -199,7 +199,8 @@ export function applyService(route: Route, id: ServiceId | undefined): ServiceSp
     sta.scheduledArrival = tt?.arr ?? base.scheduledArrival;
     sta.dwell = tt?.dep != null ? tt.dep - tt.arr : undefined;
     sta.stopMarkerCars = svc.cars;
-    sta.enterLoop = !!sta.loop && !sta.pass && !!svc.useLoop;
+    // 普通（useLoop）は待避線へ。loopPriority の駅（堺の上り）は逆で、優等列車が外側の線、普通が本線側
+    sta.enterLoop = !!sta.loop && !sta.pass && (sta.loopPriority ? !svc.useLoop : !!svc.useLoop);
     // 2面4線: 待避線に入ると右側、本線は左側がホーム。島式1面2線: 自線の右側
     // 待避線のホームが外側にある駅（浜寺公園の堺方面）は、待避線に入ると待避線の外（左）がホーム
     sta.platform.side = sta.island ? 'R' : sta.loop ? (sta.enterLoop ? (sta.loop.outside ? (sta.loop.lat < 0 ? 'L' : 'R') : 'R') : 'L') : base.platform.side;
