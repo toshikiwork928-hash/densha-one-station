@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import { getTerrain } from '../world/terrain';
+import { coastalThirdTracks } from '../world/coastal-stations';
 
 export interface NightLights {
   /** lamps: 0..1 照明の点灯度, head: 0..1 前照灯 */
@@ -59,16 +60,22 @@ export function createNightLights(ctx: GameContext): NightLights {
     const L1 = Math.max(...route.tracks), lp = sta.loop?.lat ?? 0;
     // [蛍光灯の横位置, 照らす床の横位置[]]。島式ホームは中央に蛍光灯、床は両側
     const L0 = Math.min(...route.tracks), mid = (L0 + L1) / 2;
-    const sides: [number, number[]][] = sta.island
+    const sides: [number, number[], number?][] = sta.layout === 'hamadera'
+      // 浜寺公園: 泉大津方面の島式（本線と副線の間）と、堺方面の副線の外側の片面ホーム
+      ? coastalThirdTracks(route, sta).map((t): [number, number[]] => {
+        if (t.island) { const c = (t.main + t.outer) / 2; return [c, [c - 1.5, c + 1.5]]; }
+        const c = t.outer + (t.outer < t.main ? -4.1 : 4.1); return [c, [c + (t.outer < t.main ? 0.5 : -0.5)]];
+      })
+      : sta.island
       ? [[mid, [mid - 1.5, mid + 1.5]]] // 島式1面2線: 線間の島式ホーム1本
       : sta.loop
       ? [[lp / 2, [lp / 2 - 1.5, lp / 2 + 1.5]], [L1 - lp / 2, [L1 - lp / 2 - 1.5, L1 - lp / 2 + 1.5]]]
-      : [[-4.2, [-3.6]], [L1 + 4.2, [L1 + 3.6]]]; // 相対式: 両側
+      : [[-4.2, [-3.6]], [L1 + 4.2, [L1 + 3.6], sta.platformOpp]]; // 相対式: 両側（対向側は踏切を挟んでずれることがある）
     const rl = len * .6, sc = (s0 + s1) / 2;
-    sides.forEach(([lat, floors], k) => {
+    sides.forEach(([lat, floors, shift], k) => {
       for (let z = -rl / 2 + 3; z <= rl / 2 - 3; z += 8) {
-        bulbs.push({ s: sc + z, lat, y: 4.1, w: .18, d: 1.6 });
-        for (const f of floors) pools.push({ s: sc + z, lat: f, y: 1.13, r: 7 });
+        bulbs.push({ s: sc + (shift ?? 0) + z, lat, y: 4.1, w: .18, d: 1.6 });
+        for (const f of floors) pools.push({ s: sc + (shift ?? 0) + z, lat: f, y: 1.13, r: 7 });
       }
       if (k === 0) platSpots.push({ sc, pos: [-.22, .22].map(q => track.at(sc + rl * q, lat, 3.9)) });
     });

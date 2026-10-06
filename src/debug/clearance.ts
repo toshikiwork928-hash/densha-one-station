@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import { trackLines } from '../route/service';
 import { loopTracks } from '../world/track-mesh';
-import { coastalThirdTrack } from '../world/coastal-stations';
+import { coastalThirdTracks } from '../world/coastal-stations';
 
 const RAIL = .38;
 const SKIP = /^(playerTrain|oncoming-|overtake-|cab3d|ground|ground-far|ground-grid|backdrop|coastal-sea|coastal-distant-hills|river|catenary-wire)/;
@@ -20,8 +20,7 @@ export function runningLines(ctx: GameContext): Line[] {
   for (const o of loopTracks(ctx)) out.push({ id: `loop-${route.stations[o.z.index].name}-${o.base}`, from: o.z.inFrom, to: o.z.outTo, lat: o.lat });
   // 描画と共通の海浜公園第3線。
   for (const sta of route.stations) {
-    const third = coastalThirdTrack(route, sta);
-    if (third) out.push({ id: `third-${sta.name}`, from: third.from, to: third.to, lat: third.lat });
+    coastalThirdTracks(route, sta).forEach((third, k) => out.push({ id: `third-${sta.name}-${k}`, from: third.from, to: third.to, lat: third.lat }));
   }
   return out;
 }

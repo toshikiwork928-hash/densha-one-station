@@ -195,7 +195,7 @@ function makeCar(kit: KindKit, kind: CarKind, role: Role, led: THREE.Material, l
 }
 
 export const createTrainSet: CreateTrainSet = (kind, cars, renderer, opts = {}) => {
-  const kit = kindKit(kind, renderer), label = opts.label ?? TRAIN_KINDS[kind].service, dest = opts.dest ?? '海浜公園';
+  const kit = kindKit(kind, renderer), label = opts.label ?? TRAIN_KINDS[kind].service, dest = opts.dest ?? '堺';
   // 前面の表示器: 8300系（commuter-new）は左に種別・右に行先の2面、それ以外は1面に種別と行先
   const led = kind === 'commuter-new' ? ledMatPart('type', label, dest) : ledMat(label, dest), led2 = kind === 'commuter-new' ? ledMatPart('dest', label, dest) : undefined;
   const units = opts.units?.length ? opts.units : defaultUnits(kind, Math.max(1, cars)), len = carLenOf(kind);

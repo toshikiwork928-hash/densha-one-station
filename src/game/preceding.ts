@@ -57,7 +57,11 @@ export function buildPrecedingKeys(route: Route, service?: ServiceId): Preceding
   // 反対種別の待避で普通の時刻が伸びても、目の前の本線上で競合させない。
   const player = route.services?.find(x => x.id === service);
   const waits = local?.waits?.filter(w => w.passedBy === service) ?? [];
-  const advance = Math.max(0, ...waits.map(w => (arrT[w.station] ?? 0) - (player?.timetable[w.station]?.arr ?? 0) + 60));
+  // 待避駅より手前で自列車も停車する駅（普通と同じ本線に停車）では、普通の発車を自列車の到着より80秒以上前にして、目の前で詰まらせない。
+  const lastWait = Math.max(-1, ...waits.map(w => w.station));
+  const clearAdvance = Math.max(0, ...(player?.stops ?? []).filter(i => i > 0 && i < lastWait && local?.stops.includes(i) && depT[i] != null && player?.timetable[i])
+    .map(i => depT[i] - (player!.timetable[i].arr - 80)));
+  const advance = Math.max(clearAdvance, ...waits.map(w => (arrT[w.station] ?? 0) - (player?.timetable[w.station]?.arr ?? 0) + 60), 0);
   if (advance > 0) {
     for (const key of keys) if (key.t > -1e5) key.t -= advance;
     for (const i of Object.keys(arrT)) arrT[Number(i)] -= advance;

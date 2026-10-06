@@ -8,7 +8,7 @@ import { GeoBatch, M, P, onLight } from './batch';
 import { canvasTex } from './canvas-tex';
 import { getTerrain } from './terrain';
 import { buildMountainStations } from './mountain-stations';
-import { buildElevatedConcourse, buildHeritageFacade, buildCoastalSpecialStations, coastalThirdTrack } from './coastal-stations';
+import { buildElevatedConcourse, buildHeritageFacade, buildCoastalSpecialStations, coastalThirdTracks } from './coastal-stations';
 
 const platMat = new THREE.MeshLambertMaterial({ color: 0xc9c5bc });
 const bodyMat = new THREE.MeshLambertMaterial({ vertexColors: true });
@@ -39,11 +39,11 @@ export function nameTex(sta: Station, prevName: string, nextName: string): THREE
 }
 
 /** lat = ホームに面する線路の横位置（2面4線駅は待避線）、side = ホームの側、minimal = 駅舎・駅前広場を作らない（対向側ホーム） */
-export interface StationBuildOpts { lat?: number; side?: 'L' | 'R'; minimal?: boolean; /** 高架駅: 地面までの高さ（負）。駅舎・広場を地面に置き、ホームを高架上に */ elevatedDy?: number }
+export interface StationBuildOpts { /** ホームを s 方向へずらす [m]（踏切を挟んだ対面ホーム） */ shift?: number; lat?: number; side?: 'L' | 'R'; minimal?: boolean; /** 高架駅: 地面までの高さ（負）。駅舎・広場を地面に置き、ホームを高架上に */ elevatedDy?: number }
 
 export function buildStation(ctx: GameContext, sta: Station, prevName: string, nextName: string, opt: StationBuildOpts = {}): THREE.Group {
   const { rng: rnd, track } = ctx;
-  const s0 = sta.platform.from, s1 = sta.platform.to;
+  const s0 = sta.platform.from + (opt.shift ?? 0), s1 = sta.platform.to + (opt.shift ?? 0);
   const len = s1 - s0, sc = (s0 + s1) / 2, t = track.trackAt(sc);
   // 右側ホームは左右反転（x と向きを反転）
   const sx = (opt.side ?? sta.platform.side) === 'L' ? 1 : -1;
@@ -66,8 +66,7 @@ export function buildStation(ctx: GameContext, sta: Station, prevName: string, n
     box(-4.3, 4.1, z, 4.2, .16, .14, 0x8a9096);
   }
   // 柵（ホーム裏側）
-  const thirdLineSide = sta.layout === 'hamadera' && (opt.lat ?? 0) === (ctx.route.id.endsWith('-up') ? 4 : 0);
-  if (!thirdLineSide) {
+  {
     const branchSide = ctx.route.coastalLandmarks?.find(q => q.kind === 'branch')?.side ?? -1;
     const stairOpening = sta.layout === 'hagoromo' && Math.sign(X(-6.55)) === branchSide ? len * .2 + 9.6 : undefined;
     for (let z = -len / 2; z <= len / 2; z += 2.5) if (stairOpening === undefined || Math.abs(z - stairOpening) > 1.2) box(-6.55, 1.75, z, .06, 1.3, .06, 0x8a9096);
@@ -276,13 +275,12 @@ export function buildStations(ctx: GameContext): void {
     if (sta.layout === 'hamadera') buildHeritageFacade(ctx, sta);
     buildCoastalSpecialStations(ctx, sta);
     if (sta.layout === 'hamadera') {
-      const third = coastalThirdTrack(ctx.route, sta)!;
-      // 桜ヶ丘方面だけ島式2線、反対方向は相対式1線。両方向で鏡像の同じ駅。
-      buildIsland(ctx, sta, third.main === 0 ? prev : next, third.main === 0 ? next : prev,
-        (third.main + third.outer) / 2, Math.abs(third.outer - third.main) - 3.2, { stairs: false });
-      const other = ctx.route.tracks.find(l => l !== third.main)!;
-      buildStation(ctx, sta, other === 0 ? prev : next, other === 0 ? next : prev,
-        { lat: other, side: other < third.main ? 'L' : 'R', minimal: true });
+      const [izumi, sakai] = coastalThirdTracks(ctx.route, sta);
+      // 泉大津方面: 本線と副線の間が島式ホーム（2線）。堺方面: 待避線の外側に片面ホーム。両方向で鏡像の同じ駅。
+      buildIsland(ctx, sta, izumi.main === 0 ? prev : next, izumi.main === 0 ? next : prev,
+        (izumi.main + izumi.outer) / 2, Math.abs(izumi.outer - izumi.main) - 3.2, { stairs: false });
+      buildStation(ctx, sta, sakai.main === 0 ? prev : next, sakai.main === 0 ? next : prev,
+        { lat: sakai.outer, side: sakai.outer < sakai.main ? 'L' : 'R', minimal: true });
       return;
     }
     if (sta.island) {
@@ -308,6 +306,6 @@ export function buildStations(ctx: GameContext): void {
     if (sta.layout === 'hagoromo') buildElevatedConcourse(ctx, sta, [-4.1, 8.1], 0);
     // 相対式ホーム: 対向線側にもホーム（上りの運転で使う）
     const L1 = Math.max(...ctx.route.tracks);
-    if (L1 > 0) buildStation(ctx, sta, next, prev, { lat: L1, side: sta.platform.side === 'L' ? 'R' : 'L', minimal: true, elevatedDy: dy });
+    if (L1 > 0) buildStation(ctx, sta, next, prev, { lat: L1, side: sta.platform.side === 'L' ? 'R' : 'L', minimal: true, elevatedDy: dy, shift: sta.platformOpp });
   });
 }

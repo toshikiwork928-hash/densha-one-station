@@ -193,7 +193,8 @@ export function applyService(route: Route, id: ServiceId | undefined): ServiceSp
     sta.stopMarkerCars = svc.cars;
     sta.enterLoop = !!sta.loop && !sta.pass && !!svc.useLoop;
     // 2面4線: 待避線に入ると右側、本線は左側がホーム。島式1面2線: 自線の右側
-    sta.platform.side = sta.island ? 'R' : sta.loop ? (sta.enterLoop ? 'R' : 'L') : base.platform.side;
+    // 待避線のホームが外側にある駅（浜寺公園の堺方面）は、待避線に入ると待避線の外（左）がホーム
+    sta.platform.side = sta.island ? 'R' : sta.loop ? (sta.enterLoop ? (sta.loop.outside ? (sta.loop.lat < 0 ? 'L' : 'R') : 'R') : 'L') : base.platform.side;
   });
   // 曲線制限の解除位置は編成長に合わせる（元データは base.trainLength 分を含む）
   const lim: SpeedLimit[] = b.limits.map(L => ({ ...L, to: L.to - b.trainLength + len }));

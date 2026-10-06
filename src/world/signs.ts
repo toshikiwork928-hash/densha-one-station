@@ -6,7 +6,7 @@ import { limitTex, postMat, textBoard } from './canvas-tex';
 import { cullByDistance } from './cull';
 import { trackLines } from '../route/service';
 import { loopTracks } from './track-mesh';
-import { coastalThirdTrack } from './coastal-stations';
+import { coastalThirdTracks } from './coastal-stations';
 
 export function addSign(ctx: GameContext, tex: THREE.Texture, s: number, lat: number, w: number, h: number, y: number, yaw = 0, parent: THREE.Object3D = ctx.scene): THREE.Group {
   const t = ctx.track.trackAt(s), grp = new THREE.Group();
@@ -53,7 +53,7 @@ function define(sg: Sign, lat0: number, parent: THREE.Object3D): Def {
 function place(ctx: GameContext, defs: Def[], base: (d: Def) => number): void {
   const placed: { s: number; lat: number; w: number }[] = [];
   const rails = trackLines(ctx.route), loops = loopTracks(ctx);
-  const thirds = ctx.route.stations.flatMap(st => { const t = coastalThirdTrack(ctx.route, st); return t ? [t] : []; });
+  const thirds = ctx.route.stations.flatMap(st => coastalThirdTracks(ctx.route, st));
   for (const d of [...defs].sort((a, b) => a.pri - b.pri || a.s - b.s)) {
     const dir = d.lat >= base(d) ? 1 : -1;
     let lat = d.lat;

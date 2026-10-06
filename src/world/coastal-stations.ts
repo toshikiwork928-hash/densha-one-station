@@ -7,17 +7,39 @@ import { cullByDistance } from './cull';
 import { getTerrain } from './terrain';
 import { loopShape, loopZone } from '../route/service';
 
-/** 海浜公園の泉大津方面待避線。両方向で同じ物理3線を床版・架線・検査に共有する。 */
-export function coastalThirdTrack(route: Route, sta: Station) {
-  if (sta.layout !== 'hamadera') return undefined;
-  const reverse = route.id.endsWith('-up'), main = reverse ? Math.min(...route.tracks) : Math.max(...route.tracks);
-  const outer = main + (reverse ? -9.2 : 9.2);
-  // 桜ヶ丘方面 loopZone の前後非対称な余白（入口10m、出口70m）を岬口方面では鏡像にする。
-  const z = reverse ? loopZone({ ...sta, loop: sta.loop ?? { lat: -9.2, turnoutLength: 90, turnoutLimitKmh: 45 } })! : {
-    inFrom: sta.platform.from - 160, inTo: sta.platform.from - 70,
-    outFrom: sta.platform.to + 10, outTo: sta.platform.to + 100, lat: 9.2, limit: 45,
+/** 浜寺公園の物理的な副線（両方向で同じ2本）。泉大津方面は島式ホームを挟む外側線、堺方面は本線の外側に寄り添う待避線でホームはその外側。 */
+export interface CoastalThird {
+  main: number; outer: number; from: number; to: number; lat(s: number): number;
+  /** 外側（outer の向き）に張り出すホーム・架線柱までの距離（線路中心から） */
+  reach: number;
+  /** true = 泉大津方面（本線との間が島式ホーム）、false = 堺方面（ホームは待避線の外側） */
+  island: boolean;
+}
+/** 泉大津方面副線の本線からの距離（島式ホームを挟む） */
+export const IZUMI_SIDING_LAT = 9.2;
+/** 堺方面待避線の本線からの距離（本線の隣、ホームは外側） */
+export const SAKAI_SIDING_LAT = 4;
+const TURNOUT = 90;
+
+/** 浜寺公園の副線。route の走行側（先頭が通る側）の副線は loopZone と同じ余白（入口10m、出口70m）、反対側は鏡像（入口70m、出口10m）で、
+ *  どちらの向きから見ても同じ物理配置になる。床版・架線・検査・描画で共有する。 */
+export function coastalThirdTracks(route: Route, sta: Station): CoastalThird[] {
+  if (sta.layout !== 'hamadera') return [];
+  const reverse = route.id.endsWith('-up'), lo = Math.min(...route.tracks), hi = Math.max(...route.tracks);
+  const zone = (own: boolean) => own ? loopZone({ ...sta, loop: { lat: 0, turnoutLength: TURNOUT, turnoutLimitKmh: 45 } })! : {
+    inFrom: sta.platform.from - 70 - TURNOUT, inTo: sta.platform.from - 70,
+    outFrom: sta.platform.to + 10, outTo: sta.platform.to + 10 + TURNOUT, lat: 0, limit: 45,
   };
-  return { main, outer, from: z.inFrom, to: z.outTo, lat: (s: number) => main + (outer - main) * loopShape(z, s) };
+  const make = (main: number, outer: number, own: boolean, island: boolean, reach: number): CoastalThird => {
+    const z = zone(own);
+    return { main, outer, from: z.inFrom, to: z.outTo, lat: s => main + (outer - main) * loopShape(z, s), reach, island };
+  };
+  // 下り（堺方面）で自線は lo、上りで自線は lo（進行方向左）。物理配置は両方向で鏡像。
+  const izumiMain = reverse ? lo : hi, sakaiMain = reverse ? hi : lo;
+  return [
+    make(izumiMain, izumiMain + (reverse ? -IZUMI_SIDING_LAT : IZUMI_SIDING_LAT), reverse, true, 2.9),
+    make(sakaiMain, sakaiMain + (reverse ? SAKAI_SIDING_LAT : -SAKAI_SIDING_LAT), !reverse, false, 7.4),
+  ];
 }
 
 /** 高架島式駅の地上改札・駅床・ホーム支持。寸法は実測ではなく構内形式の近似。 */
@@ -123,35 +145,38 @@ export function buildCoastalSpecialStations(ctx: GameContext, sta: Station): voi
     }
     onLight(ctx, f => material.emissiveIntensity = .05 + f * .65);
   } else {
-    const third = coastalThirdTrack(ctx.route, sta)!;
-    const { main, outer, lat: position } = third;
     const point = (s: number, lat: number, y: number) => ctx.track.at(s, lat, y);
-    // 本線→外側線→本線。島式の外縁にレールを追加して2面3線を表す。
+    // 本線→副線→本線。泉大津方面は島式の外縁、堺方面は本線の隣に副線のレールを追加する。
     const wb = new GeoBatch();
     const strip = (a: THREE.Vector3, z: THREE.Vector3, width: number, height: number, color: number) => {
       const d = z.clone().sub(a), p = a.clone().add(z).multiplyScalar(.5);
       // 勾配上も棒の長軸を両端に合わせる。水平な箱だとレール端が線路基準から浮く。
       wb.add('body', P.box, M(p.x, p.y, p.z, Math.atan2(d.x, d.z), width, height, d.length() + .025, -Math.asin(d.y / d.length())), color);
     };
-    for (let s = third.from; s < third.to; s += 4) {
-      const z = Math.min(third.to, s + 4), la = position(s), lb = position(z);
-      strip(point(s, la, .06), point(z, lb, .06), 2.7, .28, 0x827e72);
-      for (const rail of [-.5335, .5335]) strip(point(s, la + rail, .323), point(z, lb + rail, .323), .065, .12, 0x99a5a3);
-      for (let q = s; q < z; q += 1) strip(point(q, position(q) - 1, .19), point(q, position(q) + 1, .19), .14, .12, 0x5b554a);
-    }
-    const outerSide = outer < main ? -1 : 1;
-    for (let s = third.from + 5; s < third.to; s += 25) {
-      const lat = position(s), t = ctx.track.trackAt(s), p = point(s, lat + outerSide * 2.5, 0);
-      wb.add('body', P.boxB, M(p.x, p.y, p.z, -t.phi, .16, 6.9, .16), 0x8c9691);
-      const arm = point(s, lat + outerSide * 1.15, 6.4);
-      wb.add('body', P.box, M(arm.x, arm.y, arm.z, -t.phi, 2.8, .12, .12), 0x8c9691);
-      const end = Math.min(third.to, s + 25);
-      strip(point(s, lat, 5.72), point(end, position(end), 5.72), .03, .03, 0x68716a);
+    for (const third of coastalThirdTracks(ctx.route, sta)) {
+      const { main, outer, lat: position } = third;
+      for (let s = third.from; s < third.to; s += 4) {
+        const z = Math.min(third.to, s + 4), la = position(s), lb = position(z);
+        strip(point(s, la, .06), point(z, lb, .06), 2.7, .28, 0x827e72);
+        for (const rail of [-.5335, .5335]) strip(point(s, la + rail, .323), point(z, lb + rail, .323), .065, .12, 0x99a5a3);
+        for (let q = s; q < z; q += 1) strip(point(q, position(q) - 1, .19), point(q, position(q) + 1, .19), .14, .12, 0x5b554a);
+      }
+      const outerSide = outer < main ? -1 : 1;
+      // 堺方面の副線は外側にホームがあり、柱はホームの外（reach）。泉大津方面は副線の外 2.5m。
+      const poleOffset = third.island ? 2.5 : third.reach - .6;
+      for (let s = third.from + 5; s < third.to; s += 25) {
+        const lat = position(s), t = ctx.track.trackAt(s), p = point(s, lat + outerSide * poleOffset, 0);
+        wb.add('body', P.boxB, M(p.x, p.y, p.z, -t.phi, .16, 6.9, .16), 0x8c9691);
+        const arm = point(s, lat + outerSide * (poleOffset - .2) / 2, 6.4);
+        wb.add('body', P.box, M(arm.x, arm.y, arm.z, -t.phi, poleOffset + .3, .12, .12), 0x8c9691);
+        const end = Math.min(third.to, s + 25);
+        strip(point(s, lat, 5.72), point(end, position(end), 5.72), .03, .03, 0x68716a);
+      }
     }
     const trackGroup = new THREE.Group(); trackGroup.name = 'coastal-third-track';
     wb.build({ body: new THREE.MeshLambertMaterial({ vertexColors: true }) }, trackGroup);
     ctx.scene.add(trackGroup); cullByDistance(ctx, trackGroup, 1000);
-    // ホームは stations.ts で島式1面＋相対式1面として一度だけ作る。
+    // ホームは stations.ts で島式1面＋副線の外の片面1面として一度だけ作る。
   }
   b.build({ body: new THREE.MeshLambertMaterial({ vertexColors: true }) }, group);
   ctx.scene.add(group); cullByDistance(ctx, group, 1000);

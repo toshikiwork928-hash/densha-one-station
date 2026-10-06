@@ -37,7 +37,9 @@ export function buildSignals(ctx: GameContext): void {
   sigs.forEach((sg, i) => {
     const z = zones.find(q => sg.s >= q.inTo && sg.s <= q.outFrom);
     if (z) {
-      heads.push({ i, role: 'main', station: z.index, lat: LAT_BETWEEN }, { i, role: 'loop', station: z.index, lat: z.lat + LAT });
+      // 待避線が本線の隣（4m）で線間に建てられない駅（浜寺公園の堺方面）は、両方とも待避線の外側に並べる
+      const near = Math.abs(z.lat) < 6;
+      heads.push({ i, role: 'main', station: z.index, lat: near ? z.lat + Math.sign(z.lat) * 1.3 + LAT : LAT_BETWEEN }, { i, role: 'loop', station: z.index, lat: z.lat + LAT });
     } else heads.push({ i, role: 'single', station: -1, lat: LAT + (ctx.route.singleTrack ? track.pathLat(sg.s) : 0) }); // 単線: 交換駅などで左へ開く自列車の線の左側
   });
   for (const z of zones) {

@@ -5,7 +5,7 @@ import { shiokaze, shiokazeUp } from '../src/route/routes/shiokaze';
 import { mountain, mountainUp } from '../src/route/routes/mountain';
 import { buildTrack } from '../src/route/track';
 import { loopZone, loopShape } from '../src/route/service';
-import { coastalThirdTrack } from '../src/world/coastal-stations';
+import { coastalThirdTracks } from '../src/world/coastal-stations';
 import type { Route, ServiceId } from '../src/route/types';
 import { createState, type VehicleSel } from '../src/game/state';
 import { createGame } from '../src/game/loop';
@@ -66,8 +66,8 @@ const downTrack = buildTrack(shiokaze), upTrack = buildTrack(shiokazeUp);
 for (let s = 0; s <= downTrack.length; s += 50) assert.ok(Math.abs(downTrack.trackAt(s).y - upTrack.trackAt(upTrack.length - s).y) < 1e-6, '復路の標高一致');
 
 const expectedWaits = new Map([
-  ['shiokaze', [['白浜台', 'limited']]],
-  ['shiokaze-up', [['海浜公園', 'express'], ['白浜台', 'limited']]],
+  ['shiokaze', [['高石', 'limited'], ['浜寺公園', 'express']]],
+  ['shiokaze-up', [['浜寺公園', 'express'], ['高石', 'limited']]],
 ]);
 for (const route of [shiokaze, shiokazeUp]) {
   const waits = route.services!.find(s => s.id === 'local')!.waits!;
@@ -80,12 +80,26 @@ for (const route of [shiokaze, shiokazeUp]) {
 }
 const parkDown = shiokaze.stations.find(s => s.layout === 'hamadera')!;
 const parkUp = shiokazeUp.stations.find(s => s.layout === 'hamadera')!;
-const thirdDown = coastalThirdTrack(shiokaze, parkDown)!;
-const thirdUp = coastalThirdTrack(shiokazeUp, parkUp)!;
-const parkZone = loopZone(parkUp)!;
-for (let s = thirdUp.from; s <= thirdUp.to; s += 2) {
-  assert.ok(Math.abs(thirdUp.lat(s) - parkZone.lat * loopShape(parkZone, s)) < 1e-9, '普通の走行位置と3線目のレールが一致');
-  assert.ok(Math.abs(thirdDown.lat(11200 - s) - (4 - thirdUp.lat(s))) < 1e-9, '両方向で同一の物理3線');
+const [izumiDown, sakaiDown] = coastalThirdTracks(shiokaze, parkDown), [izumiUp, sakaiUp] = coastalThirdTracks(shiokazeUp, parkUp);
+const zoneDown = loopZone(parkDown)!, zoneUp = loopZone(parkUp)!;
+// 自線側の副線は普通の走行位置と一致。両方向で同一の物理4線（泉大津方面の島式外側線・堺方面の待避線）。
+for (let s = sakaiDown.from; s <= sakaiDown.to; s += 2) assert.ok(Math.abs(sakaiDown.lat(s) - zoneDown.lat * loopShape(zoneDown, s)) < 1e-9, '下り: 普通の走行位置と堺方面待避線が一致');
+for (let s = izumiUp.from; s <= izumiUp.to; s += 2) assert.ok(Math.abs(izumiUp.lat(s) - zoneUp.lat * loopShape(zoneUp, s)) < 1e-9, '上り: 普通の走行位置と泉大津方面副線が一致');
+for (const s of [izumiDown.from, (izumiDown.from + izumiDown.to) / 2, izumiDown.to - 1]) {
+  assert.ok(Math.abs(izumiDown.lat(11200 - s) + izumiUp.lat(s) - 4) < 1e-9, '両方向で同一の物理配置（泉大津方面副線）');
+  assert.ok(Math.abs(sakaiDown.lat(11200 - s) + sakaiUp.lat(s) - 4) < 1e-9, '両方向で同一の物理配置（堺方面待避線）');
+}
+// 諏訪ノ森: 上下ホームは踏切を挟んで離れ、重ならない。
+for (const route of [shiokaze, shiokazeUp]) {
+  const suwa = route.stations.find(s => s.name === '諏訪ノ森')!, opp = { from: suwa.platform.from + suwa.platformOpp!, to: suwa.platform.to + suwa.platformOpp! };
+  const gap = route.crossings!.filter(c => c.s > Math.min(suwa.platform.to, opp.to) && c.s < Math.max(suwa.platform.from, opp.from));
+  assert.ok(opp.from > suwa.platform.to + 20 && gap.length === 1, `${route.id}: 諏訪ノ森の上下ホームは踏切を挟んで離れる`);
+}
+// 石津川〜湊は直線、湊は島式。
+{
+  const t = buildTrack(shiokaze), ishi = shiokaze.stations[7], minato = shiokaze.stations[8];
+  for (let s = ishi.platform.from; s <= minato.platform.to; s += 10) assert.ok(Math.abs(t.trackAt(s).phi - t.trackAt(ishi.platform.from).phi) < 1e-9, '石津川〜湊は直線');
+  assert.ok(minato.island && !minato.loop, '湊は島式ホーム');
 }
 
 for (const source of [shiokaze, shiokazeUp, mountain, mountainUp]) {

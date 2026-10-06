@@ -59,3 +59,75 @@ export function rushStopScenes(stations: Station[], base: OncomingSpec[]): Oncom
     ? { station, kind: 'commuter-old', cars: 6, kmh: 74, label: '普通' }
     : { station, kind: 'commuter-new', cars: 4, kmh: 74 })));
 }
+
+// ---------- 停車シーンの間引き（自然な頻度にする） ----------
+
+/** 編成ごとの扱い: stop = 設定どおり（停車・待避線・通過など） / run = 停車せず走行中にすれ違うだけ / off = 出さない */
+export type OncomingMode = 'stop' | 'run' | 'off';
+
+/** 文字列 → 32bit シード（FNV-1a）。決定的な乱数用（ctx.rng とは独立） */
+function hashSeed(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+function mulberry32(a: number): () => number {
+  return () => {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export interface OncomingPlanItem { spec: OncomingSpec; kind: TrainKind; rush: boolean }
+
+/** 対向列車ごとの扱いを決める。同じ seedKey（路線・方向・自列車の種別・時間帯）なら常に同じ結果（プレイ中に矛盾しない）。
+ *  法則:
+ *  - 駅に停車する対向列車は全線で 2〜4 本（ラッシュ時の朝・夜は 3〜5 本）。2面4線駅の待避線の普通（と後続の優等列車）は固定で1回に数える
+ *  - 隣り合う駅には続けて停車させない / 停車駅の並びで同じ種別を続けない
+ *  - 自列車が通過する駅への停車は最大1回（ラッシュ時 2 回。選ばれにくい）
+ *  - 停車に選ばれなかったものは、最大3本（ラッシュ時 4 本）が停車せず走行中にすれ違うだけの編成になる（残りは出さない）
+ *  ラッシュ用の編成（rush）は、ラッシュ時以外は出さない */
+export function planOncoming(items: OncomingPlanItem[], opt: { seedKey: string; rushHour: boolean; passStations: Set<number> }): OncomingMode[] {
+  const rng = mulberry32(hashSeed(opt.seedKey));
+  const modes: OncomingMode[] = items.map(it => (it.rush && !opt.rushHour ? 'off' : 'stop'));
+  const cand: number[] = [];
+  const chosen: { station: number; kind: TrainKind }[] = [];
+  items.forEach((it, i) => {
+    const sp = it.spec.stop;
+    if (modes[i] === 'off' || !sp) return;
+    if (sp.loop) chosen.push({ station: sp.station, kind: it.kind }); else cand.push(i);
+  });
+  const want = (opt.rushHour ? [3, 4, 4, 5] : [2, 3, 3, 4])[Math.floor(rng() * 4)];
+  const order = cand
+    .map(i => ({ i, key: rng() * (opt.passStations.has(items[i].spec.stop!.station) ? 3 : 1) }))
+    .sort((a, b) => a.key - b.key).map(x => x.i);
+  const picked = new Set<number>();
+  const ok = (i: number, strictKind: boolean): boolean => {
+    const sp = items[i].spec.stop!, kind = items[i].kind;
+    if (chosen.some(c => Math.abs(c.station - sp.station) < 2)) return false;
+    if (opt.passStations.has(sp.station) && [...picked].filter(j => opt.passStations.has(items[j].spec.stop!.station)).length >= (opt.rushHour ? 2 : 1)) return false;
+    if (!strictKind) return true;
+    const lo = chosen.filter(c => c.station < sp.station).sort((a, b) => b.station - a.station)[0];
+    const hi = chosen.filter(c => c.station > sp.station).sort((a, b) => a.station - b.station)[0];
+    return lo?.kind !== kind && hi?.kind !== kind;
+  };
+  // 1周目: 種別規則も守って目標数まで。足りなければ2周目で種別規則を緩め、最低数（通常 2・ラッシュ 3）まで
+  const minWant = Math.min(want, opt.rushHour ? 3 : 2);
+  for (const strict of [true, false]) {
+    const target = strict ? want : minWant;
+    for (const i of order) {
+      if (chosen.length >= target) break;
+      if (picked.has(i) || !ok(i, strict)) continue;
+      picked.add(i); chosen.push({ station: items[i].spec.stop!.station, kind: items[i].kind });
+    }
+  }
+  // 停車に選ばれなかったもの: 一部を走行中のすれ違い（通常 最大3本・ラッシュ 最大4本）にし、残りは出さない
+  let runs = 0;
+  for (const i of order) {
+    if (picked.has(i)) continue;
+    if (runs < (opt.rushHour ? 4 : 3) && rng() < .65) { modes[i] = 'run'; runs++; } else modes[i] = 'off';
+  }
+  return modes;
+}

@@ -40,10 +40,16 @@ export interface Station {
   elevated?: boolean;
   /** 頭端式（行き止まり）の終端駅。線路はホームの先（下りなら platform.to 側、route.extent の端）で車止めに終わる */
   headEnd?: boolean;
+  /** 相対式2面2線で上下のホームを前後にずらす駅（踏切を挟んだ対面ホーム）。対向線側のホームは platform から s 方向へこの距離だけずれる（上下とも同じ符号） */
+  platformOpp?: number;
 }
 
 /** 2面4線の待避線。lat は自線待避線の横位置（左が負、例 -9.2）。対向側は route.tracks の対向線から鏡像に +lat 側へ */
-export interface StationLoop { lat: number; turnoutLength: number; turnoutLimitKmh: number }
+export interface StationLoop {
+  lat: number; turnoutLength: number; turnoutLimitKmh: number;
+  /** 待避線のホームが待避線の外側（本線と反対側）にある（浜寺公園の堺方面）。既定は本線と待避線の間の島式 */
+  outside?: boolean;
+}
 
 /** 島式1面2線駅の線形。spread = 各線がホーム側へ外へ膨らむ量 [m]（ホーム幅 = 線間 + 2×spread − 3.4）、length = S字（ホーム端の 70m 手前・先から）の長さ [m]。
  *  単線（route.singleTrack）では1本の線路が駅の前後の分岐器（両開き）で左右へ分かれ、自列車は左（-spread）、対向列車は右（+spread）を通る＝交換設備（ホーム幅 = 2×spread − 3.4） */
@@ -132,7 +138,7 @@ export interface Route {
   /** コース終着駅への接近を連続速度照査（実路線ATSの仕様そのものではない）。 */
   terminalApproach?: boolean;
   /** 描画専用の沿岸線ランドマーク。進行反転時は位置・左右・分岐向きを反転する。 */
-  coastalLandmarks?: { kind: 'road-overpass' | 'tram-overpass' | 'steel-bridge' | 'branch'; s: number; length?: number; label?: string; side?: 1 | -1; direction?: 1 | -1 }[];
+  coastalLandmarks?: { kind: 'road-overpass' | 'tram-overpass' | 'steel-bridge' | 'branch' | 'tower'; s: number; length?: number; label?: string; side?: 1 | -1; direction?: 1 | -1 }[];
   id: string;
   name: string;
   /** 路線（線区）の識別子。同じ線区の下り・上りで共通（例 'shiokaze'、'mountain'）。メニューの路線選択に使う */

@@ -6,6 +6,8 @@ import { islandOffset, islandZones, loopShape, loopZones, trackLines, type LoopZ
 import { cullByDistance } from './cull';
 
 const GAUGE = 0.535; // 軌間の半分 [m]
+/** 分岐器の長枕木を使う線間隔の上限 [m]。枕木長 2.0m より十分広がったら各線の独立した枕木に分ける（長枕木の長さ = 線間隔 + 2.0） */
+const LONG_SLEEPER_MAX_GAP = 2.6;
 
 /** 線路に沿った押し出しメッシュ。profile = [横位置, 高さ][] */
 export function extrudeAlong(track: Track, profile: [number, number][], s0: number, s1: number, step: number, mat: THREE.Material): THREE.Mesh {
@@ -96,8 +98,8 @@ export function buildTrackMesh(ctx: GameContext): void {
         const lp = loops.find(o => o.base === c && s > o.z.inFrom && s < o.z.outTo);
         const d = lp ? lp.lat(s) - c : 0;
         const co = c + islandOffset(route, c, s); // 島式ホーム駅の S字
-        if (lp && Math.abs(d) < Math.abs(lp.off) - .01) {
-          // 分岐器: 本線と分岐線にまたがる長い枕木
+        if (lp && Math.abs(d) < LONG_SLEEPER_MAX_GAP) {
+          // 分岐器の入口・出口付近: 本線と分岐線にまたがる長枕木（線間隔が枕木長より広がるまで）
           inst.setMatrixAt(i++, m4.compose(at(s, c + d / 2, .27), q, wide.set((Math.abs(d) + 2) / 2, 1, 1)));
           continue;
         }
@@ -122,7 +124,7 @@ function buildLoopTracks(ctx: GameContext, matBallast: THREE.Material, matRail: 
   for (const o of loopTracks(ctx)) {
     const { z, base } = o, dir = Math.sign(o.off);
     const s0 = z.inFrom, s1 = z.outTo;
-    // バラスト: 待避線の外側の法面から本線の道床まで埋める
+    // バラスト: 待避線の外側の法面から本線の道床まで埋める（2線の道床は一続きの路盤。枕木は別に各線ごと）
     scene.add(extrudeFn(track, s => {
       const l = o.lat(s);
       return dir < 0 ? [[l - 2.3, 0], [l - 1.4, .215], [base - 1.0, .215]] : [[base + 1.0, .215], [l + 1.4, .215], [l + 2.3, 0]];
@@ -186,7 +188,7 @@ function buildSingleTrackExtras(ctx: GameContext, matBallast: THREE.Material, ma
       const t = track.trackAt(s), a = l.lat(s), b = par(s), d = a - b;
       q.setFromEuler(e.set(0, -t.phi, 0));
       if (Math.abs(d) < .3) continue;
-      if (Math.abs(d) < 3) inst.setMatrixAt(i++, m4.compose(track.at(s, b + d / 2, .265), q, sc.set((Math.abs(d) + 2) / 2, 1, 1)));
+      if (Math.abs(d) < LONG_SLEEPER_MAX_GAP) inst.setMatrixAt(i++, m4.compose(track.at(s, b + d / 2, .265), q, sc.set((Math.abs(d) + 2) / 2, 1, 1)));
       else inst.setMatrixAt(i++, m4.compose(track.at(s, a, .27), q, sc.set(1, 1, 1)));
     }
     inst.count = i; inst.computeBoundingSphere(); scene.add(inst); cullByDistance(ctx, inst, 700);

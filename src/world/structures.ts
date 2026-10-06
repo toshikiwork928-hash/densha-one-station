@@ -3,7 +3,8 @@ import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import { GeoBatch, M, P } from './batch';
 import { extrudeAlong, extrudeFn, loopTracks } from './track-mesh';
-import { coastalThirdTrack } from './coastal-stations';
+import { coastalThirdTracks } from './coastal-stations';
+import { islandShape, islandZones } from '../route/service';
 import { TUNNEL_CENTER, TUNNEL_HALF, TUNNEL_WALL_H, getTerrain, gridAlong } from './terrain';
 import { BAND_CULL, isMountain } from './mountain-terrain';
 import { cullByDistance } from './cull';
@@ -14,12 +15,17 @@ const concrete = new THREE.MeshLambertMaterial({ color: 0xc4c0b6, side: THREE.Do
 /** 待避線の分岐と相対式ホームを包む床版外縁。横断形を変えて高欄を線路から離す。 */
 export function coastalDeckBounds(ctx: GameContext): (s: number) => [number, number] {
   const { route } = ctx, loops = loopTracks(ctx);
-  const thirds = route.stations.flatMap(st => { const t = coastalThirdTrack(route, st); return t ? [t] : []; });
+  const thirds = route.stations.flatMap(st => coastalThirdTracks(route, st));
   const lo = Math.min(...route.tracks), hi = Math.max(...route.tracks);
   return s => {
     let left = lo - 3.3, right = hi + 3.3;
     for (const t of loops) { left = Math.min(left, t.lat(s) - 3.3); right = Math.max(right, t.lat(s) + 3.3); }
     for (const t of thirds) { left = Math.min(left, t.lat(s) - 3.3); right = Math.max(right, t.lat(s) + 3.3); }
+    // 島式1面2線の高架駅: 線路が駅の前後でホームの両側へ開く（S字）分だけ床版を広げる
+    for (const z of islandZones(route)) if (s > z.inFrom && s < z.outTo) {
+      const k = z.spread * islandShape(z, s);
+      left = Math.min(left, lo - k - 3.3); right = Math.max(right, hi + k + 3.3);
+    }
     for (const st of route.stations) if (st.elevated && !st.loop && !st.island) {
       const u = Math.max(0, Math.min(1, (s - st.platform.from + 25) / 25, (st.platform.to + 25 - s) / 25));
       const edge = 3.3 + 3.9 * u * u * (3 - 2 * u);

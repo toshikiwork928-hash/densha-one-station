@@ -5,9 +5,10 @@ import type { GameContext } from '../core/context';
 import { GeoBatch, M, P } from './batch';
 import { cullByDistance } from './cull';
 import { getTerrain } from './terrain';
+import { buildTower } from './coastal-tower';
 
 type Landmark = {
-  kind: 'road-overpass' | 'tram-overpass' | 'steel-bridge' | 'branch';
+  kind: 'road-overpass' | 'tram-overpass' | 'steel-bridge' | 'branch' | 'tower';
   s: number;
   length?: number;
   label?: string;
@@ -151,6 +152,7 @@ export function buildCoastalLandmarks(ctx: GameContext): void {
   if (!list.length) return;
   const material = new THREE.MeshLambertMaterial({ vertexColors: true });
   for (const st of list) {
+    if (st.kind === 'tower') { buildTower(ctx, st); continue; }
     const batch = new GeoBatch(), group = new THREE.Group();
     group.name = `coastal-${st.kind}-${Math.round(st.s)}`;
     if (st.kind === 'road-overpass' || st.kind === 'tram-overpass') crossing(ctx, batch, st, st.kind === 'tram-overpass');

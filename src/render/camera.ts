@@ -71,7 +71,7 @@ export function createCabCamera(ctx: GameContext): CabCamera {
     const sta = nearStation(s);
     if (sta && v > 1) {
       // 島式は線路間、待避線はその外側、棒線駅はホームの側（汐風線は左、山岳線は駅ごと）
-      const plat = sta.island ? (Math.min(...route.tracks) + Math.max(...route.tracks)) / 2 + 1 : sta.enterLoop ? (loopZone(sta)?.lat ?? 0) + 4.2 : (sta.platform.side === 'R' ? 1 : -1) * 4.2;
+      const plat = sta.island ? (Math.min(...route.tracks) + Math.max(...route.tracks)) / 2 + 1 : sta.enterLoop ? (loopZone(sta)?.lat ?? 0) + (sta.loop?.outside ? (sta.loop.lat < 0 ? -4.2 : 4.2) : 4.2) : (sta.platform.side === 'R' ? 1 : -1) * 4.2;
       return { kind: 'platform', s: sta.stopS + 12, lat: plat, h: 2.4, t0: time, fov: 40 };
     }
     const kind = SHOT_ORDER[shotN++ % SHOT_ORDER.length];

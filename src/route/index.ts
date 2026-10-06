@@ -7,8 +7,8 @@ import { mountain, mountainUp } from './routes/mountain';
 export const ROUTES: Record<string, Route> = { [sakuragaoka.id]: sakuragaoka, [shiokaze.id]: shiokaze, [shiokazeUp.id]: shiokazeUp, [mountain.id]: mountain, [mountainUp.id]: mountainUp };
 /** 方向の切替（下り ↔ 上り）。タイトルの方向ボタン用 */
 export const ROUTE_DIRS: { id: string; label: string; desc: string }[] = [
-  { id: shiokaze.id, label: '上り', desc: '桜ヶ丘 → 岬口' },
-  { id: shiokazeUp.id, label: '下り', desc: '岬口 → 桜ヶ丘' },
+  { id: shiokaze.id, label: '上り', desc: '泉大津 → 堺' },
+  { id: shiokazeUp.id, label: '下り', desc: '堺 → 泉大津' },
 ];
 /** 路線（線区）の一覧。メインメニューの路線選択用。dirs[0] が既定の方向。山岳線は route/routes/ に追加して登録する */
 export interface LineEntry { id: string; name: string; desc: string; theme: 'coast' | 'mountain'; dirs: { id: string; label: string; desc: string }[] }

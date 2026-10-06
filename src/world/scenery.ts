@@ -9,7 +9,8 @@ import { isMountain } from './mountain-terrain';
 import type { TreeSpot } from './town-jp';
 import { ChunkedBatch, M, P } from './batch';
 import { cullByDistance } from './cull';
-import { coastalThirdTrack } from './coastal-stations';
+import { coastalThirdTracks } from './coastal-stations';
+import { towerZones } from './coastal-tower';
 
 /** 景観カテゴリ別のモデル集合 */
 export interface SceneryModels {
@@ -181,7 +182,7 @@ export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot
   const latOf = (sd: number, d: number) => sd < 0 ? L0 - d : L1 + d;
   // 配置を集めて材質ごとの BatchedMesh へ（scenery-batch.ts）
   const items: SceneryItem[] = [];
-  const thirds = route.stations.flatMap(st => { const t = coastalThirdTrack(route, st); return t ? [t] : []; });
+  const thirds = route.stations.flatMap(st => coastalThirdTracks(route, st));
   const put = (model: PreparedModel, s: number, lat: number, yaw: number, k: number, y?: number) => {
     const radius = Math.hypot(model.size.x, model.size.z) * k / 2;
     // 描画専用線も分岐端まで敷地を確保。樹冠の幅と前後方向の張り出しを含む。
@@ -198,6 +199,7 @@ export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot
   const blocked = (s: number) => T.nearCrossing(s, 3) || T.structureAt(s, 60)?.kind === 'tunnel' || (!MT && T.groundY(s) < -.3) || !level(s, 0);
   const overpasses = (route.coastalLandmarks ?? []).filter(l => l.kind === 'road-overpass' || l.kind === 'tram-overpass');
   const blockedBuilding = (s: number, half = 0) => overpasses.some(l => Math.abs(s - l.s) < 45 + half);
+  const towers = towerZones(route);
 
   for (const side of [-1, 1]) {
     // 市街地の奥: 商業ビル・中層ビル
@@ -220,7 +222,7 @@ export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot
     }
     // 線路際の木・植え込み（柵と道路の間）
     for (let s = TS0; s < TS1; s += 5 + rnd() * 16) {
-      if (rnd() < .5 || blocked(s) || T.structureAt(s, 5) || T.nearStation(s, 10)) continue;
+      if (rnd() < .5 || blocked(s) || T.structureAt(s, 5) || T.nearStation(s, 10) || towers.some(t => t.side === side && s > t.from && s < t.to)) continue;
       const big = rnd() < .35;
       const model = pick(big ? M.trees : M.bushes), k = (big ? KIT_SCALE.trees * .8 : KIT_SCALE.bushes) * (.7 + rnd() * .4);
       const tl = latOf(side, 8.6 + rnd() * 1.4);

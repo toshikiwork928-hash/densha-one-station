@@ -7,7 +7,8 @@ import { createRng, type Rng } from '../core/rng';
 import { ChunkedBatch, GeoBatch, M, P, basePart, onLight } from './batch';
 import { cullByDistance } from './cull';
 import { loopZone } from '../route/service';
-import { coastalThirdTrack } from './coastal-stations';
+import { coastalThirdTracks } from './coastal-stations';
+import { towerZones } from './coastal-tower';
 import { getTerrain, hash } from './terrain';
 import { isMountain } from './mountain-terrain';
 import { buildMountainScenery } from './mountain-scenery';
@@ -369,6 +370,9 @@ export function buildTown(ctx: GameContext): TownResult {
   const overpasses = (route.coastalLandmarks ?? []).filter(l => l.kind === 'road-overpass' || l.kind === 'tram-overpass');
   // 斜交する床版の線路方向投影と建物の奥行きに、余裕を含める。
   const blockedBuilding = (from: number, to: number) => overpasses.some(l => from < l.s + 45 && to > l.s - 45);
+  // 駅直結タワー（低層棟・歩廊）の敷地。その側の道路・住宅は置かない。
+  const towers = towerZones(route);
+  const towerNear = (sd: number, from: number, to: number) => towers.some(t => t.side === sd && from < t.to && to > t.from);
   const flatOk = (s: number) => !MT || MT.flat(s) > .97;
   const levelAt = (s: number, lat: number) => !MT || Math.abs(MT.terrainY(s, lat) - MT.groundY(s)) < .9;
   const wires = new Map<number, number[]>();
@@ -386,7 +390,7 @@ export function buildTown(ctx: GameContext): TownResult {
   const platSide = (_sd: number, s: number, m: number) => route.stations.some(st => s > st.platform.from - m && s < st.platform.to + m); // ホームは両側（相対式・島式）
   /** 2面4線駅の待避線区間（両側。対向側ホーム・分岐器・門型架線柱の分） */
   const loopNear = (s: number, m: number) => route.stations.some(st => { const z = loopZone(st); return !!z && s > z.inFrom - m && s < z.outTo + m; });
-  const thirds = route.stations.flatMap(st => { const t = coastalThirdTrack(route, st); return t ? [t] : []; });
+  const thirds = route.stations.flatMap(st => coastalThirdTracks(route, st));
   const thirdNear = (sd: number, s: number, m: number) => thirds.some(t => Math.sign(t.outer - t.main) === sd && s > t.from - m && s < t.to + m);
   /** 待避線駅は駅舎が待避線の分だけ外へずれる */
   const stationDepth = (s: number) => route.stations.some(st => st.loop && s > st.platform.from - 25 && s < st.platform.to + 25) ? 54 : 32;
@@ -400,6 +404,7 @@ export function buildTown(ctx: GameContext): TownResult {
   };
   /** 区画が使えるか（踏切道路・トンネル・川・ホーム側駅前を避ける） */
   const lotFree = (sd: number, a: number, b: number, d: number) => {
+    if (towerNear(sd, a, b)) return false;
     for (let s = a; s <= b; s += 3) {
       if (!flatOk(s) || !levelAt(s, latOf(sd, d)) || !levelAt(s, latOf(sd, d + 14))) return false;
       if (T.nearCrossing(s, 4) || tunnelNear(s, 80) || T.groundY(s) < -.3) return false;
@@ -465,7 +470,7 @@ export function buildTown(ctx: GameContext): TownResult {
 
   for (const sd of [-1, 1]) {
     // ---- 線路沿いの道路・電柱・電線・柵 ----
-    const roadOk = (s: number) => !tunnelNear(s, 30) && T.groundY(s) > -.3 && !platSide(sd, s, 20) && !loopNear(s, 20) && !thirdNear(sd, s, 20) && !T.nearCrossing(s, -1) && flatOk(s) && levelAt(s, latOf(sd, 13)) && levelAt(s, latOf(sd, 16.5));
+    const roadOk = (s: number) => !tunnelNear(s, 30) && T.groundY(s) > -.3 && !platSide(sd, s, 20) && !loopNear(s, 20) && !thirdNear(sd, s, 20) && !T.nearCrossing(s, -1) && !towerNear(sd, s - 6, s + 6) && flatOk(s) && levelAt(s, latOf(sd, 13)) && levelAt(s, latOf(sd, 16.5));
     const dA = 10.5, dB = 15.5, la = latOf(sd, dA), lb = latOf(sd, dB);
     for (let s = S0; s < S1; s += 40) {
       const e = Math.min(S1, s + 40);

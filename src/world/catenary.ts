@@ -5,12 +5,12 @@
 // 300m チャンクごとに「構造物 1 メッシュ＋電線 1 LineSegments」へ結合し、距離カリングする
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
-import { bayZone, islandOffset, islandZones, loopShape, trackLines } from '../route/service';
+import { bayZone, islandOffset, islandShape, islandZones, loopShape, trackLines } from '../route/service';
 import { basePart, ChunkedBatch, P, type BasePart, type GeoBatch } from './batch';
 import { cullByDistance } from './cull';
 import { getTerrain, hash, TUNNEL_CENTER, TUNNEL_HALF, TUNNEL_WALL_H } from './terrain';
 import { loopTracks } from './track-mesh';
-import { coastalThirdTrack } from './coastal-stations';
+import { coastalThirdTracks } from './coastal-stations';
 
 const RAIL = .38;           // レール面（線路基準の高さ）
 const CW = RAIL + 5.34;     // トロリー線の高さ（パンタグラフ上昇時の舟の上面にほぼ接する）
@@ -200,7 +200,7 @@ export function buildCatenary(ctx: GameContext): void {
   const L0 = Math.min(...route.tracks), L1 = Math.max(...route.tracks), MID = (L0 + L1) / 2;
   const S0 = route.extent.from, S1 = route.extent.to;
   const loops = loopTracks(ctx);
-  const thirds = route.stations.flatMap(st => { const t = coastalThirdTrack(route, st); return t ? [t] : []; });
+  const thirds = route.stations.flatMap(st => coastalThirdTracks(route, st));
   // 待避線駅の区間（lat = 外側の線路の振れ）と、島式1面2線駅の S字区間（各線が spread だけ外へ開く）。柱・ビームは外側の線路の外に立てる
   const zones: { inFrom: number; outTo: number; lat: number }[] = [
     ...new Map(loops.map(o => [o.z.index, o.z])).values(),
@@ -276,6 +276,8 @@ export function buildCatenary(ctx: GameContext): void {
       if (route.theme === 'coast') {
         // 分岐器で絞る床版に合わせ、実際の待避線中心から外側へ立てる。
         const positions = loops.map(o => o.lat(s));
+        // 島式1面2線駅: 線路が駅の前後でホームの両側へ開く分
+        for (const z of islandZones(route)) if (s > z.inFrom && s < z.outTo) { const k = z.spread * islandShape(z, s); positions.push(L0 - k, L1 + k); }
         pl = Math.min(L0, ...positions) - 2.9; pr = Math.max(L1, ...positions) + 2.9;
       } else {
         const z = zones.find(q => s >= q.inFrom - 12 && s <= q.outTo + 12)!;
@@ -287,7 +289,9 @@ export function buildCatenary(ctx: GameContext): void {
       pl = L0 - 7.4; pr = L1 + 7.4;
     }
     for (const t of thirds) if (s >= t.from && s <= t.to) {
-      pl = Math.min(pl, t.lat(s) - 2.9); pr = Math.max(pr, t.lat(s) + 2.9);
+      // 外側へは副線の外のホーム・柵（reach）の外、内側は 2.9m
+      const left = t.outer < t.main ? t.reach : 2.9, right = t.outer < t.main ? 2.9 : t.reach;
+      pl = Math.min(pl, t.lat(s) - left); pr = Math.max(pr, t.lat(s) + right);
     }
     if (route.singleTrack && kind !== 'station') {
       // 単線: 駅の右の線・副線（とその片面ホーム）の外側に立てる
