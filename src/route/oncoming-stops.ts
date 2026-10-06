@@ -1,5 +1,5 @@
 // 駅に停車する対向列車の出現設定を、駅の位置から作る（下り・上りで共通）
-import type { OncomingSpec, Station, TrainKind } from './types';
+import type { OncomingSpec, OncomingStop, Station, TrainKind } from './types';
 
 /** 停車シーン1件: station = 停車する駅 index（その向きの route.stations）。種別に合う駅を指定する */
 export interface StopScene {
@@ -8,6 +8,8 @@ export interface StopScene {
   label?: string;
   /** 2面4線駅の対向側の待避線に停車（普通の待避）。本線は同じ駅の優等列車が使う */
   loop?: boolean;
+  /** 対向側の待避線区間を明示する（自線側の待避線の鏡像でない駅） */
+  zone?: OncomingStop['zone'];
   /** 直前のシーン（待避線の普通）の後ろから出現する優等列車（同じ駅を指定する） */
   follow?: boolean;
   /** 停車せず、本線を通過する（follow とともに指定。待避線の普通の横を通過） */
@@ -44,7 +46,7 @@ export function stopScenes(stations: Station[], scenes: StopScene[]): OncomingSp
       ...base,
       spawnAt: sta.platform.from - (sc.loop || sc.follow ? SPAWN_BEFORE_LOOP : SPAWN_BEFORE),
       startS: sta.platform.to + START_AHEAD + (sc.follow ? FOLLOW_BEHIND : 0),
-      stop: { station: sc.station, headS: sta.platform.from + HEAD_MARGIN, ...(sc.loop ? { loop: true } : {}) },
+      stop: { station: sc.station, headS: sta.platform.from + HEAD_MARGIN, ...(sc.loop ? { loop: true } : {}), ...(sc.zone ? { zone: sc.zone } : {}) },
     };
   });
 }

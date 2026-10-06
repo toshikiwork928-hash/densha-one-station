@@ -1,4 +1,4 @@
-// 南海本線の目印。道路・路面電車の跨線橋、鋼橋、描画専用支線。
+// 南海本線の目印。道路の跨線橋（路面電車の跨線橋は hankai-tram.ts）、鋼橋、描画専用支線。
 // 走行経路・信号・分岐器制御は持たず、路線データに指定した位置だけに置く。
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
@@ -7,6 +7,7 @@ import { cullByDistance } from './cull';
 import { getTerrain } from './terrain';
 import { buildTower } from './coastal-tower';
 import { buildTwinTower } from './izumiotsu-towers';
+import { buildHankaiTram } from './hankai-tram';
 import { BUMPER_D, DIVERGE_D, hagoromoSpec } from './hagoromo-branch';
 
 type Landmark = {
@@ -38,9 +39,9 @@ function strip(b: GeoBatch, a: THREE.Vector3, z: THREE.Vector3, width: number, h
 }
 
 /** 跨線橋は線路に斜交。軌道の真上には橋脚を置かない。 */
-function crossing(ctx: GameContext, b: GeoBatch, st: Landmark, tram: boolean): void {
+function crossing(ctx: GameContext, b: GeoBatch, st: Landmark): void {
   const { track } = ctx, t = track.trackAt(st.s), terrain = getTerrain(ctx);
-  const side = st.side ?? -1, span = st.length ?? (tram ? 125 : 155), width = tram ? 7.8 : 19;
+  const side = st.side ?? -1, span = st.length ?? 155, width = 19;
   // 路線データの side は下りの斜交の向き。上りは進行方向が逆で、reverseRoute が side を反転しているので、
   // そのまま使うと橋が物理的に鏡像になる（斜交が逆、橋上の電車の位置も反対）。同じ物理配置になるよう、上りは座標を 180° 回して斜交を保つ。
   const up = st.reversed ?? ctx.route.id.endsWith('-up'), sgn = up ? -1 : 1, skew = (up ? -side : side) * .26;
@@ -56,7 +57,7 @@ function crossing(ctx: GameContext, b: GeoBatch, st: Landmark, tram: boolean): v
     const v = p(x, y, z); b.add('coastal', P.box, M(v.x, v.y, v.z, roadAngle, w, h, d), col);
   };
   box(0, deckY, 0, span, 1.2, width, COLOR.concrete);
-  box(0, deckY + .62, 0, span, .07, width - .65, tram ? COLOR.ballast : COLOR.road);
+  box(0, deckY + .62, 0, span, .07, width - .65, COLOR.road);
   for (const z of [-width / 2, width / 2]) {
     box(0, deckY + 1.2, z, span, 1.2, .3, COLOR.concrete);
     box(0, deckY + 1.9, z, span, .09, .09, COLOR.steel);
@@ -71,37 +72,13 @@ function crossing(ctx: GameContext, b: GeoBatch, st: Landmark, tram: boolean): v
   };
   for (let x = -span / 2 + 12; x < span / 2; x += 27) if (Math.abs(x) >= 18) pierAt(x);
   for (const x of [-span / 2 + 3, span / 2 - 3]) pierAt(x);
-  if (tram) {
-    // 複線の路面電車高架。車体と架線を添えて道路橋と区別する。
-    for (const c of [-1.55, 1.55]) {
-      for (const rail of [c - .7175, c + .7175]) box(0, deckY + .77, rail, span, .12, .065, COLOR.rail);
-      for (let x = -span / 2 + 1; x < span / 2; x += .9) box(x, deckY + .7, c, .14, .09, 2.25, 0x5b5147);
-      beam(b, p(-span / 2, deckY + 6, c), p(span / 2, deckY + 6, c), .028, 0x6d726d);
-    }
-    for (let x = -span / 2 + 10; x < span / 2; x += 28) {
-      beam(b, p(x, deckY + .8, -3.4), p(x, deckY + 6.5, -3.4), .14, COLOR.steel);
-      beam(b, p(x, deckY + 6.2, -3.4), p(x, deckY + 6.2, 2.9), .11, COLOR.steel);
-    }
-    const carX = span * .26;
-    box(carX, deckY + 2.4, -1.55, 11.5, 2.7, 2.4, 0x67997c);
-    box(carX, deckY + 3.85, -1.55, 11.7, .2, 2.45, 0xd4cec0);
-    box(carX, deckY + 1.42, -1.55, 11.4, .4, 2.45, 0xc9c9b8);
-    for (let x = carX - 4.2; x < carX + 5; x += 1.7) for (const z of [-2.77, -.33]) box(x, deckY + 2.9, z, 1.15, 1.05, .03, 0x364d50);
-    for (const x of [carX - 3.7, carX + 3.7]) for (const z of [-2.3, -.8]) box(x, deckY + 1.03, z, .7, .65, .28, 0x393d3c);
-    for (const dx of [-.8, .8]) {
-      beam(b, p(carX, deckY + 4, -1.55), p(carX + dx, deckY + 5, -1.55), .065, 0x414c48);
-      beam(b, p(carX + dx, deckY + 5, -1.55), p(carX, deckY + 6, -1.55), .065, 0x414c48);
-    }
-    box(carX, deckY + 6, -1.55, .16, .07, 1.2, 0x414c48);
-  } else {
-    // 4車線バイパス。線路から見える床版・側壁が主役。
-    box(0, deckY + .8, 0, span, .3, .6, COLOR.concrete);
-    for (const z of [-width * .25, width * .25]) for (let x = -span / 2 + 2; x < span / 2; x += 11) box(x, deckY + .68, z, 5, .02, .12, COLOR.line);
-    for (const [x, z, color] of [[-42, -6.8, 0xe8e4db], [39, 6.8, 0x537186], [62, -2.3, 0x98755a]] as const) {
-      box(x, deckY + 1.25, z, 4.1, 1.05, 1.7, color);
-      box(x, deckY + 2, z, 2.2, .55, 1.5, color);
-      box(x, deckY + 2.03, z, 2.25, .4, 1.52, 0x40565e);
-    }
+  // 4車線バイパス。線路から見える床版・側壁が主役。
+  box(0, deckY + .8, 0, span, .3, .6, COLOR.concrete);
+  for (const z of [-width * .25, width * .25]) for (let x = -span / 2 + 2; x < span / 2; x += 11) box(x, deckY + .68, z, 5, .02, .12, COLOR.line);
+  for (const [x, z, color] of [[-42, -6.8, 0xe8e4db], [39, 6.8, 0x537186], [62, -2.3, 0x98755a]] as const) {
+    box(x, deckY + 1.25, z, 4.1, 1.05, 1.7, color);
+    box(x, deckY + 2, z, 2.2, .55, 1.5, color);
+    box(x, deckY + 2.03, z, 2.25, .4, 1.52, 0x40565e);
   }
 }
 
@@ -196,9 +173,10 @@ export function buildCoastalLandmarks(ctx: GameContext): void {
   for (const st of list) {
     if (st.kind === 'tower') { buildTower(ctx, st); continue; }
     if (st.kind === 'twin-tower') { buildTwinTower(ctx, st); continue; } // 泉大津駅前の2棟並びのタワー
+    if (st.kind === 'tram-overpass') { buildHankaiTram(ctx, st); continue; } // 阪堺線の跨線橋（world/hankai-tram.ts）
     const batch = new GeoBatch(), group = new THREE.Group();
     group.name = `coastal-${st.kind}-${Math.round(st.s)}`;
-    if (st.kind === 'road-overpass' || st.kind === 'tram-overpass') crossing(ctx, batch, st, st.kind === 'tram-overpass');
+    if (st.kind === 'road-overpass') crossing(ctx, batch, st);
     else if (st.kind === 'steel-bridge') truss(ctx, batch, st);
     else branch(ctx, batch, st);
     batch.build({ coastal: material }, group);

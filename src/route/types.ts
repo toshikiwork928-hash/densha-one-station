@@ -150,6 +150,8 @@ export interface OncomingStop {
   station: number; headS: number;
   /** 2面4線駅の対向側の待避線（本線の対向線から +lat 側へ鏡像）に停車。ドアは島式ホーム側（進行方向の右）だけ開く */
   loop?: boolean;
+  /** 対向側の待避線の形が自線側の鏡像でない駅（浜寺公園の泉大津方面の副線）の待避線区間。lat は自線側の符号（例 -9.2 → 対向線から +9.2） */
+  zone?: { inFrom: number; inTo: number; outFrom: number; outTo: number; lat: number; limit: number };
 }
 
 export interface Route {

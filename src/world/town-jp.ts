@@ -9,6 +9,7 @@ import { cullByDistance } from './cull';
 import { loopZone, seaSideOf } from '../route/service';
 import { coastalThirdTracks } from './coastal-stations';
 import { towerZones } from './coastal-tower';
+import { tramBlocks } from './hankai-tram';
 import { getTerrain, hash } from './terrain';
 import { isMountain } from './mountain-terrain';
 import { buildMountainScenery } from './mountain-scenery';
@@ -367,7 +368,7 @@ export function buildTown(ctx: GameContext): TownResult {
   const coastal = !!route.coastalLandmarks?.length && !MT;
   const parkSide = seaSideOf(route);
   const parkAt = (sd: number, s: number) => coastal && sd === parkSide && !T.isCity(s);
-  const overpasses = (route.coastalLandmarks ?? []).filter(l => l.kind === 'road-overpass' || l.kind === 'tram-overpass');
+  const overpasses = (route.coastalLandmarks ?? []).filter(l => l.kind === 'road-overpass');
   // 斜交する床版の線路方向投影と建物の奥行きに、余裕を含める。
   const blockedBuilding = (from: number, to: number) => overpasses.some(l => from < l.s + 45 && to > l.s - 45);
   // 駅直結タワー（低層棟・歩廊）の敷地。その側の道路・住宅は置かない。
@@ -405,6 +406,7 @@ export function buildTown(ctx: GameContext): TownResult {
   /** 区画が使えるか（踏切道路・トンネル・川・ホーム側駅前を避ける） */
   const lotFree = (sd: number, a: number, b: number, d: number) => {
     if (towerNear(sd, a, b)) return false;
+    if (tramBlocks(route, a - 1, b + 1, latOf(sd, d - 1), latOf(sd, d + 23))) return false; // 阪堺線・高師浜線の高架の通り道
     for (let s = a; s <= b; s += 3) {
       if (!flatOk(s) || !levelAt(s, latOf(sd, d)) || !levelAt(s, latOf(sd, d + 14))) return false;
       if (T.nearCrossing(s, 4) || tunnelNear(s, 80) || T.groundY(s) < -.3) return false;
@@ -475,6 +477,7 @@ export function buildTown(ctx: GameContext): TownResult {
     for (let s = S0; s < S1; s += 40) {
       const e = Math.min(S1, s + 40);
       if (!roadOk(s) || !roadOk(e)) continue;
+      if (tramBlocks(route, s, e, la, lb, true)) continue;
       const b = chunks.at(s); b.parent = null;
       strip(b, s, e, Math.min(la, lb), Math.max(la, lb), .02, 0x55575c);
       for (const d of [dA + .25, dB - .25]) { const l = latOf(sd, d); strip(b, s, e, l - .07, l + .07, .03, 0xe8e8e8); }
@@ -482,7 +485,7 @@ export function buildTown(ctx: GameContext): TownResult {
     // 電柱（道路の外側）と電線
     let prev: THREE.Vector3[] | null = null, prevS = -1e9;
     for (let s = S0 + (sd < 0 ? 0 : 15); s < S1; s += 32) {
-      if (!roadOk(s)) { prev = null; continue; }
+      if (!roadOk(s) || tramBlocks(route, s - 1, s + 1, latOf(sd, dB + .7) - 1, latOf(sd, dB + .7) + 1)) { prev = null; continue; }
       const lat = latOf(sd, dB + .7), t = track.trackAt(s), g = T.groundY(s);
       const b = chunks.at(s); b.parent = null;
       const p = new THREE.Vector3(t.x + t.rx * lat, g, t.z + t.rz * lat);
@@ -509,7 +512,7 @@ export function buildTown(ctx: GameContext): TownResult {
     }
     // 線路の柵（駅・踏切・構造物以外）
     for (let s = S0; s < S1; s += 6) {
-      if (T.structureAt(s, 10) || T.nearStation(s, 15) || thirdNear(sd, s, 20) || T.nearCrossing(s, 3) || T.trackY(s) - T.groundY(s) > 1 || !flatOk(s) || !levelAt(s, latOf(sd, 7.8))) continue;
+      if (T.structureAt(s, 10) || T.nearStation(s, 15) || thirdNear(sd, s, 20) || T.nearCrossing(s, 3) || T.trackY(s) - T.groundY(s) > 1 || !flatOk(s) || !levelAt(s, latOf(sd, 7.8)) || tramBlocks(route, s - 3, s + 3, latOf(sd, 7.8) - .3, latOf(sd, 7.8) + .3, true)) continue;
       const t = track.trackAt(s), lat = latOf(sd, 7.8), g = T.groundY(s), b = chunks.at(s); b.parent = null;
       b.add('body', P.box, M(t.x + t.rx * lat, g + .75, t.z + t.rz * lat, -t.phi, .08, 1.5, .08), 0x5f7a66);
       b.add('fence', P.box, M(t.x + t.rx * lat, g + .95, t.z + t.rz * lat, -t.phi, .03, 1.0, 6), 0x7f9a86);

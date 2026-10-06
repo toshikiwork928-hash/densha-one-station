@@ -79,7 +79,7 @@ export function concatRoutes(a: Route, b: Route, opt: ConcatOptions): Route {
       ...a.oncoming.map(o => ({ ...o, ...(o.stop ? { stop: { ...o.stop } } : {}) })),
       ...b.oncoming.map(o => ({
         ...o, spawnAt: sh(o.spawnAt), startS: sh(o.startS),
-        ...(o.stop ? { stop: { ...o.stop, station: ib(o.stop.station), headS: sh(o.stop.headS) } } : {}),
+        ...(o.stop ? { stop: { ...o.stop, station: ib(o.stop.station), headS: sh(o.stop.headS), ...(o.stop.zone ? { zone: { ...o.stop.zone, inFrom: sh(o.stop.zone.inFrom), inTo: sh(o.stop.zone.inTo), outFrom: sh(o.stop.zone.outFrom), outTo: sh(o.stop.zone.outTo) } } : {}) } } : {}),
       })),
     ],
     // 信号: a は境目の駅の場内信号まで（終着側に出発信号は無い）、b は境目の駅の出発信号から

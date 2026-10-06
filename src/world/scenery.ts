@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import { fallbackBox, fallbackTree, prepareModel, type LoadedAssets, type PreparedModel } from './assets';
 import { buildSceneryBatches, type SceneryItem } from './scenery-batch';
+import { tramBlocks } from './hankai-tram';
 import { getTerrain } from './terrain';
 import { isMountain } from './mountain-terrain';
 import type { TreeSpot } from './town-jp';
@@ -189,6 +190,7 @@ export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot
     const radius = Math.hypot(model.size.x, model.size.z) * k / 2;
     // 描画専用線も分岐端まで敷地を確保。樹冠の幅と前後方向の張り出しを含む。
     if (thirds.some(t => s > t.from - radius && s < t.to + radius && Math.abs(lat - t.lat(s)) < radius + 2.1)) return;
+    if (tramBlocks(route, s - radius, s + radius, lat - radius, lat + radius)) return; // 阪堺線の跨線橋・高師浜線の高架支線の通り道
     const t = trackAt(s);
     items.push({ model, pl: { p: new THREE.Vector3(t.x + t.rx * lat, y ?? T.groundY(s), t.z + t.rz * lat), yaw: -t.phi + yaw, k } });
   };
@@ -199,7 +201,7 @@ export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot
   const MT = isMountain(T) ? T : null;
   const level = (s: number, lat: number) => !MT || (MT.flat(s) > .97 && Math.abs(MT.terrainY(s, lat) - MT.groundY(s)) < .9);
   const blocked = (s: number) => T.nearCrossing(s, 3) || T.structureAt(s, 60)?.kind === 'tunnel' || (!MT && T.groundY(s) < -.3) || !level(s, 0);
-  const overpasses = (route.coastalLandmarks ?? []).filter(l => l.kind === 'road-overpass' || l.kind === 'tram-overpass');
+  const overpasses = (route.coastalLandmarks ?? []).filter(l => l.kind === 'road-overpass');
   const blockedBuilding = (s: number, half = 0) => overpasses.some(l => Math.abs(s - l.s) < 45 + half);
   const towers = towerZones(route);
   // 泉大津駅前の2棟のタワーの敷地には、奥の商業ビル・遠景ビルも置かない

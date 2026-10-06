@@ -112,7 +112,7 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
   const trains: OncomingTrain[] = [...route.oncoming, ...rushSpecs].map((spec0, i) => {
     const mix = MIX[i % MIX.length];
     const spec: OncomingSpec = spec0.kind ? spec0 : { ...spec0, kind: mix.kind, cars: mix.cars, kmh: Math.round(spec0.kmh * mix.kmhScale) };
-    const zone = spec.stop?.loop ? loopZone(route.stations[spec.stop.station]) : null;
+    const zone = spec.stop?.loop ? spec.stop.zone ?? loopZone(route.stations[spec.stop.station]) : null;
     return { spec, spec0: spec, mode: 'stop', kind: spec.kind!, idx: i, zone, view: null, active: false, done: false, started: false, head: 0, v: 0, phase: 'cruise', left: false, tStop: 0, tClose: 0, tPlayer: 0, horn: false, rush: i >= route.oncoming.length } as OncomingTrain;
   });
   const RUSH_TIMES = new Set(['morning', 'night']);

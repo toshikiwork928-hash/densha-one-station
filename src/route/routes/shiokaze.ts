@@ -161,9 +161,15 @@ export const shiokaze: Route = {
   terminalApproach: false,
 };
 
-// 浜寺公園の泉大津方面（対向側）は本線と副線の島式ホーム。ラッシュ時に足す対向の普通が本線に停まると、後ろから来る対向列車が本線で詰まって追突しそうに見える。
-// 出現しない印の編成を置いて、ラッシュ用の自動追加を避ける（上りの浜寺公園と同じ扱い）
-shiokaze.oncoming.push({ spawnAt: 1e9, startS: 0, cars: 4, carLen: 20, gap: .8, kmh: 74, lat: 4, kind: 'commuter-new', stop: { station: 5, headS: 0 } });
+// 浜寺公園の泉大津方面（対向側）は本線と副線（外側 9.2m）の島式ホーム。対向の普通は副線に停車して、後ろから来る急行を本線で通過させる（通過待ち）。
+// 副線の分岐器は上りの待避線（LOOP）の鏡像: 下りの座標で ホームの泉大津側端 −160m 〜 堺側端 +100m。下り専用（上りは stopScenes の鏡像を使わない）
+{
+  const park = stations[5], zone = { inFrom: park.platform.from - 160, inTo: park.platform.from - 70, outFrom: park.platform.to + 10, outTo: park.platform.to + 100, lat: LOOP.lat, limit: LOOP.turnoutLimitKmh };
+  shiokaze.oncoming.push(...stopScenes(stations, [
+    { station: 5, kind: 'commuter-new', cars: 4, kmh: 74, loop: true, zone },
+    { station: 5, kind: 'commuter-old', cars: 6, kmh: 90, label: '急行', follow: true, through: true },
+  ]));
+}
 
 export const shiokazeUp: Route = reverseRoute(shiokaze, {
   id: 'shiokaze-up', name: '南海本線 堺 → 泉大津', timetable: TT_UP,
