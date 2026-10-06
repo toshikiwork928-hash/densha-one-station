@@ -24,6 +24,7 @@ import { attachOverlay } from './ui/overlay';
 import { lineOfRoute, resolveRoute } from './ui/lines';
 import { attachKeyboard } from './input/keyboard';
 import { attachTouch } from './input/touch';
+import { attachMouse } from './input/mouse';
 import { attachGamepad } from './input/gamepad';
 
 const renderCanvas = $<HTMLCanvasElement>('c');
@@ -63,6 +64,7 @@ attachHud(ctx);
 attachOverlay(ctx);
 attachKeyboard(ctx.actions);
 attachTouch(ctx.actions);
+attachMouse(ctx.actions);
 attachGamepad(ctx); // [A]
 
 world.loadAssets()

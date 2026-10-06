@@ -118,6 +118,7 @@ export function attachOverlay(ctx: GameContext): void {
       <table class="keys">
         <tr><td><kbd>↑</kbd> <kbd>W</kbd> / <kbd>↓</kbd> <kbd>S</kbd></td><td>力行側 / ブレーキ側へ1段</td></tr>
         <tr><td><kbd>Tab</kbd> / <kbd>← →</kbd> / <kbd>↑ ↓</kbd></td><td>タイトルで 種別 / ステージ / モード</td></tr>
+        <tr><td>マウスのホイール / 中ボタン</td><td>奥へ回すと力行側、手前へ回すとブレーキ側へ1段 / ノッチオフ（運転中）</td></tr>
         <tr><td><kbd>N</kbd> / <kbd>Space</kbd></td><td>ノッチオフ / 非常ブレーキ（減点）</td></tr>
         <tr><td><kbd>A</kbd></td><td>ATS 確認（B4 以上で）</td></tr>
         <tr><td><kbd>H</kbd> / <kbd>V</kbd></td><td>警笛（長押し） / 視点切替</td></tr>
