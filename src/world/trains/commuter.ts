@@ -94,8 +94,11 @@ export function paintCommuterSide(v: CommuterVariant, Lb: number, head: boolean,
   else s.glass((DOORS[3] + DOOR_W / 2 + hz) / 2 - sq, (DOORS[3] + DOOR_W / 2 + hz) / 2 + sq, w0, w1, '#565c63', .03);
   if (head) {
     door(crewZ, CREW_W, false);
-    const wz1 = doors[0] - DOOR_W / 2 - .17; // 客用扉の枠の手前
-    s.glass(wz1 - CREW_WIN, wz1, w0, w1, '#565c63', .05);
+    // 乗務員扉と客用扉の間の窓: 7100系にはあり、8300系は窓の無い壁（帯の立ち上がりだけ）
+    if (v === 'old') {
+      const wz1 = doors[0] - DOOR_W / 2 - .17; // 客用扉の枠の手前
+      s.glass(wz1 - CREW_WIN, wz1, w0, w1, '#565c63', .05);
+    }
   } else if (v === 'new') s.glass(-hz + .4, DOORS[0] - DOOR_W / 2 - .35, w0, w1, '#565c63', .05);
   else s.glass((DOORS[0] - DOOR_W / 2 - hz) / 2 - sq, (DOORS[0] - DOOR_W / 2 - hz) / 2 + sq, w0, w1, '#565c63', .03);
   // 号車札・小表示（文字なし）
