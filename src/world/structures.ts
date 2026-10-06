@@ -9,14 +9,14 @@ import { TUNNEL_CENTER, TUNNEL_HALF, TUNNEL_WALL_H, getTerrain, gridAlong } from
 import { BAND_CULL, isMountain } from './mountain-terrain';
 import { cullByDistance } from './cull';
 import { buildMountainSpan, buildRockSheds } from './mountain-structures';
-import { branchLinkZone } from './coastal-landmarks';
+import { hagoromoDeckEdge } from './hagoromo-branch';
 
 const concrete = new THREE.MeshLambertMaterial({ color: 0xc4c0b6, side: THREE.DoubleSide });
 
 /** 待避線の分岐と相対式ホームを包む床版外縁。横断形を変えて高欄を線路から離す。 */
 export function coastalDeckBounds(ctx: GameContext): (s: number) => [number, number] {
   const { route } = ctx, loops = loopTracks(ctx);
-  const thirds = route.stations.flatMap(st => coastalThirdTracks(route, st));
+  const thirds = route.stations.flatMap(st => coastalThirdTracks(route, st)).filter(q => !q.wire);
   const lo = Math.min(...route.tracks), hi = Math.max(...route.tracks);
   return s => {
     let left = lo - 3.3, right = hi + 3.3;
@@ -27,6 +27,8 @@ export function coastalDeckBounds(ctx: GameContext): (s: number) => [number, num
       const k = z.spread * islandShape(z, s);
       left = Math.min(left, lo - k - 3.3); right = Math.max(right, hi + k + 3.3);
     }
+    const hg = hagoromoDeckEdge(route, s);
+    if (hg) { if (hg.side < 0) left = Math.min(left, hg.lat); else right = Math.max(right, hg.lat); }
     for (const st of route.stations) if (st.elevated && !st.loop && !st.island) {
       const u = Math.max(0, Math.min(1, (s - st.platform.from + 25) / 25, (st.platform.to + 25 - s) / 25));
       const edge = 3.3 + 3.9 * u * u * (3 - 2 * u);
@@ -67,7 +69,7 @@ export function buildStructures(ctx: GameContext): void {
   const lampMat = new THREE.MeshBasicMaterial({ color: 0xffe2b0, toneMapped: false });
   const lamps: THREE.Matrix4[] = [];
   const MT = isMountain(T) ? T : null;
-  const bounds = coastalDeckBounds(ctx), linkZone = branchLinkZone(route);
+  const bounds = coastalDeckBounds(ctx);
 
   for (const st of list) {
     if (st.kind === 'tunnel') {
@@ -107,15 +109,7 @@ export function buildStructures(ctx: GameContext): void {
       for (const side of [-1, 1]) {
         scene.add(extrudeFn(track, s => {
           const [left, right] = bounds(s), a = side < 0 ? left : right - .25, b = a + .25;
-          // 支線階段の接続口はホーム床より低い地覆にする。
-          const branchSide = route.coastalLandmarks?.find(q => q.kind === 'branch')?.side ?? -1;
-          const stair = side === branchSide && route.stations.some(q => {
-            const len = q.platform.to - q.platform.from, sc = (q.platform.from + q.platform.to) / 2;
-            return q.layout === 'hagoromo' && Math.abs(s - (sc - len * .2 - 9.6)) < 3;
-          });
-          // 支線の渡り線が高架の縁をまたぐ区間は高欄を開ける。
-          const open = side === branchSide && !!linkZone && s > linkZone.from && s < linkZone.to;
-          const h = open ? .06 : stair ? .9 : wallH;
+          const h = wallH;
           return [[a, .02], [a, h], [b, h], [b, .02]];
         }, st.from, st.to, 2, concrete));
       }

@@ -31,6 +31,8 @@ export interface Station {
   /** 2面4線駅（島式ホーム2面）: 本線の外側に待避線、本線と待避線の間に島式ホーム。
    *  待避線を使う種別（ServiceSpec.useLoop）は分岐器で待避線へ入り、それ以外は本線のホームに停車・本線を通過 */
   loop?: StationLoop;
+  /** 待避線側の番線名（例 '3番線'）。待避線へ入る種別（enterLoop）の到着案内に使う */
+  loopTrack?: string;
   /** 島式1面2線駅: 下り線と上り線の間に島式ホーム1本。線路は駅の前後でホームの両側へ膨らみ（S字）、駅の外では元の間隔へ戻る。
    *  待避線は無く、全種別が自線を使う（ホームは自線から見て右側） */
   island?: StationIsland;
@@ -135,7 +137,7 @@ export interface OncomingStop {
 }
 
 export interface Route {
-  /** コース終着駅への接近を連続速度照査（実路線ATSの仕様そのものではない）。 */
+  /** コース終着駅への接近を連続速度照査（実路線ATSの仕様そのものではない）。南海本線は無効（false）。 */
   terminalApproach?: boolean;
   /** 描画専用の沿岸線ランドマーク。進行反転時は位置・左右・分岐向きを反転する。 */
   coastalLandmarks?: { kind: 'road-overpass' | 'tram-overpass' | 'steel-bridge' | 'branch' | 'tower'; s: number; length?: number; label?: string; side?: 1 | -1; direction?: 1 | -1 }[];

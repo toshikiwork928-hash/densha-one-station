@@ -28,6 +28,7 @@ const stations: Station[] = names.map(([name, kana], i) => {
     elevated: ![2, 5, 6].includes(i),
     layout: [0, 3, 9].includes(i) ? 'loop' : i === 4 ? 'hagoromo' : i === 5 ? 'hamadera' : 'relative',
     ...([0, 3, 9].includes(i) ? { loop: { ...LOOP } } : {}),
+    ...(i === 0 ? { loopTrack: '1番線' } : i === 9 ? { loopTrack: '3番線' } : {}),
     ...(i === 5 ? { loop: { ...PARK_LOOP } } : {}),
     // 湊は島式1面2線（高架）。線路は駅の前後でホームの両側へ開く。
     ...(i === 8 ? { island: { spread: 3.2, length: 100 } } : {}),
@@ -147,11 +148,13 @@ export const shiokaze: Route = {
     { kind: 'road-overpass', s: 2440, length: 155, side: 1, label: '臨海連絡道路' },
     { kind: 'tram-overpass', s: 6310, length: 125, label: '阪堺電軌' },
     { kind: 'steel-bridge', s: 7465, length: 150, label: '石津川橋梁' },
-    { kind: 'branch', s: 4980, length: 900, label: '高師浜線' },
+    // 羽衣の3番線（高師浜線）。s = 島式ホームの泉大津側の端。3線並行のまま約300m高架を進み、のち海側（西）へ離れる（配線略図 011_03）。
+    { kind: 'branch', s: stations[4].platform.from, length: 760, side: -1, direction: -1, label: '高師浜線' },
     // 羽衣駅直結のタワー: 泉大津寄りのホーム端（上り線の右側）。direction=1 は +z が s 増加方向。上りでは reverseRoute が反転する。
     { kind: 'tower', s: stations[4].platform.from - 24, side: 1, direction: 1, label: '羽衣駅直結タワー' },
   ],
-  terminalApproach: true,
+  // 終着の低速進入 ATS（game/terminal-ats.ts）は無効。普通は堺3番線・泉大津1番線（待避線側）へ入線し、分岐器制限 45km/h で速度を落とす。
+  terminalApproach: false,
 };
 
 export const shiokazeUp: Route = reverseRoute(shiokaze, {

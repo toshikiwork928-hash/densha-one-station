@@ -11,6 +11,7 @@ import { cullByDistance } from './cull';
 import { getTerrain, hash, TUNNEL_CENTER, TUNNEL_HALF, TUNNEL_WALL_H } from './terrain';
 import { loopTracks } from './track-mesh';
 import { coastalThirdTracks } from './coastal-stations';
+import { hagoromoDeckEdge } from './hagoromo-branch';
 
 const RAIL = .38;           // レール面（線路基準の高さ）
 const CW = RAIL + 5.34;     // トロリー線の高さ（パンタグラフ上昇時の舟の上面にほぼ接する）
@@ -227,10 +228,6 @@ export function buildCatenary(ctx: GameContext): void {
     for (const g of route.signs) if (Math.abs(s - g.s) < 2.5) return true;
     for (const L of route.limits) if (Math.abs(s - L.from) < 2.5 || Math.abs(s - L.to) < 2.5) return true;
     for (const st of route.stations) if (Math.abs(s - (st.platform.from + st.platform.to) / 2) < 15.5) return true; // 駅舎
-    for (const st of route.stations) if (st.layout === 'hagoromo') {
-      const sc = (st.platform.from + st.platform.to) / 2, len = st.platform.to - st.platform.from;
-      if (Math.abs(s - (sc - len * .2 - 9.6)) < 4) return true; // 支線への階段接続口
-    }
     for (const st of structs) if (Math.abs(s - st.from) < (st.kind === 'tunnel' ? 7 : 5) || Math.abs(s - st.to) < (st.kind === 'tunnel' ? 7 : 5)) return true;
     return false;
   };
@@ -287,6 +284,11 @@ export function buildCatenary(ctx: GameContext): void {
     if (kind === 'station') {
       // 相対式ホーム（両側）の外
       pl = L0 - 7.4; pr = L1 + 7.4;
+    }
+    // 羽衣の島式ホーム側: 床版の外縁（ホーム・3番線の外）に立てる
+    if (kind === 'station' || kind === 'viaduct' || kind === 'bridge') {
+      const hg = hagoromoDeckEdge(route, s);
+      if (hg) { if (hg.side < 0) pl = Math.min(pl, hg.lat + .5); else pr = Math.max(pr, hg.lat - .5); }
     }
     for (const t of thirds) if (s >= t.from && s <= t.to) {
       // 外側へは副線の外のホーム・柵（reach）の外、内側は 2.9m
@@ -348,6 +350,14 @@ export function buildCatenary(ctx: GameContext): void {
       off: (s) => ({ dl: 0, dy: .22 * (1 - Math.min(1, sh(s) * 2)) }),
       s0: a, s1: bS, anchors: [{ at: 's0', side: dir }, { at: 's1', side: dir }],
     });
+  }
+
+  // 羽衣の3番線（並行区間）: 本線と同じ吊架線・トロリー線。車止め側の端だけ引留め、離れていく側は支線（coastal-landmarks.ts）の架線へ続く。
+  for (const t of thirds) if (t.wire) {
+    const dir = Math.sign(t.outer - t.main), i0 = supIdx(t.from), i1 = supIdx(t.to);
+    const a = i0 < 0 ? 0 : i0, b = i1 < 0 ? sups.length - 1 : i1 - 1;
+    if (b <= a) continue;
+    runs.push({ lat: () => t.outer, off: () => zero, s0: sups[a].s, s1: sups[b].s, anchors: [{ at: t.wire.bumperAtFrom ? 's0' : 's1', side: dir }] });
   }
 
   // 単線の駅の右の線・副線: 分かれる手前は本線の架線の 0.45m 外側を並走（交差部は少し高く）

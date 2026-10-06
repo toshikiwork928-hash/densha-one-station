@@ -15,7 +15,7 @@ export function attachHud(ctx: GameContext): void {
   const mctx = $<HTMLCanvasElement>('meter').getContext('2d')!;
   const el = {
     clock: $('clock'), sched: $('sched'), delay: $('delay'), limit: $('limit'), limitPanel: $('limitPanel'),
-    nextLimit: $('nextLimit'), dist: $('dist'), nextSta: $('nextSta'), banner: $('banner'), notches: $('notches'),
+    nextLimit: $('nextLimit'), dist: $('dist'), distPanel: $('distPanel'), nextSta: $('nextSta'), banner: $('banner'), notches: $('notches'),
   };
   const distLbl = $('distPanel').querySelector<HTMLElement>('.lbl');
   // 「定刻 … 着」の「着」を停車中は「発」に切り替える
@@ -115,7 +115,7 @@ export function attachHud(ctx: GameContext): void {
     const terminalLimit = terminalSpeedLimit(route, st.target, st.train.s);
     const terminalDistance = route.terminalApproach && st.target === route.stations.length - 1
       ? route.stations[st.target].stopS - st.train.s : Infinity;
-    sx.ats.textContent = ats.state === 'normal' ? (terminalLimit < Infinity ? `ATS 終着照査 ${Math.floor(terminalLimit)}km/h` : terminalDistance <= 1500 ? `ATS 終着予告 65km/hまで ${Math.ceil(terminalDistance - 1000)}m` : st.sigLimit < Infinity ? `ATS 正常（信号制限 ${st.sigLimit}）` : 'ATS 正常')
+    sx.ats.textContent = ats.state === 'normal' ? (terminalLimit < Infinity ? `ATS 終着照査 ${Math.floor(terminalLimit)}km/h` : terminalDistance <= 1500 ? `ATS 終着予告 65km/hまで ${Math.ceil(terminalDistance - 1000)}m` : st.sigLimit < Infinity ? `ATS 正常（信号制限 ${Math.floor(st.sigLimit + 1e-6)}）` : 'ATS 正常')
       : ats.state === 'warn' ? `ATS 警報 ${Math.max(0, ats.timer).toFixed(1)}s — B4以上＋確認(A)`
         : `ATS 非常制動 — 停止後 確認(A)で復帰`;
     const open = st.doors === 'open', closing = st.doors === 'closing';
@@ -139,7 +139,7 @@ export function attachHud(ctx: GameContext): void {
     const remain = (dwelling() ? departureTime(route, targetIndex()) : sta.scheduledArrival) - st.t;
     if (running && remain < 0) { el.delay.textContent = `(遅れ ${Math.floor(-remain)}秒)`; el.delay.className = 'late'; }
     else { el.delay.textContent = running ? `(あと ${Math.ceil(remain)}秒)` : ''; el.delay.className = 'early'; }
-    el.limit.textContent = String(lim);
+    el.limit.textContent = lim < Infinity ? String(Math.floor(lim + 1e-6)) : '-';
     // 信号による制限が線路の制限より低いときは標識を黄色で強調（判定は loop.ts と同じ min(線路, 信号)）
     el.limitPanel.classList.toggle('sigcut', st.state === 'run' && st.sigLimit < track.limitAt(s));
     el.limitPanel.classList.toggle('over', vk > lim + OVERSPEED_MARGIN);
@@ -147,14 +147,16 @@ export function attachHud(ctx: GameContext): void {
     let nxt = '&nbsp;';
     const cur = route.limits.filter(L => s >= L.from && s < L.to && L.kmh <= route.lineLimit).sort((a, b) => a.kmh - b.kmh)[0];
     const ahead = route.limits.find(L => L.from > s && L.from - s < 1200 && L.kmh < (cur?.kmh ?? route.lineLimit));
-    if (ahead && (!cur || ahead.from < cur.to)) nxt = `<b>この先 ${ahead.kmh}</b> あと ${Math.round(ahead.from - s)}m`;
-    else if (cur) nxt = `<b>${cur.kmh} 解除</b>まで ${Math.round(cur.to - s)}m`;
+    if (ahead && (!cur || ahead.from < cur.to)) nxt = `<b>この先 ${Math.round(ahead.kmh)}</b> あと ${Math.round(ahead.from - s)}m`;
+    else if (cur) nxt = `<b>${Math.round(cur.kmh)} 解除</b>まで ${Math.round(cur.to - s)}m`;
     el.nextLimit.innerHTML = nxt;
     // 通過駅が手前にあればそこまでの距離を補助表示
     const p = nextPass();
     const d = sta.stopS - s;
     el.dist.textContent = d > 100 ? `${Math.round(d)} m` : d >= 0 ? `${d.toFixed(2)} m` : `+${(-d).toFixed(2)} m`;
     el.dist.classList.toggle('near', d <= 100);
+    el.distPanel.classList.toggle('near', d <= 100 && d >= 0);
+    el.distPanel.classList.toggle('over', d < 0);
     if (distLbl) distLbl.textContent = p >= 0 ? `停止位置まで（${route.stations[p].name}通過まで ${Math.max(0, Math.round(route.stations[p].stopS - s))}m）` : '停止位置まで';
     drawMeter(mctx, vk, lim, route.lineLimit > 100 ? 140 : 120, route.lineLimit);
     updateSide();

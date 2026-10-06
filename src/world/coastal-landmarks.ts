@@ -6,7 +6,7 @@ import { GeoBatch, M, P } from './batch';
 import { cullByDistance } from './cull';
 import { getTerrain } from './terrain';
 import { buildTower } from './coastal-tower';
-import type { Route } from '../route/types';
+import { BUMPER_D, DIVERGE_D, hagoromoSpec } from './hagoromo-branch';
 
 type Landmark = {
   kind: 'road-overpass' | 'tram-overpass' | 'steel-bridge' | 'branch' | 'tower';
@@ -39,11 +39,16 @@ function strip(b: GeoBatch, a: THREE.Vector3, z: THREE.Vector3, width: number, h
 function crossing(ctx: GameContext, b: GeoBatch, st: Landmark, tram: boolean): void {
   const { track } = ctx, t = track.trackAt(st.s), terrain = getTerrain(ctx);
   const side = st.side ?? -1, span = st.length ?? (tram ? 125 : 155), width = tram ? 7.8 : 19;
+  // 路線データの side は下りの斜交の向き。上りは進行方向が逆で、reverseRoute が side を反転しているので、
+  // そのまま使うと橋が物理的に鏡像になる（斜交が逆、橋上の電車の位置も反対）。同じ物理配置になるよう、上りは座標を 180° 回して斜交を保つ。
+  const up = ctx.route.id.endsWith('-up'), sgn = up ? -1 : 1, skew = (up ? -side : side) * .26;
+  // 上りの自線（横位置 0）は下りの対向線（横位置 4）の位置。橋の中心は物理的に同じ点へ。
+  const base = track.at(st.s, up ? Math.max(...ctx.route.tracks) : 0, 0);
   // 主線の吊架線・門形ビームも通せる余裕を取る。
-  const deckY = t.y + 9.35, roadAngle = -t.phi + side * .26;
+  const deckY = t.y + 9.35, roadAngle = -t.phi + skew;
   const p = (x: number, y: number, z = 0): THREE.Vector3 => {
-    const c = Math.cos(roadAngle), s = Math.sin(roadAngle);
-    return new THREE.Vector3(t.x + c * x + s * z, y, t.z - s * x + c * z);
+    const c = Math.cos(roadAngle), s = Math.sin(roadAngle), xx = x * sgn, zz = z * sgn;
+    return new THREE.Vector3(base.x + c * xx + s * zz, y, base.z - s * xx + c * zz);
   };
   const box = (x: number, y: number, z: number, w: number, h: number, d: number, col: number) => {
     const v = p(x, y, z); b.add('coastal', P.box, M(v.x, v.y, v.z, roadAngle, w, h, d), col);
@@ -55,14 +60,15 @@ function crossing(ctx: GameContext, b: GeoBatch, st: Landmark, tram: boolean): v
     box(0, deckY + 1.9, z, span, .09, .09, COLOR.steel);
     for (let x = -span / 2 + 2; x < span / 2; x += 3) box(x, deckY + 1.65, z, .065, .65, .065, COLOR.steel);
   }
-  for (let x = -span / 2 + 12; x < span / 2; x += 27) {
-    // 本線・待避線の建築限界を含む中央の大きな無柱スパン。
-    if (Math.abs(x) < 18) continue;
-    const ground = terrain.groundY(st.s + side * x * .25), height = deckY - .6 - ground;
-    if (height <= 0) continue;
+  // 橋脚: 中央の無柱スパン（本線・待避線の建築限界）を避け、両端にも橋台代わりの橋脚を置く。
+  const pierAt = (x: number) => {
+    const ground = terrain.groundY(st.s + sgn * x * Math.sin(skew)), height = deckY - .6 - ground;
+    if (height <= 0) return;
     for (const z of [-width * .3, width * .3]) box(x, ground + height / 2, z, 1.2, height, 1.5, COLOR.concrete);
     box(x, deckY - 1, 0, 2.5, .8, width + .4, COLOR.concrete);
-  }
+  };
+  for (let x = -span / 2 + 12; x < span / 2; x += 27) if (Math.abs(x) >= 18) pierAt(x);
+  for (const x of [-span / 2 + 3, span / 2 - 3]) pierAt(x);
   if (tram) {
     // 複線の路面電車高架。車体と架線を添えて道路橋と区別する。
     for (const c of [-1.55, 1.55]) {
@@ -118,87 +124,66 @@ function truss(ctx: GameContext, b: GeoBatch, st: Landmark): void {
   beam(b, point(to, left, 9.2), point(to, right, 9.2), .28, COLOR.steel);
 }
 
-const smooth0 = (x: number) => Math.max(0, Math.min(1, x));
-const smooth = (x: number) => { const t = Math.max(0, Math.min(1, x)); return t * t * (3 - 2 * t); };
-/** 支線の本線への渡り線。d = 支線ホーム端（landmark.s）から direction 向きの距離。主線の外側の線から泉大津側（図: 011_03 の羽衣 南西端）で分かれ、支線の線路へ合流する。 */
-const LINK = { from: 185, to: 365 };
-
-/** 支線・渡り線の平面形（描画と、高架床版の高欄を開ける区間の計算で共有する） */
-function branchSpec(route: Route, st: Landmark) {
-  const side = st.side ?? -1, direction = st.direction ?? -1, length = st.length ?? 430;
-  const lo = Math.min(...route.tracks), hi = Math.max(...route.tracks);
-  const originLat = side < 0 ? lo - 14 : hi + 14, mainLat = side < 0 ? lo : hi;
-  // ホームの横は直線で通す。駅端を離れてから緩く外側へ分かれる。
-  const lineLat = (d: number) => originLat + side * 115 * smooth0((d - 220) / Math.max(1, length - 220)) ** 2;
-  const linkLat = (d: number) => mainLat + (lineLat(LINK.to) - mainLat) * smooth((d - LINK.from) / (LINK.to - LINK.from));
-  return { side, direction, length, originLat, mainLat, lineLat, linkLat };
-}
-
-/** 渡り線が高架の高欄をまたぐ区間（s の範囲）。高欄をここだけ開ける。 */
-export function branchLinkZone(route: Route): { from: number; to: number } | null {
-  const st = route.coastalLandmarks?.find(l => l.kind === 'branch');
-  if (!st) return null;
-  const g = branchSpec(route, st);
-  let from = Infinity, to = -Infinity;
-  for (let d = LINK.from; d <= LINK.to; d++) {
-    const off = Math.abs(g.linkLat(d) - g.mainLat);
-    if (off > 1.5 && off < 5.5) { const s = st.s + g.direction * d; from = Math.min(from, s); to = Math.max(to, s); }
-  }
-  return from < to ? { from, to } : null;
-}
-
-/** 支線は単線の湾曲高架。駅の支線ホームは coastal-stations.ts が担当。羽衣駅の泉大津側で本線と渡り線でつながり、先は車止めで終わる（走行不可の描画専用）。 */
+/** 羽衣の3番線（高師浜線）。ホームの車止めから本線と3線並行のまま高架を泉大津側へ進み、のちに海側（西）へ曲がって離れ、行き止まりで終わる（走行不可の描画専用）。
+ *  並行区間の床版・高欄は structures.ts（本線の高架）が受け持ち、離れた先の床版・橋脚・高欄・架線柱はここで描く。平面形は world/hagoromo-branch.ts。 */
 function branch(ctx: GameContext, b: GeoBatch, st: Landmark): void {
-  const g = branchSpec(ctx.route, st), { side, direction, length } = g, terrain = getTerrain(ctx);
-  const originY = ctx.track.trackAt(st.s).y - 4;
-  const line = (d: number, lat = 0, height = 0): THREE.Vector3 => {
-    const p = ctx.track.at(st.s + direction * d, g.lineLat(d) + lat, 0);
-    p.y = originY + height; return p;
+  const h = hagoromoSpec(ctx.route);
+  if (!h) return;
+  const { side, length } = h, terrain = getTerrain(ctx);
+  /** d 地点の3番線中心（線路基準 y）と、進行方向に直角の水平単位ベクトル（+側 = 本線の横位置が増える向き） */
+  const frame = (d: number) => {
+    const s = h.sOf(d), c = (q: number) => ctx.track.at(q, h.lat(h.dOf(q)), 0);
+    const p = c(s), a = c(s - 1), z = c(s + 1);
+    let tx = z.x - a.x, tz = z.z - a.z; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
+    return { p, nx: -tz, nz: tx, s };
   };
-  const link = (d: number, lat = 0, height = 0): THREE.Vector3 => {
-    const w = smooth(((d - LINK.from) / (LINK.to - LINK.from) - .25) / .75);
-    const p = ctx.track.at(st.s + direction * d, g.linkLat(d) + lat, 0);
-    p.y = ctx.track.trackAt(st.s + direction * d).y * (1 - w) + originY * w + height; return p;
+  const pt = (d: number, off = 0, height = 0): THREE.Vector3 => {
+    const f = frame(d);
+    return new THREE.Vector3(f.p.x + f.nx * off, f.p.y + height, f.p.z + f.nz * off);
   };
-  const rails = (pt: typeof line, d: number, z: number) => {
-    strip(b, pt(d, 0, -.04), pt(z, 0, -.04), 2.7, .35, COLOR.ballast);
-    for (const lat of [-.5335, .5335]) strip(b, pt(d, lat, .35), pt(z, lat, .35), .065, .12, COLOR.rail);
-    for (let sleeper = d; sleeper < z; sleeper += 1.1) strip(b, pt(sleeper, -1, .18), pt(sleeper, 1, .18), .15, .13, 0x605951);
+  const rails = (d: number, z: number) => {
+    strip(b, pt(d, 0, .11), pt(z, 0, .11), 3.2, .22, COLOR.ballast);
+    for (const lat of [-.5335, .5335]) strip(b, pt(d, lat, .31), pt(z, lat, .31), .07, .14, COLOR.rail);
   };
-  const pier = (pt: typeof line, d: number) => {
-    const p = pt(d), g0 = terrain.groundY(st.s + direction * d), h = p.y - 1.4 - g0;
-    if (h > .2) b.add('coastal', P.boxB, M(p.x, g0, p.z, 0, 1.2, h, 1.2), COLOR.concrete);
+  const pier = (d: number) => {
+    const f = frame(d), g0 = terrain.groundY(f.s), top = f.p.y - 1.1, height = top - g0;
+    if (height < .5) return;
+    for (const off of [-2.2, 2.2]) b.add('coastal', P.boxB, M(f.p.x + f.nx * off, g0, f.p.z + f.nz * off, Math.atan2(f.nx, f.nz), 1.3, height, 1.3), COLOR.concrete);
+    b.add('coastal', P.box, M(f.p.x, top - .5, f.p.z, Math.atan2(f.nx, f.nz), 6.4, 1, 1.5), COLOR.concrete);
   };
-  const pole = (pt: typeof line, d: number) => {
-    beam(b, pt(d, side * 2.5, 0), pt(d, side * 2.5, 6.5), .14, COLOR.steel);
-    beam(b, pt(d, side * 2.5, 6.2), pt(d, 0, 6.2), .1, COLOR.steel);
+  const pole = (d: number) => {
+    beam(b, pt(d, side * 2.9, 0), pt(d, side * 2.9, 6.9), .16, COLOR.steel);
+    beam(b, pt(d, side * 2.9, 6.5), pt(d, side * .2, 6.5), .1, COLOR.steel);
   };
-  const bumper = (d: number) => {
-    for (const lat of [-.95, .95]) beam(b, line(d, lat, -.04), line(d, lat, 1.05), .2, 0x4b4f50);
-    beam(b, line(d, -1, .9), line(d, 1, .9), .22, 0x4b4f50, .3);
-    beam(b, line(d, -.8, .62), line(d, .8, .62), .1, 0xb5352a, .34);
+  // 車止めは線路終端を塞ぐ物なので、建築限界検査の対象外（clearanceExempt）として別グループに置く。
+  const stops = new GeoBatch();
+  const bumper = (d: number, inward: 1 | -1) => {
+    const e = d + inward * .6;
+    for (const lat of [-.95, .95]) beam(stops, pt(e, lat, 0), pt(e, lat, 1.1), .2, 0x4b4f50);
+    beam(stops, pt(e, -1, .9), pt(e, 1, .9), .22, 0x4b4f50, .3);
+    beam(stops, pt(e, -.8, .62), pt(e, .8, .62), .1, 0xb5352a, .34);
   };
-  // 8mごとの床版、4mごとの枕木をまとめ、遠景まで軽く描く。渡り線が合流する区間は本線側の高欄を開ける。
-  const open = (d: number, lat: number) => lat === -side * 1.9 && d > LINK.from + 50 && d < LINK.to + 16;
-  for (let d = -60; d < length; d += 8) {
-    const z = Math.min(length, d + 8);
-    strip(b, line(d, 0, -.8), line(z, 0, -.8), 4.2, 1.1, COLOR.concrete);
-    rails(line, d, z);
-    for (const lat of [-1.9, 1.9]) if (!open(d, lat)) strip(b, line(d, lat, .6), line(z, lat, .6), .15, .7, COLOR.concrete);
+  const STEP = 6, SLAB = DIVERGE_D + 40, PARAPET = DIVERGE_D + 80;
+  // 軌道（車止めから先端まで）。枕木は進行方向に直角。
+  for (let d = BUMPER_D; d < length; d += STEP) {
+    const z = Math.min(length, d + STEP);
+    rails(d, z);
+    for (let q = d; q < z; q += .8) strip(b, pt(q, -1.05, .22), pt(q, 1.05, .22), .2, .14, 0x605951);
+    beam(b, pt(d, 0, 5.72), pt(z, 0, 5.72), .03, 0x68706b);
   }
-  for (let d = -34; d < length; d += 25) {
-    pier(line, d); pole(line, d);
-    beam(b, line(d, 0, 5.72), line(Math.min(length, d + 25), 0, 5.72), .03, 0x68706b);
+  // 離れた先の床版・高欄（並行区間は本線の高架の床版）
+  for (let d = SLAB; d < length; d += STEP) {
+    const z = Math.min(length, d + STEP);
+    strip(b, pt(d, 0, -.54), pt(z, 0, -.54), 6.6, 1.1, COLOR.concrete);
+    if (d >= PARAPET) for (const off of [-3.2, 3.2]) strip(b, pt(d, off, .6), pt(z, off, .6), .25, 1.15, COLOR.concrete);
   }
-  bumper(-60); bumper(length);
-  // 渡り線: 本線の外側の線から分かれて高架の縁を越え、支線の線路へ合流する。分岐側は本線の高さのまま、合流側へ向けて支線の高さまで下る。
-  for (let d = LINK.from; d < LINK.to; d += 6) {
-    const z = Math.min(LINK.to, d + 6);
-    if (d > LINK.from + 55) strip(b, link(d, 0, -.8), link(z, 0, -.8), 4.2, 1.1, COLOR.concrete);
-    rails(link, d, z);
-    beam(b, link(d, 0, 5.72), link(z, 0, 5.72), .03, 0x68706b);
-  }
-  for (let d = LINK.from + 100; d < LINK.to; d += 25) { pier(link, d); pole(link, d); }
+  for (let d = PARAPET + 10; d < length; d += 24) pier(d);
+  for (let d = DIVERGE_D - 25; d < length; d += 25) if (d > DIVERGE_D + 10) pole(d);
+  bumper(BUMPER_D, 1); bumper(length, -1);
+  const stopGroup = new THREE.Group(); stopGroup.name = 'branch-bumper'; stopGroup.userData.clearanceExempt = 'rail-stop';
+  stops.build({ coastal: new THREE.MeshLambertMaterial({ vertexColors: true }) }, stopGroup);
+  ctx.scene.add(stopGroup); cullByDistance(ctx, stopGroup, 1100);
+  void st;
 }
 
 export function buildCoastalLandmarks(ctx: GameContext): void {

@@ -8,6 +8,7 @@ import { GeoBatch, M, P, onLight } from './batch';
 import { canvasTex } from './canvas-tex';
 import { getTerrain } from './terrain';
 import { buildMountainStations } from './mountain-stations';
+import { T3_GAP, hagoromoSpec } from './hagoromo-branch';
 import { buildElevatedConcourse, buildHeritageFacade, buildCoastalSpecialStations, coastalThirdTracks } from './coastal-stations';
 
 const platMat = new THREE.MeshLambertMaterial({ color: 0xc9c5bc });
@@ -67,8 +68,7 @@ export function buildStation(ctx: GameContext, sta: Station, prevName: string, n
   }
   // 柵（ホーム裏側）
   {
-    const branchSide = ctx.route.coastalLandmarks?.find(q => q.kind === 'branch')?.side ?? -1;
-    const stairOpening = sta.layout === 'hagoromo' && Math.sign(X(-6.55)) === branchSide ? len * .2 + 9.6 : undefined;
+    const stairOpening: number | undefined = undefined;
     for (let z = -len / 2; z <= len / 2; z += 2.5) if (stairOpening === undefined || Math.abs(z - stairOpening) > 1.2) box(-6.55, 1.75, z, .06, 1.3, .06, 0x8a9096);
     const segments = stairOpening === undefined ? [[-len / 2, len / 2]] : [[-len / 2, stairOpening - 1.2], [stairOpening + 1.2, len / 2]];
     for (const [from, to] of segments) {
@@ -299,11 +299,20 @@ export function buildStations(ctx: GameContext): void {
       buildIslandConcourse(ctx, sta, lp, [lp / 2, L1 - lp / 2]);
       return;
     }
+    if (sta.layout === 'hagoromo') {
+      // 2面3線: 本線の外側に島式ホーム（3番線＝高師浜線との間）、もう一方の本線の外側に片面ホーム。下り・上りで同じ物理配置。
+      const h = hagoromoSpec(ctx.route);
+      if (h) {
+        const sc2 = (sta.platform.from + sta.platform.to) / 2, dy2 = T.groundY(sc2) - T.trackY(sc2);
+        buildIsland(ctx, sta, h.mainIsland === 0 ? prev : next, h.mainIsland === 0 ? next : prev, h.island, T3_GAP - 3.2, { roof: .8 });
+        buildStation(ctx, sta, h.mainOuter === 0 ? prev : next, h.mainOuter === 0 ? next : prev, { lat: h.mainOuter, side: h.side < 0 ? 'R' : 'L', minimal: true, elevatedDy: dy2 });
+        buildElevatedConcourse(ctx, sta, [h.island, h.mainOuter - h.side * 4.1], -4.3, { noScreen: true });
+        return;
+      }
+    }
     const sc = (sta.platform.from + sta.platform.to) / 2;
     const dy = sta.elevated ? T.groundY(sc) - T.trackY(sc) : 0;
-    const special = sta.layout === 'hagoromo';
-    buildStation(ctx, sta, prev, next, { elevatedDy: dy, minimal: special });
-    if (sta.layout === 'hagoromo') buildElevatedConcourse(ctx, sta, [-4.1, 8.1], 0);
+    buildStation(ctx, sta, prev, next, { elevatedDy: dy });
     // 相対式ホーム: 対向線側にもホーム（上りの運転で使う）
     const L1 = Math.max(...ctx.route.tracks);
     if (L1 > 0) buildStation(ctx, sta, next, prev, { lat: L1, side: sta.platform.side === 'L' ? 'R' : 'L', minimal: true, elevatedDy: dy, shift: sta.platformOpp });

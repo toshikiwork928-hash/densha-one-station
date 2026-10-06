@@ -13,7 +13,7 @@ import { EventBus } from '../src/core/events';
 import { createTrainEnv } from '../src/sim/train';
 import { createRng } from '../src/core/rng';
 import { attachAutodrive } from '../src/debug/autodrive';
-import { terminalSpeedLimit, TERMINAL_CHECKPOINTS } from '../src/game/terminal-ats';
+import { terminalSpeedLimit } from '../src/game/terminal-ats';
 import type { GameContext } from '../src/core/context';
 import { createSignalSystem } from '../src/game/signals';
 
@@ -53,14 +53,23 @@ for (const route of [shiokaze, shiokazeUp]) {
       if (structure.kind === 'bridge') assert.ok(to <= structure.from || from >= structure.to, `${route.id}/${station.name}ホームと橋梁区間が重ならない`);
     }
   }
+  // 終着 ATS は無効。普通は終着の待避線（堺3番線・泉大津1番線）へ入り分岐器制限45km/h、急行・特急は本線ホームで制限なし。
   const target = 9, stop = route.stations[target].stopS;
-  for (const [distance, limit] of TERMINAL_CHECKPOINTS) assert.equal(terminalSpeedLimit(route, target, stop - distance), limit);
-  assert.equal(terminalSpeedLimit(route, 8, stop - 10), Infinity);
-  const ctx = context(route, 'express'); ctx.state.target = 9;
-  let eb = 0; const ats = createSignalSystem(ctx, () => eb++);
-  ctx.state.train.s = ctx.route.stations[9].stopS - 40; ctx.state.train.v = 25 / 3.6;
-  ctx.state.nextSignal = -1; ats.update(1 / 60, true); assert.equal(eb, 1, '終着照査で非常制動');
-  ctx.state.train.v = 0; assert.equal(ats.ack(), true);
+  assert.ok(!route.terminalApproach, `${route.id}終着ATSは無効`);
+  for (const distance of [1000, 600, 300, 120, 50, 0]) assert.equal(terminalSpeedLimit(route, target, stop - distance), Infinity);
+  const trackName = route.id === 'shiokaze' ? '3番線' : '1番線';
+  for (const service of ['local', 'express', 'limited'] as ServiceId[]) {
+    const ctx = context(route, service), sta = ctx.route.stations[target], loop = service === 'local';
+    assert.equal(!!sta.enterLoop, loop, `${route.id}/${service}終着の待避線入線`);
+    if (loop) assert.equal(sta.loopTrack, trackName, `${route.id}終着の番線名`);
+    const z = loopZone(sta)!;
+    assert.equal(ctx.track.limitAt(z.inFrom + 10), loop ? 45 : ctx.route.lineLimit, `${route.id}/${service}終着入線の制限`);
+    assert.equal(ctx.track.limitAt(stop - 40) <= (loop ? 45 : 999), true);
+    ctx.state.target = target;
+    let eb = 0; const ats = createSignalSystem(ctx, () => eb++);
+    ctx.state.train.s = stop - 40; ctx.state.train.v = 25 / 3.6; ctx.state.nextSignal = -1; ats.update(1 / 60, true);
+    assert.equal(eb, 0, `${route.id}/${service}終着で低速進入ATSの非常制動なし`);
+  }
 }
 const downTrack = buildTrack(shiokaze), upTrack = buildTrack(shiokazeUp);
 for (let s = 0; s <= downTrack.length; s += 50) assert.ok(Math.abs(downTrack.trackAt(s).y - upTrack.trackAt(upTrack.length - s).y) < 1e-6, '復路の標高一致');
@@ -106,11 +115,13 @@ for (const source of [shiokaze, shiokazeUp, mountain, mountainUp]) {
   for (const service of source.theme === 'mountain' ? ['local'] as const : ['local', 'express', 'limited'] as const) {
     const ctx = context(source, service), game = createGame(ctx);
     const observedWaits = new Set<number>(), observedSidings = new Set<number>();
-    let heldStation = -1;
+    let heldStation = -1, zoneMax = 0;
+    const finalSta = ctx.route.stations.at(-1)!, finalZone = loopZone(finalSta)!;
     attachAutodrive(ctx, (sec, dt = 1 / 30, hook) => {
       for (let t = 0; t < sec; t += dt) {
         if (hook?.()) break; game.update(dt);
         const st = ctx.state, o = st.overtake;
+        if (source.theme === 'coast' && st.train.s > finalZone.inFrom + 20 && st.train.s < finalZone.outTo) zoneMax = Math.max(zoneMax, st.train.v * 3.6);
         if (o?.localStopped && !o.cleared) {
           observedWaits.add(o.station);
           if (heldStation === o.station) assert.equal(st.signals[o.depSignal], 'R', '優等列車が抜けるまで普通の出発信号は停止');
@@ -133,6 +144,13 @@ for (const source of [shiokaze, shiokazeUp, mountain, mountainUp]) {
     assert.equal(ctx.state.penalties.atsBrake, 0, `${source.id}/${service}正常運転でATS非常制動なし`);
     assert.equal(result.overspeed, 0, `${source.id}/${service}全区間（終着ATS速度曲線含む）で速度超過減点なし`);
     assert.ok(Math.abs(ctx.state.train.s - ctx.route.stations.at(-1)!.stopS) < 15, `${source.id}/${service}終着停止`);
+    if (source.theme === 'coast') {
+      console.log(`  終着入線 ${service}: 入線区間の最高速 ${zoneMax.toFixed(1)}km/h 番線案内=${result.log.some((l: string) => l.includes('入線'))}`);
+      if (service === 'local') {
+        assert.ok(zoneMax <= 45 + 1, `${source.id}普通は終着の待避線入線で45km/h制限を保持`);
+        assert.ok(result.log.some((l: string) => l.includes(`${finalSta.loopTrack}へ入線`)), `${source.id}終着の番線予告バナー`);
+      } else assert.ok(!result.log.some((l: string) => l.includes('入線')), `${source.id}/${service}は入線案内なし`);
+    }
     if (source.theme === 'coast') {
       const waits = ctx.route.services!.find(s => s.id === 'local')!.waits!;
       assert.deepEqual([...observedWaits], service === 'local' ? waits.map(w => w.station) : [], '普通の通過待ちを指定順で実施');

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import { getTerrain } from '../world/terrain';
 import { coastalThirdTracks } from '../world/coastal-stations';
+import { hagoromoSpec } from '../world/hagoromo-branch';
 
 export interface NightLights {
   /** lamps: 0..1 照明の点灯度, head: 0..1 前照灯 */
@@ -60,7 +61,11 @@ export function createNightLights(ctx: GameContext): NightLights {
     const L1 = Math.max(...route.tracks), lp = sta.loop?.lat ?? 0;
     // [蛍光灯の横位置, 照らす床の横位置[]]。島式ホームは中央に蛍光灯、床は両側
     const L0 = Math.min(...route.tracks), mid = (L0 + L1) / 2;
-    const sides: [number, number[], number?][] = sta.layout === 'hamadera'
+    const hg = sta.layout === 'hagoromo' ? hagoromoSpec(route) : null;
+    const sides: [number, number[], number?][] = hg
+      // 羽衣: 本線と3番線の間の島式ホームと、もう一方の本線の外の片面ホーム
+      ? [[hg.island, [hg.island - 1.5, hg.island + 1.5]], [hg.mainOuter - hg.side * 4.1, [hg.mainOuter - hg.side * 3.6]]]
+      : sta.layout === 'hamadera'
       // 浜寺公園: 泉大津方面の島式（本線と副線の間）と、堺方面の副線の外側の片面ホーム
       ? coastalThirdTracks(route, sta).map((t): [number, number[]] => {
         if (t.island) { const c = (t.main + t.outer) / 2; return [c, [c - 1.5, c + 1.5]]; }
