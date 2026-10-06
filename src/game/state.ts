@@ -117,6 +117,8 @@ export interface GameState {
   overtake: OvertakeState | null;
   /** 単線の交換駅で行き違う対向列車（game/meet.ts）。無ければ null */
   meet: MeetState | null;
+  /** 一時停止中（run / dwell のときのみ true になり得る。シミュレーション時刻・信号・ATS・対向列車・音を止める） */
+  paused: boolean;
 }
 
 /** 停車駅（通過駅を除く）の index 列 */
@@ -178,7 +180,7 @@ export function resetState(st: GameState, route: Route): void {
     signals: (route.signals ?? []).map(() => 'G'), nextSignal: -1, sigLimit: Infinity, precedingS: 0,
     ats: { state: 'normal', timer: 0, reason: '' },
     penalties: { atsWarn: 0, atsBrake: 0, redPass: 0, wrongStop: 0 },
-    overtake: null, meet: null,
+    overtake: null, meet: null, paused: false,
   } satisfies GameState);
 }
 

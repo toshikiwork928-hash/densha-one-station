@@ -62,11 +62,29 @@ export function createGame(ctx: GameContext): Game {
   }
 
   function reset() {
+    setPaused(false);
     replay.stop();
     resetState(st, route);
     signals.reset();
     syncService();
     events.emit('reset');
+  }
+
+  /** 一時停止: 運転・停車中のみ（リプレイ・タイトル・結果では不可）。停止中は update() が何も進めない */
+  const canPause = () => (st.state === 'run' || st.state === 'dwell') && ctx.cameraMode !== 'replay' && !replay.active;
+  function setPaused(paused: boolean, reason: 'user' | 'hidden' = 'user') {
+    if (paused && !canPause()) return;
+    if (st.paused === paused) return;
+    st.paused = paused;
+    events.emit('pause', { paused, reason });
+  }
+  /** 一時停止中にプレイを中断してタイトルへ（記録は残さない） */
+  function quitToTitle() {
+    const from = st.state;
+    if (from !== 'run' && from !== 'dwell') return;
+    reset(); // 一時停止の解除（音の再開）・状態の初期化を含む
+    setCamera('cab');
+    events.emit('stateChange', { from, to: 'title' });
   }
 
   function setNotch(n: number, force = false) {
@@ -80,7 +98,7 @@ export function createGame(ctx: GameContext): Game {
   }
 
   function startOrRetry() {
-    if (!ctx.assetsReady) return;
+    if (!ctx.assetsReady || st.paused) return;
     if (st.state === 'run' || st.state === 'dwell') return;
     if (replay.active) { replay.stop(); return; }
     events.emit('start');
@@ -286,10 +304,14 @@ export function createGame(ctx: GameContext): Game {
     notchOff: () => setNotch(0),
     emergency: () => setNotch(NOTCH_EB),
     startOrRetry,
-    canControl: () => st.state === 'run' || st.state === 'dwell',
-    atsAck: () => { if (st.state === 'run' || st.state === 'dwell') signals.ack(); },
+    canControl: () => (st.state === 'run' || st.state === 'dwell') && !st.paused,
+    atsAck: () => { if ((st.state === 'run' || st.state === 'dwell') && !st.paused) signals.ack(); },
+    canPause: () => canPause() || st.paused,
+    togglePause: () => setPaused(!st.paused),
+    setPaused,
+    quitToTitle,
     cycleCamera: () => {
-      if (replay.active) return;
+      if (replay.active || st.paused) return;
       camCycle = (camCycle + 1) % 4;
       const mode: CameraMode = camCycle === 0 ? 'cab' : 'outside';
       ctx.cameraMode = mode;
@@ -325,6 +347,7 @@ export function createGame(ctx: GameContext): Game {
   const game: Game = {
     actions,
     update(dt) {
+      if (st.paused) return; // 一時停止中: 時刻・信号・待避/行き違い・ATS タイマーを進めない
       if (st.state === 'run') step(dt);
       else if (st.state === 'dwell') updateDwell(dt);
       else if (st.state === 'result' && replay.active) {

@@ -1,6 +1,6 @@
 // ゲームパッド（Gamepad API, standard mapping 想定）→ GameActions。frame ごとにポーリング
 // 十字上下/RB・LB = ノッチ±1, A = 開始・ATS確認, B = 非常(EB)・結果画面でタイトルへ, X = ノッチオフ, Y = 視点,
-// Start = 開始, Back = リプレイ, 十字左右 = ステージ選択, LB/RB = 種別選択（タイトル）, L3 = 1軸レバーモード切替（左スティック上下をマスコン位置に対応）
+// Start = 開始・一時停止/再開（運転・停車中）, Back = リプレイ, 十字左右 = ステージ選択, LB/RB = 種別選択（タイトル）, L3 = 1軸レバーモード切替（左スティック上下をマスコン位置に対応）
 import { NOTCH_MAX } from '../core/config';
 import type { GameContext } from '../core/context';
 
@@ -34,6 +34,11 @@ export function attachGamepad(ctx: GameContext): void {
     const hit = (i: number) => !!now[i] && !prev[i];
     prev = now;
     const a = act(), running = a.canControl();
+    // Start = 一時停止 / 再開（運転・停車中）。停止中は他のボタンを受け付けない
+    if (a.canPause()) {
+      if (hit(B.START)) { a.togglePause(); return; }
+      if (!running) return;
+    }
 
     if (hit(B.Y)) a.cycleCamera();
     if (hit(B.L3)) { lever = !lever; banner(lever ? 'レバーモード（左スティック上下 = マスコン位置）' : '段送りモード', 2.5); }

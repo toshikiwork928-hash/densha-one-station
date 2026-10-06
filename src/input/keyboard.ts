@@ -10,6 +10,9 @@ export function attachKeyboard(actions: GameActions, target: Window = window): (
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Tab'].includes(k)) e.preventDefault();
     if (e.repeat) return;
     if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return; // 修飾キー付きは他モジュールのショートカット
+    // 一時停止（運転・停車中のみ。結果画面の Esc はタイトルへ）。停止中は再開以外の操作を受け付けない
+    if ((k === 'Escape' || k === 'KeyP') && actions.canPause()) { actions.togglePause(); return; }
+    if (actions.canPause() && !actions.canControl()) return;
     if (k === 'KeyV') { actions.cycleCamera(); return; }
     if (!actions.canControl()) {
       if (k === 'Enter' || k === 'Space') actions.startOrRetry();

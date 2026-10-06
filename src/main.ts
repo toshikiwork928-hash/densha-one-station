@@ -70,6 +70,8 @@ world.loadAssets()
   .then(failed => { ctx.assetsReady = true; ctx.events.emit('assetsReady', { failed: Math.max(0, failed) }); });
 
 const clock = new THREE.Clock();
+/** 描画系の時刻 [s]。一時停止中は進めない（踏切の点滅・揺れ・雲なども止める） */
+let viewTime = 0;
 let inspectScene: (() => void) | undefined;
 function step(dt: number, time: number) {
   game.update(dt);
@@ -81,9 +83,11 @@ function step(dt: number, time: number) {
 }
 function loop() {
   if (recovery.failed) return;
-  const dt = Math.min(MAX_DT, clock.getDelta());
+  const real = Math.min(MAX_DT, clock.getDelta());
+  const dt = ctx.state.paused ? 0 : real;
+  viewTime += dt;
   try {
-    step(dt, clock.elapsedTime);
+    step(dt, viewTime);
     if (!renderer.getContext().isContextLost()) recovery.healthyFrame();
   } catch (error) { console.error(error); recovery.fail('描画処理でエラーが発生した。'); return; }
   requestAnimationFrame(loop);

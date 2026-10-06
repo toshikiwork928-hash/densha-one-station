@@ -121,6 +121,7 @@ export function attachOverlay(ctx: GameContext): void {
         <tr><td><kbd>H</kbd> / <kbd>V</kbd></td><td>警笛（長押し） / 視点切替</td></tr>
         <tr><td><kbd>X</kbd> / <kbd>M</kbd></td><td>ワイパー / 消音</td></tr>
         <tr><td><kbd>Shift</kbd>+<kbd>T</kbd> <kbd>Y</kbd> <kbd>Q</kbd></td><td>時間帯 / 天候 / 画質</td></tr>
+        <tr><td><kbd>Esc</kbd> / <kbd>P</kbd></td><td>運転・停車中に一時停止 / 再開（画面右上のボタン、ゲームパッド Start でも可）</td></tr>
         <tr><td><kbd>R</kbd> / <kbd>Esc</kbd></td><td>結果画面でリプレイ / タイトルへ</td></tr>
       </table>
       <p class="sub">途中駅はドアが閉まったら力行で発車。ゲームパッド対応（L3 でレバーモード）。タッチ端末は画面右下のボタン。</p>

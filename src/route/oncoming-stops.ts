@@ -48,3 +48,14 @@ export function stopScenes(stations: Station[], scenes: StopScene[]): OncomingSp
     };
   });
 }
+
+/** ラッシュ時（朝・夜）に足す対向列車: 既存の停車シーン（spec.stop）が無い途中駅に、普通（新型4両 / 旧型6両を交互）を停車させる。
+ *  複線で、停車シーンを持つ路線のみ（無ければ空）。出現・走路の重なりは world/oncoming.ts の canSpawn が既存編成と同じ規則で調停する */
+export function rushStopScenes(stations: Station[], base: OncomingSpec[]): OncomingSpec[] {
+  if (!base.some(o => o.stop)) return [];
+  const used = new Set(base.flatMap(o => (o.stop ? [o.stop.station] : [])));
+  const idx = stations.map((_, i) => i).filter(i => i > 0 && i < stations.length - 1 && !used.has(i));
+  return stopScenes(stations, idx.map((station, k): StopScene => (k % 2
+    ? { station, kind: 'commuter-old', cars: 6, kmh: 74, label: '普通' }
+    : { station, kind: 'commuter-new', cars: 4, kmh: 74 })));
+}

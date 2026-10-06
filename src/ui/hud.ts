@@ -147,6 +147,37 @@ export function attachHud(ctx: GameContext): void {
     updateSide();
   }
 
+  // ---- 一時停止（右上のボタン・中央の停止画面・タブ非表示で自動停止） ----
+  const pause = {
+    btn: $<HTMLButtonElement>('pauseBtn'), box: $('pauseOverlay'), info: $('pauseInfo'),
+    resume: $<HTMLButtonElement>('resumeBtn'), quit: $<HTMLButtonElement>('quitBtn'),
+  };
+  let quitArmed = false;
+  const armQuit = (on: boolean) => {
+    quitArmed = on;
+    pause.quit.textContent = on ? 'もう一度押すとタイトルへ（記録は残らない）' : 'タイトルへ戻る';
+    pause.quit.classList.toggle('warn', on);
+  };
+  // pointerdown でなく click: 押した指を離したときの誤操作（停止画面の下の操作ボタン）を避ける
+  pause.btn.addEventListener('click', () => { ctx.actions.setPaused(true); pause.btn.blur(); });
+  pause.resume.addEventListener('click', () => ctx.actions.setPaused(false));
+  pause.quit.addEventListener('click', () => { if (!quitArmed) { armQuit(true); return; } armQuit(false); ctx.actions.quitToTitle(); });
+  events.on('pause', ({ paused, reason }) => {
+    pause.box.hidden = !paused;
+    document.body.classList.toggle('paused', paused);
+    armQuit(false);
+    if (paused) {
+      pause.info.textContent = `${fmtClock(route.startClock + st.t)} で停止中${reason === 'hidden' ? '（画面が非表示になったため自動で一時停止）' : ''}`;
+      pause.resume.focus({ preventScroll: true });
+    }
+  });
+  // タブ・アプリが背面へ回ったら自動で一時停止（戻っても自動再開はしない）
+  document.addEventListener('visibilitychange', () => { if (document.hidden && !st.paused && ctx.actions.canPause()) ctx.actions.setPaused(true, 'hidden'); });
+  const syncPauseBtn = () => {
+    const show = !st.paused && ctx.actions.canPause();
+    if (pause.btn.hidden === show) pause.btn.hidden = !show;
+  };
+
   let passCount = 0;
   renderTarget();
   renderNotches();
@@ -160,5 +191,6 @@ export function attachHud(ctx: GameContext): void {
     if (bannerTimer > 0 && (bannerTimer -= dt) <= 0) el.banner.classList.remove('show');
     if (st.passes.length !== passCount) { passCount = st.passes.length; renderTarget(); } // 通過駅を過ぎたら更新
     update();
+    syncPauseBtn();
   });
 }

@@ -26,6 +26,13 @@ export interface GameActions {
   cycleCamera(): void;
   /** [A] 結果画面からタイトルへ */
   toTitle(): void;
+  /** 一時停止できる状態か（運転中・停車中のみ。リプレイ・タイトル・結果では不可） */
+  canPause(): boolean;
+  /** 一時停止の切替 / 指定（reason: user = 操作, hidden = タブ非表示で自動） */
+  togglePause(): void;
+  setPaused(paused: boolean, reason?: 'user' | 'hidden'): void;
+  /** 一時停止中にプレイを中断してタイトルへ戻る */
+  quitToTitle(): void;
   /** [A] 結果画面でリプレイ開始/停止 */
   toggleReplay(): void;
   /** [A] タイトルでステージ/モード選択（delta で前後へ） */

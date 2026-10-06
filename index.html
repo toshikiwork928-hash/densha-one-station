@@ -17,10 +17,13 @@
       <div class="sub">定刻 <span id="sched"></span> 着 <span id="delay"></span></div>
     </div>
     <div id="banner"></div>
-    <div class="panel" id="limitPanel">
-      <div class="lbl">制限速度</div>
-      <div class="limitSign" id="limit">90</div>
-      <div class="sub" id="nextLimit">&nbsp;</div>
+    <div id="topRight">
+      <div class="panel" id="limitPanel">
+        <div class="lbl">制限速度</div>
+        <div class="limitSign" id="limit">90</div>
+        <div class="sub" id="nextLimit">&nbsp;</div>
+      </div>
+      <button id="pauseBtn" type="button" aria-label="一時停止（Esc / P）" title="一時停止（Esc / P）" hidden><i aria-hidden="true"></i><span>一時停止</span></button>
     </div>
   </div>
   <div id="dash">
@@ -38,6 +41,16 @@
   <button data-k="up">▲<small>力行側</small></button>
   <button data-k="down">▼<small>ブレーキ側</small></button>
   <button data-k="eb">EB</button>
+</div>
+
+<div id="pauseOverlay" role="dialog" aria-modal="true" aria-labelledby="pauseTitle" hidden>
+  <div class="pauseCard">
+    <div id="pauseTitle">一時停止中</div>
+    <div class="sub" id="pauseInfo"></div>
+    <button class="btn" id="resumeBtn" type="button">再開</button>
+    <button class="btn sub2" id="quitBtn" type="button">タイトルへ戻る</button>
+    <p class="pauseKeys"><kbd>Esc</kbd> / <kbd>P</kbd> / ゲームパッド Start で再開</p>
+  </div>
 </div>
 
 <div id="overlay"><div class="card" id="card"></div></div>

@@ -67,6 +67,8 @@ export interface EventMap {
   tunnel: { inside: boolean };
   /** [G] 運行種別の変更（タイトルでの選択時。起動時は route に適用済みで発火しない場合あり → ctx.service を参照） */
   serviceChange: { service: ServiceSpec };
+  /** 一時停止の開始/解除（停止中はシミュレーション・音・放送を止める） */
+  pause: { paused: boolean; reason: 'user' | 'hidden' };
   /** [G] 待避中に後続列車が本線を通過（0..1 の近さ。風切り音用。通過中は毎フレーム） */
   overtakePass: { proximity: number };
 }

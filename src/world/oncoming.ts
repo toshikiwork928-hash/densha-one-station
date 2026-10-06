@@ -4,11 +4,13 @@
 // 島式ホーム側のドアだけ開ける。同じ駅の対向の優等列車（spec.follow）は本線に停車 / 通過し、普通はその優等列車が分岐器を抜けてから発車する
 // 同時に走る対向列車は、走路が重ならないものだけ（出現位置が他の編成の走路と重なるうちは出さない）。同じ線の前後の編成は間隔を保つ。車両セットは種別・両数ごとに使い回す
 // 単線（route.singleTrack）: 交換駅で行き違う対向列車（route.meets）は game/meet.ts が動かし（st.meet）、ここでは描画・ドア・警笛のみ。右の線（+spread）を走る
+// ラッシュ時（朝・夜）は、対向の停車シーンが無い途中駅にも停車する対向列車を足す（複線のみ。route/oncoming-stops.ts の rushStopScenes）
 // spec.kind 未指定なら 普通(新型4両) → 急行(旧型6両) → 特急(6両) の順に割り当てる
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import type { OncomingSpec, Station, TrainKind } from '../route/types';
 import { islandOffset, loopShape, loopZone, type LoopZone } from '../route/service';
+import { rushStopScenes } from '../route/oncoming-stops';
 import { onLight } from './batch';
 import { placeCar } from './emu';
 import { createTrainSet, setTrainNight, TRAIN_KINDS, type TrainCar } from './train-models';
@@ -42,6 +44,8 @@ interface OncomingTrain {
   tClose: number;
   tPlayer: number;
   horn: boolean;
+  /** ラッシュ時（朝・夜）だけ出す編成 */
+  rush: boolean;
 }
 
 export interface OncomingSystem {
@@ -99,12 +103,15 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
     const arr = sets.get(key) ?? []; arr.push(v); sets.set(key, arr);
     return v;
   };
-  const trains: OncomingTrain[] = route.oncoming.map((spec0, i) => {
+  // ラッシュ用の編成は末尾に足す（follow は直前の要素を相手にするので、既存の並びを崩さない）
+  const rushSpecs = route.singleTrack ? [] : rushStopScenes(route.stations, route.oncoming);
+  const trains: OncomingTrain[] = [...route.oncoming, ...rushSpecs].map((spec0, i) => {
     const mix = MIX[i % MIX.length];
     const spec: OncomingSpec = spec0.kind ? spec0 : { ...spec0, kind: mix.kind, cars: mix.cars, kmh: Math.round(spec0.kmh * mix.kmhScale) };
     const zone = spec.stop?.loop ? loopZone(route.stations[spec.stop.station]) : null;
-    return { spec, kind: spec.kind!, idx: i, zone, view: null, active: false, done: false, started: false, head: 0, v: 0, phase: 'cruise', left: false, tStop: 0, tClose: 0, tPlayer: 0, horn: false } as OncomingTrain;
+    return { spec, kind: spec.kind!, idx: i, zone, view: null, active: false, done: false, started: false, head: 0, v: 0, phase: 'cruise', left: false, tStop: 0, tClose: 0, tPlayer: 0, horn: false, rush: i >= route.oncoming.length } as OncomingTrain;
   });
+  const RUSH_TIMES = new Set(['morning', 'night']);
   const lenOf = (o: OncomingTrain) => o.view ? o.view.length : o.spec.cars * (o.spec.carLen + o.spec.gap);
   /** 待避線に停車する編成について、同じ駅の優等列車（後ろに続く follow の要素）。無ければ null */
   const followerOf = (o: OncomingTrain): OncomingTrain | null => { const f = trains[o.idx + 1]; return o.zone && f?.spec.follow ? f : null; };
@@ -248,7 +255,7 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
   // ---------- 行き違いの対向列車（st.meet） ----------
   const meetSpecs: OncomingTrain[] = (route.meets ?? []).map((m, i) => ({
     spec: { spawnAt: Infinity, startS: 0, cars: m.cars, carLen: 18, gap: .8, kmh: m.kmh, lat: 0, kind: m.kind, ...(m.label ? { label: m.label } : {}), ...(m.dest ? { dest: m.dest } : {}) },
-    kind: m.kind, idx: -1 - i, zone: null, view: null, active: false, done: false, started: false, head: 0, v: 0, phase: 'cruise', left: false, tStop: 0, tClose: 0, tPlayer: 0, horn: false,
+    kind: m.kind, idx: -1 - i, zone: null, view: null, active: false, done: false, started: false, head: 0, v: 0, phase: 'cruise', left: false, tStop: 0, tClose: 0, tPlayer: 0, horn: false, rush: false,
   }));
   for (const o of meetSpecs) if (!sets.has(keyOf(o))) build(o);
   let meetHornStage = '';
@@ -276,11 +283,13 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
   }
 
   events.on('frame', ({ dt }) => {
-    if (st.state !== 'run' && st.state !== 'dwell') return;
+    if ((st.state !== 'run' && st.state !== 'dwell') || st.paused) return;
     const ps = st.train.s, pv = st.train.v;
     let p = updateMeet(ps, pv);
+    const rushHour = RUSH_TIMES.has(ctx.envState.timeOfDay);
     for (const o of trains) {
       if (!o.active && !o.done && ps >= o.spec.spawnAt) {
+        if (o.rush && !rushHour) { o.done = true; continue; }
         const ok = canSpawn(o, ps);
         if (ok === 'skip') { o.done = true; continue; }
         if (ok) {
@@ -298,7 +307,7 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
   });
 
   // 開発時の確認用: 各編成の状態
-  if (import.meta.env.DEV) (window as any).__oncomingDebug = () => trains.map(o => ({ kind: o.kind, stop: o.spec.stop?.station, loop: !!o.zone, active: o.active, done: o.done, phase: o.phase, head: Math.round(o.head), len: Math.round(lenOf(o)), lat: +laneLat(o, o.head).toFixed(1), kmh: Math.round(o.v * 3.6), tStop: Math.round(o.tStop), tPlayer: Math.round(o.tPlayer) }));
+  if (import.meta.env.DEV) (window as any).__oncomingDebug = () => trains.map(o => ({ kind: o.kind, rush: o.rush, started: o.started, stop: o.spec.stop?.station, loop: !!o.zone, active: o.active, done: o.done, phase: o.phase, head: Math.round(o.head), len: Math.round(lenOf(o)), lat: +laneLat(o, o.head).toFixed(1), kmh: Math.round(o.v * 3.6), tStop: Math.round(o.tStop), tPlayer: Math.round(o.tPlayer) }));
 
   return {
     activeSpans: () => [

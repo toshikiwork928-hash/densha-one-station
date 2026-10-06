@@ -93,6 +93,13 @@ export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
   }
 
   events.on('start', () => { ensure(); doorsOpen = false; });
+  // 一時停止: AudioContext ごと止める（走行音・VVVF・ブレーキ・警報・踏切・予約済みの音の時刻も止まる）。放送は残り時間を保持
+  events.on('pause', e => {
+    hornStop?.(); hornStop = null;
+    // suspend/resume は非同期。連打で順序が入れ替わらないよう、状態を見ずに毎回最後の指示を出す
+    if (e.paused) { announcer.pause(); if (ac && ac.state !== 'closed') void ac.suspend(); }
+    else { if (ac && ac.state !== 'closed') void ac.resume(); announcer.resume(); }
+  });
   events.on('reset', () => { silenceAll(); doorsOpen = false; });
   events.on('notch', e => { if (!p) return; p.alarms.click(e.notch); p.brakes.notch(e.notch, e.prev); });
   events.on('stop', () => p?.brakes.stopped());
@@ -180,6 +187,7 @@ export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
   window.addEventListener('keydown', ev => {
     if (ev.repeat || isTyping(ev.target)) return;
     if (ev.code === 'KeyH') {
+      if (ctx.state.paused) return;
       const parts = ensure();
       if (parts && !hornStop) hornStop = parts.alarms.hornStart();
     } else if (ev.code === 'KeyM') {
