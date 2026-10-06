@@ -75,13 +75,13 @@ export interface MeetSpec { station: number; kind: TrainKind; cars: number; /** 
 
 /** 運行種別（プレイヤーが選ぶ） */
 /** southern = 特急サザン（10000系 + 7100系の8両。座席指定車と自由席車の併結） */
-export type ServiceId = 'local' | 'express' | 'limited' | 'southern';
+export type ServiceId = 'local' | 'express' | 'airport' | 'limited' | 'southern';
 /** 車両の見た目の種類（world/train-models.ts が生成） */
 /** commuter-2300 = 山岳線用の 2300系（18m 車体・2両ユニット）、southern-10000 = 特急サザンの座席指定車（10000系、4両ユニット） */
 export type TrainKind = 'commuter-new' | 'commuter-old' | 'limited' | 'commuter-2300' | 'southern-10000';
 export interface ServiceSpec {
   id: ServiceId;
-  /** 表示名（普通 / 急行 / 特急） */
+  /** 表示名（普通 / 急行 / 空港急行 / 特急ラピート / 特急サザン） */
   name: string;
   /** 総両数（units の合計。種別適用で route/service.ts が更新） */
   cars: number;

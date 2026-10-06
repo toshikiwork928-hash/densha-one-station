@@ -16,8 +16,8 @@ const ROOF: V2[] = [[HW, 3.42], [HW - .05, 3.58], [HW - .3, 3.71], [HW - .75, 3.
 /** 断面: new = すそ絞り、old = 直線車体（鋼製） */
 const HALFS: Record<CommuterVariant, V2[]> = { new: [[HW - .06, Y0], [HW, 1.5], ...ROOF], old: [[HW, Y0], ...ROOF] };
 const DOORS = [-7.2, -2.4, 2.4, 7.2], DOOR_W = 1.3;
-/** 先頭車: 前端から乗務員扉の中心まで・扉幅・客用扉1の後ろへのずらし量・扉後ろの窓幅 */
-const CREW_OFF = .55, CREW_W = .64, HEAD_SHIFT = .4, CREW_WIN = 1.1;
+/** 先頭車: 前端から乗務員扉の中心まで・扉幅・客用扉1の後ろへのずらし量 */
+const CREW_OFF = .55, CREW_W = .64, HEAD_SHIFT = .4;
 const BLUE = '#2f3fa8', ORANGE = '#f0961c';
 
 interface Look {
@@ -95,9 +95,10 @@ export function paintCommuterSide(v: CommuterVariant, Lb: number, head: boolean,
   if (head) {
     door(crewZ, CREW_W, false);
     // 乗務員扉と客用扉の間の窓: 7100系にはあり、8300系は窓の無い壁（帯の立ち上がりだけ）
+    // 7100系の窓は他の側窓と同じ正方形（乗務員扉と客用扉の間の中央）
     if (v === 'old') {
-      const wz1 = doors[0] - DOOR_W / 2 - .17; // 客用扉の枠の手前
-      s.glass(wz1 - CREW_WIN, wz1, w0, w1, '#565c63', .05);
+      const zc = (crewZ + CREW_W / 2 + doors[0] - DOOR_W / 2) / 2;
+      s.glass(zc - sq, zc + sq, w0, w1, '#565c63', .07);
     }
   } else if (v === 'new') s.glass(-hz + .4, DOORS[0] - DOOR_W / 2 - .35, w0, w1, '#565c63', .05);
   else s.glass((DOORS[0] - DOOR_W / 2 - hz) / 2 - sq, (DOORS[0] - DOOR_W / 2 - hz) / 2 + sq, w0, w1, '#565c63', .03);

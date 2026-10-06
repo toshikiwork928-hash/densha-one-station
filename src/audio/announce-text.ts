@@ -8,7 +8,7 @@ export const toKatakana = (s: string): string => s.replace(/[ぁ-ゖ]/g, c => St
 /** 読み上げ用の駅名 */
 export const spoken = (s: Station): string => toKatakana(s.kana ?? s.name);
 
-/** 路線の終点か（列車の本来の行先がコースの終点より先＝サザンの和歌山市など、のときは終点ではない） */
+/** 路線の終点か（列車の本来の行先がコースの終点と違う＝なんば・和歌山市・羽倉崎など、のときは終点ではない） */
 export const isTerminus = (route: Route, index: number, svc?: ServiceSpec): boolean =>
   index === route.stations.length - 1 && (!svc?.destination || svc.destination === route.stations[index].name);
 

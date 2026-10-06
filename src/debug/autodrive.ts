@@ -1,5 +1,5 @@
 // QA 用の自動運転（開発時のみ。main.ts が import.meta.env.DEV で読み込む）。
-// コンソールから: __qa.run('local'|'express'|'limited') → 全線通しを描画せずに走らせ、停車・待避・行き違い（overtake 列に 'meet' 行）の経過を返す
+// コンソールから: __qa.run('local'|'express'|'airport'|'limited'|'southern') → 全線通しを描画せずに走らせ、停車・待避・行き違い（overtake 列に 'meet' 行）の経過を返す
 import type { GameContext } from '../core/context';
 import type { ServiceId } from '../route/types';
 import { terminalSpeedLimit } from '../game/terminal-ats';

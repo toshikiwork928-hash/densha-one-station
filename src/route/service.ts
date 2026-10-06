@@ -155,8 +155,26 @@ export const serviceOf = (route: Route, id: ServiceId | undefined): ServiceSpec 
 /** 海の側（進行方向に対して -1 = 左、1 = 右）。route.seaSide、無ければ高架支線の側（汐風線の従来の決め方） */
 export const seaSideOf = (route: Route): 1 | -1 => route.seaSide ?? route.coastalLandmarks?.find(l => l.kind === 'branch')?.side ?? -1;
 
-/** 列車の行先（行先表示・放送）。種別に本来の行先（サザンの和歌山市など）があればそれ、無ければコースの終点 */
+/** 列車の行先（行先表示・放送）。種別に本来の行先（なんば・和歌山市など）があればそれ、無ければコースの終点 */
 export const destOf = (route: Route, svc?: ServiceSpec): string => svc?.destination ?? route.stations[route.stations.length - 1]?.name ?? '';
+/** 和歌山方面（コースの終点が岸和田・泉大津でも）の種別ごとの本来の行先 */
+const WAKAYAMA_DEST: Record<ServiceId, [string, string]> = {
+  local: ['羽倉崎', 'はぐらざき'], express: ['和歌山市', 'わかやまし'], airport: ['関西空港', 'かんさいくうこう'],
+  limited: ['関西空港', 'かんさいくうこう'], southern: ['和歌山港', 'わかやまこう'],
+};
+/** 種別の行先を本来のものにそろえる。堺方面（なんば方面）は全種別「なんば」、和歌山方面は種別ごと（普通 羽倉崎・急行 和歌山市・空港急行/ラピート 関西空港・サザン 和歌山港） */
+export function setDestinations(services: ServiceSpec[], toward: 'namba' | 'wakayama'): void {
+  for (const v of services) {
+    const [d, k] = toward === 'namba' ? ['なんば', 'なんば'] : WAKAYAMA_DEST[v.id];
+    v.destination = d; v.destinationKana = k;
+  }
+}
+/** 空港急行（8300系 8両が既定、6両も選べる。停車駅は急行と同じ、最高速度 100km/h） */
+export const airportService = (stops: number[], timetable: ServiceSpec['timetable']): ServiceSpec => ({
+  id: 'airport', name: '空港急行', cars: 8, units: [4, 4], kind: 'commuter-new',
+  kindOptions: ['commuter-new', 'commuter-old'], formationOptions: [[4, 4], [4, 2]],
+  lineLimit: 100, stops, timetable,
+});
 /** 編成の車種の並びのキー（キャッシュ用。例 'southern-10000+commuter-old'） */
 export const kindsKey = (svc: ServiceSpec): string => svc.unitKinds?.join('+') ?? svc.kind;
 

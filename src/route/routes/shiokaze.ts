@@ -4,7 +4,7 @@
 // 配線の参考: 配線略図.net 南海本線（堺 / 湊〜羽衣 / 高石〜泉大津）。詳細は docs/shiokaze-reference.md。
 import type { Route, Sign, Station, StationLoop } from '../types';
 import { reverseRoute } from '../reverse';
-import { islandZone, loopZone } from '../service';
+import { airportService, islandZone, loopZone, setDestinations } from '../service';
 import { stopScenes, type StopScene } from '../oncoming-stops';
 import { TT, TT_UP } from './shiokaze-timetable';
 
@@ -114,14 +114,15 @@ export const shiokaze: Route = {
       id: 'local', name: '普通', cars: 4, units: [4], kind: 'commuter-new',
       kindOptions: ['commuter-new', 'commuter-old'], formationOptions: [[4], [4, 2]],
       lineLimit: 90, useLoop: true, stops: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], timetable: TT.local,
-      waits: [{ station: 3, passedBy: 'limited' }, { station: 5, passedBy: 'express' }],
+      waits: [{ station: 3, passedBy: 'limited' }, { station: 5, passedBy: 'express' }, { station: 5, passedBy: 'airport' }],
     },
     {
       id: 'express', name: '急行', cars: 6, units: [4, 2], kind: 'commuter-old',
       kindOptions: ['commuter-old', 'commuter-new'], formationOptions: [[4, 2], [4, 4], [4, 2, 2]],
       lineLimit: 100, stops: [0, 4, 9], timetable: TT.express,
     },
-    { id: 'limited', name: '特急', cars: 6, units: [6], kind: 'limited', lineLimit: 110, stops: [0, 9], timetable: TT.limited },
+    airportService([0, 4, 9], TT.airport),
+    { id: 'limited', name: '特急ラピート', cars: 6, units: [6], kind: 'limited', lineLimit: 110, stops: [0, 9], timetable: TT.limited },
   ],
   prevName: '忠岡', nextName: '七道',
   signs: stations.slice(1).flatMap(st => approachSigns(st.stopS)),
@@ -171,6 +172,8 @@ export const shiokaze: Route = {
   ]));
 }
 
+setDestinations(shiokaze.services!, 'namba');
+
 export const shiokazeUp: Route = reverseRoute(shiokaze, {
   id: 'shiokaze-up', name: '南海本線 堺 → 泉大津', timetable: TT_UP,
   oncomingStops: STOP_SCENES, signs: approachSigns,
@@ -194,8 +197,9 @@ const park = shiokazeUp.stations.findIndex(s => s.name === '浜寺公園');
 const bay = shiokazeUp.stations.findIndex(s => s.name === '高石');
 shiokazeUp.stations[park].loop = { ...LOOP };
 shiokazeUp.services!.find(s => s.id === 'local')!.waits = [
-  { station: park, passedBy: 'express' }, { station: bay, passedBy: 'limited' },
+  { station: park, passedBy: 'express' }, { station: park, passedBy: 'airport' }, { station: bay, passedBy: 'limited' },
 ];
+setDestinations(shiokazeUp.services!, 'wakayama');
 // 逆転後に追加した分岐器より手前へ場内信号を移す。
 const parkZone = loopZone(shiokazeUp.stations[park])!;
 shiokazeUp.signals = shiokazeUp.signals!.filter(s => s.s < parkZone.inFrom - 110 || s.s > parkZone.inTo);

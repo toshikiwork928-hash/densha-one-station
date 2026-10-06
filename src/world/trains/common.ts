@@ -197,11 +197,11 @@ export function capGeo(half: V2[], rg: Ring, ytop: number, hw: number, facing: -
 export function ledTexture(label: string, dest: string): THREE.CanvasTexture {
   const [k, g] = cv(512, 128);
   g.fillStyle = '#0b0b0b'; g.fillRect(0, 0, 512, 128);
-  const col: Record<string, string> = { 普通: '#e8e8e8', 急行: '#ff5a3a', 特急: '#ff4a6a', サザン: '#ff3b3b', 準急: '#5ad06a', 快速: '#ff9a2a' };
+  const col: Record<string, string> = { 普通: '#e8e8e8', 急行: '#ff5a3a', 空港急行: '#ff8a2a', 特急: '#ff4a6a', 特急ラピート: '#ff4a6a', 特急サザン: '#ff3b3b', サザン: '#ff3b3b', 準急: '#5ad06a', 快速: '#ff9a2a' };
   const kc = col[label] ?? '#ffb347';
   g.textAlign = 'center'; g.textBaseline = 'middle';
   g.fillStyle = kc; g.font = `800 58px ${FONT}`; g.fillText(label, 78, 66, 140);
-  g.fillStyle = '#ffb347'; g.font = `700 64px ${FONT}`; g.fillText(dest, 330, 68, 330);
+  g.fillStyle = '#f4f4f0'; g.font = `700 64px ${FONT}`; g.fillText(dest, 330, 68, 330);
   // ドット感
   g.fillStyle = 'rgba(0,0,0,.45)';
   for (let x = 0; x < 512; x += 4) g.fillRect(x, 0, 1, 128);
@@ -213,7 +213,7 @@ export function ledTexture(label: string, dest: string): THREE.CanvasTexture {
 export function ledTypeTexture(label: string): THREE.CanvasTexture {
   const [k, g] = cv(256, 64);
   g.fillStyle = '#0b0b0b'; g.fillRect(0, 0, 256, 64);
-  const col: Record<string, string> = { 普通: '#e8e8e8', 急行: '#ff5a3a', 特急: '#ff4a6a', サザン: '#ff3b3b', 準急: '#5ad06a', 快速: '#ff9a2a' };
+  const col: Record<string, string> = { 普通: '#e8e8e8', 急行: '#ff5a3a', 空港急行: '#ff8a2a', 特急: '#ff4a6a', 特急ラピート: '#ff4a6a', 特急サザン: '#ff3b3b', サザン: '#ff3b3b', 準急: '#5ad06a', 快速: '#ff9a2a' };
   g.textAlign = 'center'; g.textBaseline = 'middle';
   g.fillStyle = col[label] ?? '#ffb347'; g.font = `800 46px ${FONT}`; g.fillText(label, 128, 34, 220);
   g.fillStyle = 'rgba(0,0,0,.45)';
@@ -227,7 +227,7 @@ export function ledDestTexture(dest: string): THREE.CanvasTexture {
   const [k, g] = cv(256, 64);
   g.fillStyle = '#0b0b0b'; g.fillRect(0, 0, 256, 64);
   g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillStyle = '#ffb347'; g.font = `700 46px ${FONT}`; g.fillText(dest, 128, 34, 220);
+  g.fillStyle = '#f4f4f0'; g.font = `700 46px ${FONT}`; g.fillText(dest, 128, 34, 220);
   g.fillStyle = 'rgba(0,0,0,.45)';
   for (let x = 0; x < 256; x += 4) g.fillRect(x, 0, 1, 64);
   for (let y = 0; y < 64; y += 4) g.fillRect(0, y, 256, 1);

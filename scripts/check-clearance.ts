@@ -71,9 +71,9 @@ function build(ctx: GameContext): void {
 const all = process.argv.includes('--all');
 const option = (name: string) => process.argv.find(a => a.startsWith(`--${name}=`))?.split('=')[1];
 const routeFilter = option('route'), serviceFilter = option('service');
-const cases: [Route, ServiceId[]][] = [[shiokaze, ['local', 'express', 'limited']], [shiokazeUp, ['local', 'express', 'limited']], [mountain, ['local']], [mountainUp, ['local']],
-  [kishiwada, ['local', 'express', 'southern']], [kishiwadaUp, ['local', 'express', 'southern']],
-  [throughUp, ['local', 'southern']], [through, ['local', 'southern']]];
+const cases: [Route, ServiceId[]][] = [[shiokaze, ['local', 'express', 'airport', 'limited']], [shiokazeUp, ['local', 'express', 'airport', 'limited']], [mountain, ['local']], [mountainUp, ['local']],
+  [kishiwada, ['local', 'express', 'airport', 'southern']], [kishiwadaUp, ['local', 'express', 'airport', 'southern']],
+  [throughUp, ['local', 'airport', 'southern']], [through, ['local', 'airport', 'southern']]];
 let total = 0;
 let checked = 0;
 for (const [src, services] of cases) {

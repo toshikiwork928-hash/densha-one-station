@@ -23,14 +23,14 @@ export interface LineEntry { id: string; name: string; desc: string; theme: 'coa
 const NANKAI_SECTIONS: SectionEntry[] = [
   { id: 'izumiotsu-sakai', name: '堺〜泉大津', desc: '10駅・10.6km。高架駅、路面電車跨線橋、鉄橋と支線', dirs: ROUTE_DIRS },
   {
-    id: 'izumiotsu-kishiwada', name: '泉大津〜岸和田', desc: '5駅・5.6km。大津川を渡って地上へ、高架の屋内駅・岸和田。特急サザン',
+    id: 'izumiotsu-kishiwada', name: '泉大津〜岸和田', desc: '5駅・5.6km。大津川を渡って地上へ、高架の屋内駅・岸和田。空港急行・特急ラピート・特急サザン',
     dirs: [
       { id: kishiwada.id, label: '下り', desc: '泉大津 → 岸和田' },
       { id: kishiwadaUp.id, label: '上り', desc: '岸和田 → 泉大津' },
     ],
   },
   {
-    id: 'sakai-kishiwada', name: '堺〜岸和田（通し）', desc: '14駅・16.2km。2区間の通し。特急・特急サザンは堺〜岸和田ノンストップ',
+    id: 'sakai-kishiwada', name: '堺〜岸和田（通し）', desc: '14駅・16.2km。2区間の通し。特急ラピート・特急サザンは堺〜岸和田ノンストップ',
     dirs: [
       { id: throughUp.id, label: '下り', desc: '堺 → 岸和田' },
       { id: through.id, label: '上り', desc: '岸和田 → 堺' },
@@ -39,7 +39,7 @@ const NANKAI_SECTIONS: SectionEntry[] = [
 ];
 export const LINES: LineEntry[] = [
   {
-    id: 'shiokaze', name: '南海本線', desc: '南海本線（堺〜泉大津〜岸和田）。海沿いの複線。区間を選ぶ。普通・急行・特急・特急サザン', theme: 'coast',
+    id: 'shiokaze', name: '南海本線', desc: '南海本線（堺〜泉大津〜岸和田）。海沿いの複線。区間を選ぶ。普通・急行・空港急行・特急ラピート・特急サザン', theme: 'coast',
     dirs: NANKAI_SECTIONS.flatMap(x => x.dirs), sections: NANKAI_SECTIONS,
   },
   {

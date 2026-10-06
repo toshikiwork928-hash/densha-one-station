@@ -16,6 +16,7 @@ const LAST_BLOCK = 500;
 const HEADWAY_BY: Record<ServiceId, { h: number; extra: number }> = {
   local: { h: 300, extra: 8 },
   express: { h: 200, extra: 6 },
+  airport: { h: 200, extra: 6 },
   limited: { h: 240, extra: 6 },
   southern: { h: 240, extra: 6 },
 };

@@ -6,7 +6,7 @@
 //   泉大津・岸和田 = 島式2面4線（外側に待避線）、忠岡・春木・和泉大宮 = 相対式2面2線。
 import type { Route, Sign, Station, StationLoop } from '../types';
 import { reverseRoute } from '../reverse';
-import { loopZone } from '../service';
+import { airportService, loopZone, setDestinations } from '../service';
 import { stopScenes, type StopScene } from '../oncoming-stops';
 import { KT, KT_UP } from './kishiwada-timetable';
 
@@ -123,19 +123,17 @@ export const kishiwada: Route = {
     {
       id: 'express', name: '急行', cars: 6, units: [4, 2], kind: 'commuter-old',
       kindOptions: ['commuter-old', 'commuter-new'], formationOptions: [[4, 2], [4, 4], [4, 2, 2]],
-      lineLimit: 100, stops: [0, 2, 4], timetable: KT.express, destination: '和歌山市', destinationKana: 'わかやまし',
+      lineLimit: 100, stops: [0, 2, 4], timetable: KT.express,
     },
+    airportService([0, 2, 4], KT.airport),
     {
       id: 'southern', name: '特急サザン', cars: 8, units: [4, 4], kind: 'southern-10000', unitKinds: ['southern-10000', 'commuter-old'],
-      lineLimit: 110, stops: [0, 4], timetable: KT.southern, destination: '和歌山市', destinationKana: 'わかやまし',
+      lineLimit: 110, stops: [0, 4], timetable: KT.southern,
     },
-    {
-      id: 'limited', name: '特急', cars: 6, units: [6], kind: 'limited', lineLimit: 110, stops: [0, 4], timetable: KT.limited,
-      destination: '関西空港', destinationKana: 'かんさいくうこう',
-    },
+    { id: 'limited', name: '特急ラピート', cars: 6, units: [6], kind: 'limited', lineLimit: 110, stops: [0, 4], timetable: KT.limited },
   ],
   // 途中に待避駅が無いので、先行の普通は優等列車に追いつかれない間隔で先に出す
-  precedingHeadway: { express: 240, limited: 330, southern: 330 },
+  precedingHeadway: { express: 240, airport: 240, limited: 330, southern: 330 },
   prevName: '松ノ浜', nextName: '蛸地蔵',
   signs: stations.slice(1).flatMap(st => approachSigns(st.stopS)),
   extent: { from: -400, to: 6400 }, tracks: [0, 4],
@@ -163,6 +161,8 @@ export const kishiwada: Route = {
   terminalApproach: false,
 };
 
+setDestinations(kishiwada.services!, 'wakayama');
+
 export const kishiwadaUp: Route = reverseRoute(kishiwada, {
   id: 'kishiwada-up', name: '南海本線 岸和田 → 泉大津', timetable: KT_UP,
   oncomingStops: STOP_SCENES, signs: approachSigns,
@@ -171,6 +171,6 @@ export const kishiwadaUp: Route = reverseRoute(kishiwada, {
 kishiwadaUp.stations[LAST].loopTrack = '4番線';
 kishiwadaUp.stations[0].loopTrack = '4番線';
 for (const v of kishiwadaUp.services!) {
-  if (v.destination) { v.destination = '難波'; v.destinationKana = 'なんば'; }
   if (v.id === 'southern') { v.kind = 'commuter-old'; v.unitKinds = ['commuter-old', 'southern-10000']; }
 }
+setDestinations(kishiwadaUp.services!, 'namba');

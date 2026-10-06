@@ -70,10 +70,10 @@ table.res td:last-child { text-align: right; font-family: ui-monospace, monospac
 .sp-svc { font-size: 13px; }
 .svcBadge { display: inline-block; padding: 1px 8px; border-radius: 4px; font-weight: 800; color: #fff; background: #4a5566; }
 .svcBadge.svc-local { background: #15171b; border: 1px solid #8a93a0; }
-.svcBadge.svc-express { background: #e2501c; }
+.svcBadge.svc-express, .svcBadge.svc-airport { background: #e2501c; }
 .svcBadge.svc-limited, .svcBadge.svc-southern { background: #d01e2e; }
 #selService button.on.svc-local { background: #15171b; border-color: #c9d2de; }
-#selService button.on.svc-express { background: #e2501c; border-color: #e2501c; }
+#selService button.on.svc-express, #selService button.on.svc-airport { background: #e2501c; border-color: #e2501c; }
 #selService button.on.svc-limited, #selService button.on.svc-southern { background: #d01e2e; border-color: #d01e2e; }
 .sigRow { display: flex; align-items: center; gap: 10px; margin-top: 2px; }
 .sigLamps { display: grid; grid-template-columns: 12px; gap: 3px; background: #111; padding: 4px; border-radius: 6px; border: 1px solid #333; }

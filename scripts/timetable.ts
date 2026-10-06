@@ -95,16 +95,17 @@ const dn = table(shiokaze), upT = table(shiokazeUp);
 const body = (r: Record<string, string>) => `{
   local: ${r.local},
   express: ${r.express},
+  airport: ${r.airport},
   limited: ${r.limited},
 }`;
 writeFileSync('src/route/routes/shiokaze-timetable.ts', `// 南海本線の時刻表（scripts/timetable.ts が生成。手で直さない）
 import type { ServiceSpec } from '../types';
 
 /** 下り（桜ヶ丘 → 岬口） */
-export const TT: Record<'local' | 'express' | 'limited', ServiceSpec['timetable']> = ${body(dn)};
+export const TT: Record<'local' | 'express' | 'airport' | 'limited', ServiceSpec['timetable']> = ${body(dn)};
 
 /** 上り（岬口 → 桜ヶ丘） */
-export const TT_UP: Record<'local' | 'express' | 'limited', ServiceSpec['timetable']> = ${body(upT)};
+export const TT_UP: Record<'local' | 'express' | 'airport' | 'limited', ServiceSpec['timetable']> = ${body(upT)};
 `);
 
 // 南海本線 泉大津〜岸和田（特急サザンを含む）
@@ -112,13 +113,14 @@ const kDn = table(kishiwada), kUp = table(kishiwadaUp);
 const kBody = (r: Record<string, string>) => `{
   local: ${r.local},
   express: ${r.express},
+  airport: ${r.airport},
   limited: ${r.limited},
   southern: ${r.southern},
 }`;
 writeFileSync('src/route/routes/kishiwada-timetable.ts', `// 南海本線 泉大津〜岸和田の時刻表（scripts/timetable.ts が生成。手で直さない）
 import type { ServiceSpec } from '../types';
 
-type Id = 'local' | 'express' | 'limited' | 'southern';
+type Id = 'local' | 'express' | 'airport' | 'limited' | 'southern';
 /** 下り（泉大津 → 岸和田） */
 export const KT: Record<Id, ServiceSpec['timetable']> = ${kBody(kDn)};
 
@@ -131,7 +133,7 @@ const nDn = table(throughUp), nUp = table(through);
 writeFileSync('src/route/routes/through-timetable.ts', `// 南海本線 堺〜岸和田（通し）の時刻表（scripts/timetable.ts が生成。手で直さない）
 import type { ServiceSpec } from '../types';
 
-type Id = 'local' | 'express' | 'limited' | 'southern';
+type Id = 'local' | 'express' | 'airport' | 'limited' | 'southern';
 /** 下り（堺 → 岸和田） */
 export const NT: Record<Id, ServiceSpec['timetable']> = ${kBody(nDn)};
 
