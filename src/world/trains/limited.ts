@@ -15,13 +15,12 @@ const BLUE_CSS = '#2a318c';
 
 /** 流線形の先頭部の長さ [m]（車体端から） */
 const NOSE_LEN = 3.7;
-/** 横から見た先頭部の輪郭（ラピート 50000系の真横の写真から読んだ寸法。d = 鼻先からの距離 [m]）:
- *  鼻先の下半分（スカート〜FACE_Y）はほぼ垂直、FACE_Y〜SLOPE_Y は後ろへ SLOPE_D 傾いて上がり、そこから屋根まで大きな弧 */
-const FACE_Y = 1.24, SLOPE_Y = 2.37, SLOPE_D = .72;
+/** 横から見た先頭部の輪郭（d = 鼻先からの距離 [m]）: 鼻先の下（スカート〜FACE_Y）は垂直、そこから屋根まで前へ膨らんだ1本の弧（超楕円、指数 PROFILE_P）。
+ *  鼻先の下端で垂直に立ち上がり、屋根へ向かって寝ていく（横から見て胸が張った形。途中で凹まない） */
+const FACE_Y = 1.24, PROFILE_P = 2.2;
 const noseTopAt = (d: number) => {
-  if (d <= SLOPE_D) return FACE_Y + (SLOPE_Y - FACE_Y) * Math.pow(d / SLOPE_D, 1.6); // 下は緩く前へ張り出し、上で立ち上がって弧へつながる（凹みを作らない）
-  const t = Math.min(1, (NOSE_LEN - d) / (NOSE_LEN - SLOPE_D));
-  return SLOPE_Y + (YTOP_L - SLOPE_Y) * Math.pow(Math.max(0, 1 - t * t), 1 / 2.2);
+  const t = Math.min(1, Math.max(0, (NOSE_LEN - d) / NOSE_LEN));
+  return FACE_Y + (YTOP_L - FACE_Y) * Math.pow(Math.max(0, 1 - t ** PROFILE_P), 1 / PROFILE_P);
 };
 /** 上から見た鼻先の角の丸み（横幅の係数。鼻先は幅の 8割、PLAN_R 後ろで全幅） */
 const PLAN_R = .9;
