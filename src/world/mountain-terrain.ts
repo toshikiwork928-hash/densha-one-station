@@ -477,6 +477,30 @@ function buildFarGrid(ctx: GameContext, T: MountainTerrain, mat: THREE.Material,
     if (i === pts.length - 1 && a > 0) s = p.s + a;
     return { s, lat: dx * p.rx + dz * p.rz };
   };
+  // トンネルの近く: 格子（45m・対角 64m）の三角形が覆工の内側を横切らないよう、覆工から格子 1 対角以内の頂点は
+  // 近くの線路より下げる（尾根は帯が描く。急曲線の内側で帯が狭く粗い格子が尾根の高さのまま残ると、坑内に斜面が突き出る）
+  const tps: { x: number; z: number; y: number }[] = [];
+  for (const t of ctx.route.structures ?? []) {
+    if (t.kind !== 'tunnel') continue;
+    for (let s = t.from - 10; s <= t.to + 10; s += 5) { const p = track.trackAt(s); tps.push({ x: p.x, z: p.z, y: p.y }); }
+  }
+  const TCLR = 78; // 覆工の半幅 7m ＋ 格子の対角 64m ＋ 余裕
+  const tunnelCap = (x: number, z: number): number => {
+    let cap = Infinity, dmin = Infinity, ymin = Infinity;
+    for (const p of tps) {
+      const dx = p.x - x, dz = p.z - z;
+      if (Math.abs(dx) > TCLR + 60 || Math.abs(dz) > TCLR + 60) continue;
+      const d = Math.sqrt(dx * dx + dz * dz);
+      if (d < dmin) dmin = d;
+      if (d < TCLR) ymin = Math.min(ymin, p.y);
+    }
+    if (dmin < TCLR) cap = ymin - 2;
+    else if (dmin < TCLR + 60) { // 外側はなだらかに戻す（谷・尾根に穴が見えないよう）
+      for (const p of tps) if (Math.hypot(p.x - x, p.z - z) < TCLR + 60) ymin = Math.min(ymin, p.y);
+      cap = ymin - 2 + (dmin - TCLR) * 1.2;
+    }
+    return cap;
+  };
   const tag = { tag: Tag.Forest };
   const heightAt = (x: number, z: number, col: THREE.Color): number => {
     const n1 = near(x, z);
@@ -496,7 +520,7 @@ function buildFarGrid(ctx: GameContext, T: MountainTerrain, mat: THREE.Material,
     // 線路際（切土・平場）は粗い格子が帯の上に出ないよう大きく、帯の縁の近くは段差が見えないよう少しだけ
     if (Math.abs(a.lat) < cov && a.s > S0 + 20 && a.s < S1 - 20) h -= 3 + 42 * smooth((cov - 70 - Math.abs(a.lat)) / 50);
     else h -= .8;
-    return h;
+    return Math.min(h, tunnelCap(x, z));
   };
   const TILE = 44; // 1 タイル = 44×44 セル（約 2km 四方。描画コールを抑える）
   const nx = Math.ceil((x1 - x0) / G), nz = Math.ceil((z1 - z0) / G);

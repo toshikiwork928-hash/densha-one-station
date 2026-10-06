@@ -18,8 +18,8 @@ const HALF: V2[] = [[HW_23 - .06, Y0], [HW_23, 1.45], ...ROOF];
 const DOORS = [-4.3, 4.3], DOOR_W = 1.3;
 /** 先頭部の丸み・乗務員扉 */
 const R = .16, CREW_OFF = .6, CREW_W = .6;
-/** 側窓の高さ */
-const WIN: V2 = [2.02, 3.0];
+/** 窓の上下端（側窓・客用扉の窓・乗務員扉の窓で共通） */
+const WIN: V2 = [2.05, 2.9];
 const GREEN = '#1f6a45', GREEN_D = '#164a33', LEAF = '#8cc63e';
 const FACE_GREEN = '#1c5a3c';
 const ROOF_Y = 3.48;
@@ -31,7 +31,7 @@ function bands(s: ReturnType<typeof sideSheet>, hz: number) {
     g.addColorStop(0, GREEN_D); g.addColorStop(.5, GREEN); g.addColorStop(1, GREEN_D);
     s.rect(-hz - 1, hz + 1, y0, y1, g as unknown as string, .35, .1);
   };
-  grad(3.08, 3.24); s.rect(-hz - 1, hz + 1, 3.04, 3.075, LEAF, .35, .1);
+  grad(2.99, 3.15); s.rect(-hz - 1, hz + 1, 2.95, 2.985, LEAF, .35, .1); // 上の帯は窓の上端（WIN[1] + 枠）に沿わせる
   grad(1.8, 1.96); s.rect(-hz - 1, hz + 1, 1.725, 1.765, LEAF, .35, .1);
 }
 
@@ -59,15 +59,16 @@ export function paint2300Side(Lb: number, head: boolean, open = false): SheetMap
     s.rect(zc - w / 2, zc + w / 2, 1.16, 3.03, '#c6cbd1', .4, .7);
     if (dbl) {
       s.rect(zc - .012, zc + .012, 1.16, 3.03, '#5e646b');
-      for (const sg of [-1, 1]) s.glass(zc + sg * w / 4 - .2, zc + sg * w / 4 + .2, 2.05, 2.9, '#5a6067', .06);
-    } else s.glass(zc - .19, zc + .19, 2.12, 2.9, '#5a6067', .03);
+      for (const sg of [-1, 1]) s.glass(zc + sg * w / 4 - .2, zc + sg * w / 4 + .2, WIN[0], WIN[1], '#5a6067', .06);
+    } else s.glass(zc - .19, zc + .19, WIN[0], WIN[1], '#5a6067', .03);
   };
   for (const d of DOORS) door(d, DOOR_W, true);
-  const big = (zc: number) => s.glass(zc - .92, zc + .92, WIN[0], WIN[1], '#4a5056', .08); // 1.84m の1枚窓
-  const drop = (zc: number) => s.glass(zc - .42, zc + .42, WIN[0] + .05, WIN[1], '#565c63', .05); // 車端の下降窓
+  const BIG = 1.7; // 扉間の1枚窓の幅
+  const big = (zc: number) => s.glass(zc - BIG / 2, zc + BIG / 2, WIN[0], WIN[1], '#4a5056', .08);
+  const drop = (zc: number) => s.glass(zc - .42, zc + .42, WIN[0], WIN[1], '#565c63', .05); // 車端の下降窓
   // 扉間: 大窓3枚
-  const a = DOORS[0] + DOOR_W / 2, b = DOORS[1] - DOOR_W / 2, gap = (b - a - 3 * 1.84) / 4;
-  for (let i = 0; i < 3; i++) big(a + gap * (i + 1) + 1.84 * i + .92);
+  const a = DOORS[0] + DOOR_W / 2, b = DOORS[1] - DOOR_W / 2, gap = (b - a - 3 * BIG) / 4;
+  for (let i = 0; i < 3; i++) big(a + gap * (i + 1) + BIG * i + BIG / 2);
   // 後端（連結面側）: 下降窓2枚
   const e0 = DOORS[1] + DOOR_W / 2;
   drop(e0 + .7); drop(e0 + 1.75);
@@ -76,7 +77,7 @@ export function paint2300Side(Lb: number, head: boolean, open = false): SheetMap
     door(crewZ, CREW_W, false);
     // 乗務員扉と客用扉の間: 大窓1枚（運転台後ろのクロスシート部）
     const f0 = crewZ + CREW_W / 2 + .2, f1 = DOORS[0] - DOOR_W / 2 - .25;
-    s.glass(f0, f1, WIN[0], WIN[1], '#4a5056', .08);
+    big((f0 + f1) / 2);
     // ワンマン表示灯（乗務員扉の後ろ上）
     s.rect(f0 - .05, f0 + .25, 3.28, 3.38, '#202428', .3, .2);
   } else { drop(-e0 - .7); drop(-e0 - 1.75); }

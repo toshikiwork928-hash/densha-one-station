@@ -29,12 +29,12 @@ const LOOK: Record<CommuterVariant, Look> = {
   new: {
     r: .24, base: ['#d3d7dc', '#b4bac1'], roof: '#a7acb2', rough: .38, metal: .75,
     topBand: [3.34, 3.48], topLine: [3.24, 3.33], lowBand: [1.66, 1.77], lowLine: [1.54, 1.64],
-    frontBand: [1.58, 2.0], frontLine: [1.48, 1.55], win: [2.1, 3.04], door: '#c4c9cf', roofY: 3.55, // 窓は戸間に1枚（2枚引き違い）の約1.9m幅
+    frontBand: [1.58, 2.0], frontLine: [1.48, 1.55], win: [2.04, 2.93], door: '#c4c9cf', roofY: 3.55, // 窓は戸間に1枚（2枚引き違い）の約1.76m幅。上下端は客用扉の窓と揃える
   },
   old: {
     r: .3, base: ['#c6cbd6', '#b3b9c6'], roof: '#9fa4aa', rough: .42, metal: .12,
     topBand: [3.4, 3.65], topLine: [3.26, 3.37], lowBand: [1.44, 1.53], lowLine: [1.34, 1.43],
-    frontBand: [1.6, 2.02], frontLine: [1.49, 1.56], win: [1.98, 2.84], door: '#c9ccd1', roofY: 3.7, // ドアは車体と同系色の塗装。上の帯は太い青＋細い橙
+    frontBand: [1.6, 2.02], frontLine: [1.49, 1.56], win: [2.0, 2.93], door: '#c9ccd1', roofY: 3.7, // ドアは車体と同系色の塗装。上の帯は太い青＋細い橙。窓の上下端は客用扉の窓と揃える
   },
 };
 
@@ -57,7 +57,8 @@ export function paintCommuterSide(v: CommuterVariant, Lb: number, head: boolean,
   } else {
     band(L.topBand, BLUE); band(L.topLine, ORANGE); band(L.lowBand, BLUE); band(L.lowLine, ORANGE);
   }
-  const [w0, w1] = L.win;
+  /** 窓の上下端（側窓・客用扉の窓・乗務員扉の窓で共通） */
+  const [w0, w1] = L.win, sq = (w1 - w0) / 2; // sq = old の正方形窓の半幅
   const door = (zc: number, w: number, dbl: boolean) => {
     s.rect(zc - w / 2 - .03, zc + w / 2 + .03, 1.13, 3.08, v === 'old' ? '#a9adb3' : '#8b9198', .5, .3);
     if (open && dbl) {
@@ -75,27 +76,28 @@ export function paintCommuterSide(v: CommuterVariant, Lb: number, head: boolean,
     s.rect(zc - w / 2, zc + w / 2, 1.16, 3.05, L.door, v === 'old' ? L.rough : .4, v === 'old' ? L.metal : .7);
     if (dbl) {
       s.rect(zc - .012, zc + .012, 1.16, 3.05, '#5e646b');
-      for (const sg of [-1, 1]) s.glass(zc + sg * w / 4 - .22, zc + sg * w / 4 + .22, v === 'new' ? 2.04 : 2.0, 2.93, '#5a6067', .06);
-    } else s.glass(zc - .2, zc + .2, 2.12, 2.92, '#5a6067', .03);
+      for (const sg of [-1, 1]) s.glass(zc + sg * w / 4 - .22, zc + sg * w / 4 + .22, w0, w1, '#5a6067', .06);
+    } else s.glass(zc - .2, zc + .2, w0, w1, '#5a6067', .03); // 乗務員扉の窓も側窓・客用扉の窓と同じ高さ
   };
   for (const d of doors) door(d, DOOR_W, true);
   // 側窓
   for (let i = 0; i < doors.length - 1; i++) {
     const zc = (doors[i] + doors[i + 1]) / 2;
     if (v === 'new') {
-      // 幅1.9mの大窓: 外枠の中に2枚の窓ガラスと、中央の細い仕切り（約6cm）
-      s.rect(zc - .95 - .045, zc + .95 + .045, w0 - .045, w1 + .045, '#4a5056', .5, 0, .12);
-      for (const sg of [-1, 1]) s.glass(sg < 0 ? zc - .95 : zc + .03, sg < 0 ? zc - .03 : zc + .95, w0, w1, '', .04);
-    } else for (const dz of [-.49, .49]) s.glass(zc + dz - .42, zc + dz + .42, w0, w1, '#565c63', .07); // 850mm角の1段下降窓を2枚ずつ
+      // 幅1.76mの大窓: 外枠の中に2枚の窓ガラスと、中央の細い仕切り（約6cm）
+      const bw = .88;
+      s.rect(zc - bw - .045, zc + bw + .045, w0 - .045, w1 + .045, '#4a5056', .5, 0, .12);
+      for (const sg of [-1, 1]) s.glass(sg < 0 ? zc - bw : zc + .03, sg < 0 ? zc - .03 : zc + bw, w0, w1, '', .04);
+    } else for (const dz of [-.53, .53]) s.glass(zc + dz - sq, zc + dz + sq, w0, w1, '#565c63', .07); // 正方形の1段下降窓を2枚ずつ（間に約13cmの窓柱）
   }
   if (v === 'new') s.glass(DOORS[3] + DOOR_W / 2 + .35, hz - .4, w0, w1, '#565c63', .1);
-  else s.glass((DOORS[3] + DOOR_W / 2 + hz) / 2 - .43, (DOORS[3] + DOOR_W / 2 + hz) / 2 + .43, w0, w1, '#565c63', .03);
+  else s.glass((DOORS[3] + DOOR_W / 2 + hz) / 2 - sq, (DOORS[3] + DOOR_W / 2 + hz) / 2 + sq, w0, w1, '#565c63', .03);
   if (head) {
     door(crewZ, CREW_W, false);
     const wz1 = doors[0] - DOOR_W / 2 - .17; // 客用扉の枠の手前
     s.glass(wz1 - CREW_WIN, wz1, w0, w1, '#565c63', .05);
   } else if (v === 'new') s.glass(-hz + .4, DOORS[0] - DOOR_W / 2 - .35, w0, w1, '#565c63', .05);
-  else s.glass((DOORS[0] - DOOR_W / 2 - hz) / 2 - .43, (DOORS[0] - DOOR_W / 2 - hz) / 2 + .43, w0, w1, '#565c63', .03);
+  else s.glass((DOORS[0] - DOOR_W / 2 - hz) / 2 - sq, (DOORS[0] - DOOR_W / 2 - hz) / 2 + sq, w0, w1, '#565c63', .03);
   // 号車札・小表示（文字なし）
   s.rect(DOORS[1] + .9, DOORS[1] + 1.2, 3.46, 3.53, '#2b3138');
   if (v === 'old') for (let z = -hz + .2; z < hz; z += 2.1) s.rect(z, z + .02, Y0, 3.55, 'rgba(0,0,0,.06)'); // 外板継ぎ目

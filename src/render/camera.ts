@@ -10,6 +10,8 @@ export interface CabCamera {
 }
 
 const CAB_FOV = 58;
+/** 運転台: 車体の向きから先の線路の方へ振る角の上限の目安 [rad]（tanh で頭打ち） */
+const LOOK_LEAD = THREE.MathUtils.degToRad(6);
 /** 沿線カメラの地表からの最低高さ [m] */
 const CAM_CLEAR = 1.5;
 
@@ -21,6 +23,7 @@ const SHOT_ORDER: ShotKind[] = ['trackside', 'chase', 'low', 'heli', 'trackside'
 export function createCabCamera(ctx: GameContext): CabCamera {
   const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
   const smPos = new THREE.Vector3(), smLook = new THREE.Vector3();
+  const bogieA = new THREE.Vector3(), bogieB = new THREE.Vector3();
   const viewDir = new THREE.Vector3(), viewRight = new THREE.Vector3(), viewUp = new THREE.Vector3(), viewPoint = new THREE.Vector3();
   const lat = -.45; // 運転席は左寄り
   const { events, route } = ctx;
@@ -160,10 +163,18 @@ export function createCabCamera(ctx: GameContext): CabCamera {
         const shake = Math.min(1, v / 22);
         camPos.copy(at(s, lat, 3.0));
         camPos.y += Math.sin(time * 11.3) * .006 * shake + Math.sin(time * 3.1) * .012 * shake;
-        // 向きは車体（台車の並び = 先頭の約10m後ろ）の向き。待避線の分岐器では注視点を先の線路に合わせず、現在の横ずれの傾きで延長する
+        // 向きは車体（台車の並び = 先頭の 3m・17m 後ろの台車を結ぶ向き）を基準に、先の線路（60m 先）の方へ少しだけ振る。
+        // 振り幅は LOOK_LEAD で頭打ち（急曲線 R100〜200 で 60m 先を直接見ると車体から 15〜20° ずれ、首振りが速く大きい。
+        // 汐風線の R500 以上では 3〜4° 程度で従来とほぼ同じ）。上下は従来どおり 60m 先の線路。
+        // 待避線の分岐器では注視点を先の線路に合わせず、現在の横ずれの傾きで延長する（車体の向きも台車の並びなので横ずれを含む）
         const pl = ctx.track.pathLat(s), slope = (ctx.track.pathLat(s - 3) - ctx.track.pathLat(s - 17)) / 14;
         camLook.copy(ctx.track.at(s + 60, pl + slope * 60 + lat * .3, 2.4));
-        camLook.x += Math.sin(time * 2.3) * .06 * shake;
+        bogieA.copy(at(s - 3, 0, 0)); bogieB.copy(at(s - 17, 0, 0));
+        const bodyYaw = Math.atan2(bogieA.x - bogieB.x, bogieA.z - bogieB.z);
+        const dx = camLook.x - camPos.x, dz = camLook.z - camPos.z, dh = Math.hypot(dx, dz);
+        const lead = Math.atan2(dx, dz) - bodyYaw, d = Math.atan2(Math.sin(lead), Math.cos(lead));
+        const yaw = bodyYaw + LOOK_LEAD * Math.tanh(d / LOOK_LEAD) + Math.sin(time * 2.3) * .001 * shake;
+        camLook.set(camPos.x + Math.sin(yaw) * dh, camLook.y, camPos.z + Math.cos(yaw) * dh);
         ctx.camera.position.copy(camPos);
         ctx.camera.lookAt(camLook);
         return;
