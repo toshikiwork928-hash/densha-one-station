@@ -17,7 +17,7 @@ export function attachAutodrive(ctx: GameContext, advance: (sec: number, dt?: nu
     if (st.state === 'title') return false;
     if (st.state === 'dwell') { ctx.actions.setNotch(st.doors === 'closed' ? 5 : -4); return false; }
     let pl = (ctx.trainEnv.perf?.bMax ?? 1) * .6;
-    // 単線の山岳線: 先の下り勾配の分だけ計画減速度を下げる（汐風線は従来どおり）
+    // 単線の山岳線: 先の下り勾配の分だけ計画減速度を下げる（南海本線は従来どおり）
     if (route.singleTrack) {
       let g = 0;
       for (let d = 0; d < 800; d += 20) g = Math.min(g, track.gradeAt(tr.s + d));

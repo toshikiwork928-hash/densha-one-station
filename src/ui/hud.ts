@@ -37,6 +37,14 @@ export function attachHud(ctx: GameContext): void {
     <div class="panel sp-tt"><div class="lbl">時刻表</div><table id="ttTable"></table></div>
     <div id="replayTag">REPLAY</div>`;
   $('hud').appendChild(side);
+  // PC 幅（styles.css と同じ条件）では制限速度パネルを左の信号パネルの直下へ移す。それ以外は右上のまま
+  const limitBox = el.limitPanel, topRight = $('topRight'), sigBox = side.querySelector('.sp-sig')!;
+  const pcMq = window.matchMedia('(min-width: 900px) and (min-height: 600px) and (any-pointer: fine)');
+  const placeLimit = () => {
+    if (pcMq.matches) sigBox.after(limitBox); else topRight.prepend(limitBox);
+  };
+  placeLimit();
+  pcMq.addEventListener('change', placeLimit);
   const sx = {
     lamps: side.querySelector<HTMLElement>('.sigLamps')!, sigTxt: $('sigTxt'), sigDist: $('sigDist'), ats: $('atsLine'),
     door: $('doorLamp'), doorTxt: $('doorTxt'), tt: $<HTMLTableElement>('ttTable'), replay: $('replayTag'), svc: $('svcPanel'),
@@ -76,6 +84,9 @@ export function attachHud(ctx: GameContext): void {
       rows.push(`<tr class="${cls}${x.pass ? ' pass' : ''}"><td>${x.name}</td><td>${arr}</td><td>${dep}</td></tr>`);
     }
     sx.tt.innerHTML = rows.join('');
+    // 低い画面で時刻表がはみ出す場合は次の停車駅付近が見える位置へ寄せる
+    const box = sx.tt.parentElement!, nr = sx.tt.querySelector<HTMLElement>('tr.next');
+    box.scrollTop = nr ? Math.max(0, nr.offsetTop - 48) : 0;
   }
 
   // ノッチ列
@@ -129,6 +140,8 @@ export function attachHud(ctx: GameContext): void {
     if (running && remain < 0) { el.delay.textContent = `(遅れ ${Math.floor(-remain)}秒)`; el.delay.className = 'late'; }
     else { el.delay.textContent = running ? `(あと ${Math.ceil(remain)}秒)` : ''; el.delay.className = 'early'; }
     el.limit.textContent = String(lim);
+    // 信号による制限が線路の制限より低いときは標識を黄色で強調（判定は loop.ts と同じ min(線路, 信号)）
+    el.limitPanel.classList.toggle('sigcut', st.state === 'run' && st.sigLimit < track.limitAt(s));
     el.limitPanel.classList.toggle('over', vk > lim + OVERSPEED_MARGIN);
     // 制限の補助表示: 制限中は解除（後部通過）までの距離、制限外は次の制限までの距離
     let nxt = '&nbsp;';

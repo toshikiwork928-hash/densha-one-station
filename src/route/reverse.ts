@@ -41,7 +41,7 @@ export function singleTrackSignals(stations: Station[], crossings: { s: number }
 export function reverseRoute(down: Route, opt: {
   id: string; name: string; timetable: Record<string, ServiceSpec['timetable']>;
   /** 下りの停車駅 index で指定した対向列車の停車（上りでは駅 index を反転して配置） */ oncomingStops?: StopScene[];
-  /** 駅の距離標・停止位置目標（既定は 6両基準の汐風線の形） */ signs?: (stopS: number) => Sign[];
+  /** 駅の距離標・停止位置目標（既定は 6両基準の南海本線の形） */ signs?: (stopS: number) => Sign[];
 }): Route {
   const L = totalLength(down), m = (s: number) => L - s;
   const n = down.stations.length, ri = (i: number) => n - 1 - i;

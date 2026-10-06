@@ -70,7 +70,7 @@ export function createCabCamera(ctx: GameContext): CabCamera {
     const L = route.trainLength;
     const sta = nearStation(s);
     if (sta && v > 1) {
-      // 島式は線路間、待避線はその外側、棒線駅はホームの側（汐風線は左、山岳線は駅ごと）
+      // 島式は線路間、待避線はその外側、棒線駅はホームの側（南海本線は左、山岳線は駅ごと）
       const plat = sta.island ? (Math.min(...route.tracks) + Math.max(...route.tracks)) / 2 + 1 : sta.enterLoop ? (loopZone(sta)?.lat ?? 0) + (sta.loop?.outside ? (sta.loop.lat < 0 ? -4.2 : 4.2) : 4.2) : (sta.platform.side === 'R' ? 1 : -1) * 4.2;
       return { kind: 'platform', s: sta.stopS + 12, lat: plat, h: 2.4, t0: time, fov: 40 };
     }
@@ -165,7 +165,7 @@ export function createCabCamera(ctx: GameContext): CabCamera {
         camPos.y += Math.sin(time * 11.3) * .006 * shake + Math.sin(time * 3.1) * .012 * shake;
         // 向きは車体（台車の並び = 先頭の 3m・17m 後ろの台車を結ぶ向き）を基準に、先の線路（60m 先）の方へ少しだけ振る。
         // 振り幅は LOOK_LEAD で頭打ち（急曲線 R100〜200 で 60m 先を直接見ると車体から 15〜20° ずれ、首振りが速く大きい。
-        // 汐風線の R500 以上では 3〜4° 程度で従来とほぼ同じ）。上下は従来どおり 60m 先の線路。
+        // 南海本線の R500 以上では 3〜4° 程度で従来とほぼ同じ）。上下は従来どおり 60m 先の線路。
         // 待避線の分岐器では注視点を先の線路に合わせず、現在の横ずれの傾きで延長する（車体の向きも台車の並びなので横ずれを含む）
         const pl = ctx.track.pathLat(s), slope = (ctx.track.pathLat(s - 3) - ctx.track.pathLat(s - 17)) / 14;
         camLook.copy(ctx.track.at(s + 60, pl + slope * 60 + lat * .3, 2.4));

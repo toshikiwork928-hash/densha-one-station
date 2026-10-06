@@ -1,11 +1,11 @@
-// 霧峰線（架空の山岳線）: 川原町 → 清流口 → 杉ノ沢（交換駅）→ 霧ヶ谷 → 雲ノ橋（頭端式。ケーブルカー乗換）約8.6km
-// 実在の山岳線（大河の谷の町から 50‰ 級の急勾配・R100 級の急曲線・トンネルと橋梁の連続で山奥の谷間の終点へ上る単線）の特徴を参考にした架空路線。
-//   川原町: 平地の地上駅。島式1面2線＋副線（右側の行き止まり線と片面ホーム）の2面3線。発車後すぐ単線になる
-//   川原町 → 清流口: 川沿いの平地（最高 70km/h）、大河を長い橋梁で渡る。勾配は緩い
-//   清流口から先は山岳区間（50km/h、曲線 35〜45km/h、最急 50‰）。トンネル・橋梁が連続
-//   杉ノ沢: 交換駅（単線が両開き分岐器で左右へ分かれ、間に島式ホーム。分岐器 35km/h）。自列車（左）は対向列車（右）の到着を待って発車
-//   清流口・霧ヶ谷: 棒線駅（単線に片面ホーム）
-//   雲ノ橋: 谷間の頭端式。島式1面2線、ホームの先で車止め（分岐器 30km/h）
+// 高野線（橋本〜極楽橋、一部の駅を省略した山岳線）: 橋本 → 九度山 → 高野下（交換駅）→ 紀伊神谷 → 極楽橋（頭端式。ケーブルカー乗換）約8.6km
+// 実在の山岳線（大河の谷の町から 50‰ 級の急勾配・R100 級の急曲線・トンネルと橋梁の連続で山奥の谷間の終点へ上る単線）の特徴を参考にした路線（高野線の区間を参考にした概形で、地形・勾配は創作）。
+//   橋本: 平地の地上駅。島式1面2線＋副線（右側の行き止まり線と片面ホーム）の2面3線。発車後すぐ単線になる
+//   橋本 → 九度山: 川沿いの平地（最高 70km/h）、大河を長い橋梁で渡る。勾配は緩い
+//   九度山から先は山岳区間（50km/h、曲線 35〜45km/h、最急 50‰）。トンネル・橋梁が連続
+//   高野下: 交換駅（単線が両開き分岐器で左右へ分かれ、間に島式ホーム。分岐器 35km/h）。自列車（左）は対向列車（右）の到着を待って発車
+//   九度山・紀伊神谷: 棒線駅（単線に片面ホーム）
+//   極楽橋: 谷間の頭端式。島式1面2線、ホームの先で車止め（分岐器 30km/h）
 // 運行は各停のみ（2300系 18m 車、2両 / 2+2 の4両）。上りは下りのデータを反転（reverseRoute）
 import type { MeetSpec, Route, Segment, Sign, SpeedLimit, Station, StationIsland } from '../types';
 import { reverseRoute, singleTrackSignals } from '../reverse';
@@ -26,19 +26,19 @@ const PASSING: StationIsland = { spread: 4.2, length: 50, turnoutLimitKmh: 35 };
 /** 線形（[直線長] または [半径, 角度 rad, 向き]）。曲線制限は半径から自動で付ける */
 type Piece = number | [number, number, 'L' | 'R'];
 const PIECES: Piece[] = [
-  // 川沿いの平地（川原町 0〜250 は駅構内）
+  // 川沿いの平地（橋本 0〜250 は駅構内）
   300, [400, .35, 'L'], 360,
   450, // 大河の橋梁 820〜1230
-  [300, .5, 'R'], 500, [250, .6, 'L'], 550, // 清流口 2380〜2470
-  // 山岳区間 1（〜杉ノ沢）
+  [300, .5, 'R'], 500, [250, .6, 'L'], 550, // 九度山 2380〜2470
+  // 山岳区間 1（〜高野下）
   [160, .9, 'R'], 180, [120, 1.1, 'L'], 150, [200, .8, 'R'], 250, [100, 1.3, 'L'], 200, [150, 1.0, 'R'], 250, [250, .5, 'L'],
-  650, // 杉ノ沢（交換駅 4600〜4930）
-  // 山岳区間 2（〜霧ヶ谷）
+  650, // 高野下（交換駅 4600〜4930）
+  // 山岳区間 2（〜紀伊神谷）
   [100, 1.4, 'R'], 170, [130, 1.2, 'L'], 220, [180, .9, 'R'], 160, [110, 1.2, 'L'], 180, [200, .6, 'R'],
-  420, // 霧ヶ谷 6760〜6850
-  // 山岳区間 3（〜雲ノ橋）
+  420, // 紀伊神谷 6760〜6850
+  // 山岳区間 3（〜極楽橋）
   [100, 1.5, 'L'], 140, [120, 1.3, 'R'], 200, [160, 1.0, 'L'], 160, [140, .8, 'R'],
-  600, // 雲ノ橋 8480〜8570（車止め 8582）
+  600, // 極楽橋 8480〜8570（車止め 8582）
 ];
 const segments: Segment[] = PIECES.map(p => typeof p === 'number' ? { type: 'straight', length: p } : { type: 'arc', radius: p[0], angle: p[1], turn: p[2] });
 
@@ -47,7 +47,7 @@ const curveKmh = (R: number): number => R <= 115 ? 35 : R <= 145 ? 40 : R <= 185
 
 const TRAIN_LEN = BASE_CARS * CAR;
 const LINE_LIMIT = 70;
-/** 山岳区間（清流口の先から終点まで）の区間制限 */
+/** 山岳区間（九度山の先から終点まで）の区間制限 */
 const MOUNTAIN_FROM = 2600, MOUNTAIN_KMH = 50;
 const EXTENT_TO = 8582;
 
@@ -67,19 +67,19 @@ const limits: SpeedLimit[] = (() => {
 
 const stations: Station[] = [
   {
-    name: '川原町', kana: 'かわらまち', stopS: 125, platform: { from: 40, to: 130, side: 'R' }, scheduledArrival: 0,
+    name: '橋本', kana: 'はしもと', stopS: 125, platform: { from: 40, to: 130, side: 'R' }, scheduledArrival: 0,
     island: { ...PASSING, bay: { lat: 8.4, bumper: 'behind', platformWidth: 4 } },
   },
-  { name: '清流口', kana: 'せいりゅうぐち', stopS: 2465, platform: { from: 2380, to: 2470, side: 'L' }, scheduledArrival: 0 },
-  { name: '杉ノ沢', kana: 'すぎのさわ', stopS: 4805, platform: { from: 4720, to: 4810, side: 'R' }, scheduledArrival: 0, island: PASSING },
-  { name: '霧ヶ谷', kana: 'きりがたに', stopS: 6845, platform: { from: 6760, to: 6850, side: 'R' }, scheduledArrival: 0 },
+  { name: '九度山', kana: 'くどやま', stopS: 2465, platform: { from: 2380, to: 2470, side: 'L' }, scheduledArrival: 0 },
+  { name: '高野下', kana: 'こうやした', stopS: 4805, platform: { from: 4720, to: 4810, side: 'R' }, scheduledArrival: 0, island: PASSING },
+  { name: '紀伊神谷', kana: 'きいかみや', stopS: 6845, platform: { from: 6760, to: 6850, side: 'R' }, scheduledArrival: 0 },
   {
-    name: '雲ノ橋', kana: 'くものはし', stopS: 8565, platform: { from: 8480, to: 8570, side: 'R' }, scheduledArrival: 0,
+    name: '極楽橋', kana: 'ごくらくばし', stopS: 8565, platform: { from: 8480, to: 8570, side: 'R' }, scheduledArrival: 0,
     island: { ...PASSING, turnoutLimitKmh: 30 }, headEnd: true,
   },
 ];
 
-/** 交換駅（杉ノ沢）で行き違う対向の各停（上りでは駅 index を反転） */
+/** 交換駅（高野下）で行き違う対向の各停（上りでは駅 index を反転） */
 const MEETS: MeetSpec[] = [{ station: 2, kind: 'commuter-2300', cars: 2, kmh: 35, label: '各停' }];
 
 const crossings = [
@@ -90,7 +90,7 @@ const crossings = [
 
 export const mountain: Route = {
   id: 'mountain',
-  name: '霧峰線 川原町 → 雲ノ橋',
+  name: '高野線 橋本 → 極楽橋',
   lineId: 'mountain',
   theme: 'mountain',
   singleTrack: true,
@@ -100,7 +100,7 @@ export const mountain: Route = {
   trainLength: TRAIN_LEN,
   stopBaseCars: BASE_CARS,
   segments,
-  // 標高（s=0 が 0m）: 川沿いは緩い上り、清流口の先から 40〜50‰ で上る。駅は水平（雲ノ橋のみ 5‰）。終点で約 +244m
+  // 標高（s=0 が 0m）: 川沿いは緩い上り、九度山の先から 40〜50‰ で上る。駅は水平（極楽橋のみ 5‰）。終点で約 +244m
   gradients: [
     { from: 1300, to: 2250, permil: 10 },
     { from: 2600, to: 3300, permil: 40 },
@@ -119,7 +119,7 @@ export const mountain: Route = {
       timetable: MT.local,
     },
   ],
-  prevName: '紀見台',
+  prevName: '林間田園都市',
   nextName: '',
   signs: stations.slice(1).flatMap(st => approachSigns(st.stopS)),
   extent: { from: -400, to: EXTENT_TO },
@@ -148,5 +148,5 @@ export const mountain: Route = {
   ],
 };
 
-/** 上り（雲ノ橋 → 川原町）。下りのデータを反転して作る（交換駅の左側通行・頭端駅・副線の左右も反転） */
-export const mountainUp: Route = reverseRoute(mountain, { id: 'mountain-up', name: '霧峰線 雲ノ橋 → 川原町', timetable: MT_UP, signs: approachSigns });
+/** 上り（極楽橋 → 橋本）。下りのデータを反転して作る（交換駅の左側通行・頭端駅・副線の左右も反転） */
+export const mountainUp: Route = reverseRoute(mountain, { id: 'mountain-up', name: '高野線 極楽橋 → 橋本', timetable: MT_UP, signs: approachSigns });

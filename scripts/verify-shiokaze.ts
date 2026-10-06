@@ -30,7 +30,7 @@ for (const route of [shiokaze, shiokazeUp]) {
   assert.equal(route.stations.length, 10);
   assert.equal(route.stations[9].stopS - route.stations[0].stopS, 10600);
   const geometry = buildTrack(route);
-  assert.equal(geometry.length, 11200, '汐風線の線形総延長');
+  assert.equal(geometry.length, 11200, '南海本線の線形総延長');
   for (const crossing of route.crossings ?? []) {
     const half = (crossing.roadWidth ?? 6) / 2;
     for (const station of route.stations) assert.ok(crossing.s + half < station.platform.from || crossing.s - half > station.platform.to,

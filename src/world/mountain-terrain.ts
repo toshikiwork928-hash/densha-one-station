@@ -547,7 +547,7 @@ function buildFarGrid(ctx: GameContext, T: MountainTerrain, mat: THREE.Material,
   }
 }
 
-/** 積雪: 上を向いた面ほど白く（汐風線の平面の積雪の代わり） */
+/** 積雪: 上を向いた面ほど白く（南海本線の平面の積雪の代わり） */
 function attachSnow(ctx: GameContext, mat: THREE.MeshLambertMaterial): void {
   const u = { value: 0 };
   const before = mat.onBeforeCompile;

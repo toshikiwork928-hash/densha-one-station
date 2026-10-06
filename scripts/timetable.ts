@@ -95,7 +95,7 @@ const body = (r: Record<string, string>) => `{
   express: ${r.express},
   limited: ${r.limited},
 }`;
-writeFileSync('src/route/routes/shiokaze-timetable.ts', `// 汐風線の時刻表（scripts/timetable.ts が生成。手で直さない）
+writeFileSync('src/route/routes/shiokaze-timetable.ts', `// 南海本線の時刻表（scripts/timetable.ts が生成。手で直さない）
 import type { ServiceId, ServiceSpec } from '../types';
 
 /** 下り（桜ヶ丘 → 岬口） */
@@ -105,18 +105,18 @@ export const TT: Record<ServiceId, ServiceSpec['timetable']> = ${body(dn)};
 export const TT_UP: Record<ServiceId, ServiceSpec['timetable']> = ${body(upT)};
 `);
 
-// --shiokaze-only は汐風線だけ更新。別作業中の山岳線の生成物を触らない。
+// --shiokaze-only は南海本線だけ更新。別作業中の山岳線の生成物を触らない。
 if (!process.argv.includes('--shiokaze-only')) {
 const mDn = table(mountain), mUp = table(mountainUp);
-writeFileSync('src/route/routes/mountain-timetable.ts', `// 霧峰線の時刻表（scripts/timetable.ts が生成。手で直さない）
+writeFileSync('src/route/routes/mountain-timetable.ts', `// 高野線の時刻表（scripts/timetable.ts が生成。手で直さない）
 import type { ServiceSpec } from '../types';
 
-/** 下り（川原町 → 雲ノ橋） */
+/** 下り（橋本 → 極楽橋） */
 export const MT: Record<'local', ServiceSpec['timetable']> = {
   local: ${mDn.local},
 };
 
-/** 上り（雲ノ橋 → 川原町） */
+/** 上り（極楽橋 → 橋本） */
 export const MT_UP: Record<'local', ServiceSpec['timetable']> = {
   local: ${mUp.local},
 };

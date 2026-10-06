@@ -128,7 +128,7 @@ export function attachOverlay(ctx: GameContext): void {
     </div>
     <div id="titleExtra" hidden></div>
     <button class="btn" id="go" ${ready ? '' : 'disabled'}>${ready ? '出発（Enter）' : '3D素材を読み込み中…'}</button>
-    <p class="sub credit">3D素材: Kenney / Quaternius（CC0）。駅名・路線名は架空</p>`;
+    <p class="sub credit">3D素材: Kenney / Quaternius（CC0）。店名・塗装は架空。実在の路線・駅を参考にした概形</p>`;
     bindGo();
     card.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach(b => b.onclick = () => { showTab(b.dataset.tab as Tab); b.blur(); });
     card.querySelectorAll<HTMLButtonElement>('[data-stage]').forEach(b => b.onclick = () => {

@@ -143,7 +143,7 @@ export interface Route {
   name: string;
   /** 路線（線区）の識別子。同じ線区の下り・上りで共通（例 'shiokaze'、'mountain'）。メニューの路線選択に使う */
   lineId?: string;
-  /** 沿線の景観テーマ（既定 'coast' = 汐風線の街並み・海沿い、'mountain' = 山岳線） */
+  /** 沿線の景観テーマ（既定 'coast' = 南海本線の街並み・海沿い、'mountain' = 山岳線） */
   theme?: 'coast' | 'mountain';
   /** 単線区間（駅の交換設備以外は1線）。true なら route.tracks は自線のみ、行き違いは駅の交換設備で行う */
   singleTrack?: boolean;
@@ -162,7 +162,7 @@ export interface Route {
   limits: SpeedLimit[];
   /** 停車順。stations[0] が始発 */
   stations: Station[];
-  /** 端の駅の駅名標用（前後の架空駅名） */
+  /** 端の駅の駅名標用（前後の隣の駅名） */
   prevName?: string;
   nextName?: string;
   signs: Sign[];

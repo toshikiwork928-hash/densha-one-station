@@ -9,6 +9,7 @@ import { TUNNEL_CENTER, TUNNEL_HALF, TUNNEL_WALL_H, getTerrain, gridAlong } from
 import { BAND_CULL, isMountain } from './mountain-terrain';
 import { cullByDistance } from './cull';
 import { buildMountainSpan, buildRockSheds } from './mountain-structures';
+import { branchLinkZone } from './coastal-landmarks';
 
 const concrete = new THREE.MeshLambertMaterial({ color: 0xc4c0b6, side: THREE.DoubleSide });
 
@@ -66,7 +67,7 @@ export function buildStructures(ctx: GameContext): void {
   const lampMat = new THREE.MeshBasicMaterial({ color: 0xffe2b0, toneMapped: false });
   const lamps: THREE.Matrix4[] = [];
   const MT = isMountain(T) ? T : null;
-  const bounds = coastalDeckBounds(ctx);
+  const bounds = coastalDeckBounds(ctx), linkZone = branchLinkZone(route);
 
   for (const st of list) {
     if (st.kind === 'tunnel') {
@@ -112,7 +113,9 @@ export function buildStructures(ctx: GameContext): void {
             const len = q.platform.to - q.platform.from, sc = (q.platform.from + q.platform.to) / 2;
             return q.layout === 'hagoromo' && Math.abs(s - (sc - len * .2 - 9.6)) < 3;
           });
-          const h = stair ? .9 : wallH;
+          // 支線の渡り線が高架の縁をまたぐ区間は高欄を開ける。
+          const open = side === branchSide && !!linkZone && s > linkZone.from && s < linkZone.to;
+          const h = open ? .06 : stair ? .9 : wallH;
           return [[a, .02], [a, h], [b, h], [b, .02]];
         }, st.from, st.to, 2, concrete));
       }

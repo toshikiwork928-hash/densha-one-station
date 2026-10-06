@@ -1,4 +1,4 @@
-// 汐風線: 南海本線 泉大津〜堺の実在の駅名・駅間距離・配線を参考にした海沿いの複線（10駅・10.6km）。路線名は汐風線（架空名）。
+// 南海本線: 泉大津〜堺の実在の駅名・駅間距離・配線を参考にした海沿いの複線（10駅・10.6km）。公式の再現ではない概形。
 // 駅間は南海 HANDBOOK 2025 営業キロ程表を使用。曲線の向きと大きさは地図の駅位置から読んだ概形、勾配・高架高さ・構造物の距離はゲーム向け概形。
 // https://www.nankai.co.jp/lib/company/handbook/pdf/handbook2025.pdf （営業キロ程表）
 // 配線の参考: 配線略図.net 南海本線（堺 / 湊〜羽衣 / 高石〜泉大津）。詳細は docs/shiokaze-reference.md。
@@ -73,7 +73,7 @@ const shiftOpp = (list: ReturnType<typeof stopScenes>, station: number, d: numbe
   ? { ...o, spawnAt: o.spawnAt + d, startS: o.startS + d, stop: { ...o.stop, headS: o.stop.headS + d } } : o);
 
 export const shiokaze: Route = {
-  id: 'shiokaze', lineId: 'shiokaze', theme: 'coast', name: '汐風線 泉大津 → 堺',
+  id: 'shiokaze', lineId: 'shiokaze', theme: 'coast', name: '南海本線 泉大津 → 堺',
   lineLimit: 90, startS: 180, startClock: 10 * 3600, trainLength: 120,
   // 地図の駅位置から読んだ曲がり: 泉大津〜高石は北東へほぼ直線（松ノ浜〜北助松で少し左へ）、高石〜羽衣で左へ約20°、羽衣〜浜寺公園でさらに左へ約14°、
   // 浜寺公園〜湊は直線的で、諏訪ノ森を出たところで右へ曲がり（石津川橋梁へ上る）、石津川〜湊は直線、堺へ向けて少しずつ右へ寄る。
@@ -94,8 +94,8 @@ export const shiokaze: Route = {
   // 羽衣を出てすぐ高架を下り（5030m〜）、諏訪ノ森を出て上り坂（7000〜7360m）で石津川橋梁へ。
   elevation0: 9,
   gradients: [
-    { from: 1300, to: 1750, permil: -20 },
-    { from: 2340, to: 2790, permil: 20 },
+    { from: 1250, to: 1610, permil: -25 },   // 松ノ浜（高架）から北助松（地上）へ下る
+    { from: 2570, to: 2930, permil: 25 },    // 北助松（地上）から高石（高架）へ上る。高石の分岐器（下り3000m〜、上りは出口側が下りの2940mまで）は水平
     { from: 5030, to: 5390, permil: -25 },
     { from: 7000, to: 7360, permil: 25 },
   ],
@@ -135,16 +135,16 @@ export const shiokaze: Route = {
     { id: 'suwanomori', s: 6710, roadWidth: 6 },
   ],
   structures: [
-    { kind: 'viaduct', from: -400, to: 1740 },
-    { kind: 'viaduct', from: 2350, to: 5395 },
+    { kind: 'viaduct', from: -400, to: 1610 },
+    { kind: 'viaduct', from: 2570, to: 5395 },
     { kind: 'viaduct', from: 7010, to: 7390 },
     { kind: 'bridge', from: 7390, to: 7540 },
     { kind: 'viaduct', from: 7540, to: 11200 },
   ],
   // 区間内での概形配置。実測距離/橋長ではない。羽衣の南側へ高師浜線の高架分岐を描く。
   coastalLandmarks: [
-    { kind: 'road-overpass', s: 1590, length: 155, label: '湾岸バイパス' },
-    { kind: 'road-overpass', s: 2680, length: 155, label: '臨海連絡道路' },
+    { kind: 'road-overpass', s: 1720, length: 155, side: -1, label: '湾岸バイパス' },
+    { kind: 'road-overpass', s: 2440, length: 155, side: 1, label: '臨海連絡道路' },
     { kind: 'tram-overpass', s: 6310, length: 125, label: '阪堺電軌' },
     { kind: 'steel-bridge', s: 7465, length: 150, label: '石津川橋梁' },
     { kind: 'branch', s: 4980, length: 900, label: '高師浜線' },
@@ -155,7 +155,7 @@ export const shiokaze: Route = {
 };
 
 export const shiokazeUp: Route = reverseRoute(shiokaze, {
-  id: 'shiokaze-up', name: '汐風線 堺 → 泉大津', timetable: TT_UP,
+  id: 'shiokaze-up', name: '南海本線 堺 → 泉大津', timetable: TT_UP,
   oncomingStops: STOP_SCENES, signs: approachSigns,
 });
 
