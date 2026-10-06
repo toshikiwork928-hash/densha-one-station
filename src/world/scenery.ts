@@ -7,6 +7,8 @@ import { buildSceneryBatches, type SceneryItem } from './scenery-batch';
 import { getTerrain } from './terrain';
 import { isMountain } from './mountain-terrain';
 import type { TreeSpot } from './town-jp';
+import { ChunkedBatch, M, P } from './batch';
+import { cullByDistance } from './cull';
 
 /** 景観カテゴリ別のモデル集合 */
 export interface SceneryModels {
@@ -41,6 +43,12 @@ export function buildBackdrop(ctx: GameContext): void {
   // 峰（位置・高さ・幅）を乱数で決めておく（rng の消費量は従来と同程度）
   const peaks: { s: number; h: number; w: number }[] = [];
   for (let s = S0; s < S1; s += 420) peaks.push({ s: s + rnd() * 300, h: 90 + rnd() * 200, w: 300 + rnd() * 400 });
+  if (route.coastalLandmarks?.length) {
+    // 従来の前後稜線で使っていた82回分も消費し、後続の駅・人などの乱数列を保つ。
+    for (let i = 0; i < 82; i++) rnd();
+    buildCoastalBackdrop(ctx, S0, S1, at);
+    return;
+  }
   const ridge = (s: number, layer: number, side: number) => {
     let h = 30 + 18 * Math.sin(s / 290 + layer * 1.7 + side) + 12 * Math.sin(s / 113 + layer * 3.1) + 5 * Math.sin(s / 41 + side * 2);
     for (const p of peaks) { const d = (s - p.s - layer * 230 * side) / p.w; if (Math.abs(d) < 2.2) h += p.h * (layer ? .9 : .7) * Math.exp(-d * d * 2.2); }
@@ -84,6 +92,66 @@ export function buildBackdrop(ctx: GameContext): void {
   m.name = 'backdrop'; scene.add(m);
 }
 
+/** 沿岸市街地の概形。港・海岸線の位置は測量値ではなく、線路から遠いシルエット。 */
+function buildCoastalBackdrop(ctx: GameContext, from: number, to: number, at: (s: number, lat: number, y: number) => THREE.Vector3): void {
+  const seaSide = ctx.route.coastalLandmarks?.find(l => l.kind === 'branch')?.side ?? -1;
+  const positions: number[] = [], indices: number[] = [];
+  // 海は線路から900m以遠。近景の道路・住宅・支線を水面で覆わない。
+  const step = 240, n = Math.ceil((to - from) / step);
+  for (let i = 0; i <= n; i++) {
+    const s = Math.min(to, from + i * step);
+    for (const distance of [900, 4800]) {
+      const p = at(s, seaSide * distance, 0); positions.push(p.x, .07, p.z);
+    }
+    if (i) { const a = (i - 1) * 2; indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+  }
+  const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setIndex(indices); geometry.computeVertexNormals();
+  const sea = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({ color: 0x86a7b1, side: THREE.DoubleSide }));
+  sea.name = 'coastal-sea'; ctx.scene.add(sea);
+  const hillPoints: number[] = [], hillIndices: number[] = [];
+  for (let i = 0; i <= n; i++) {
+    const s = Math.min(to, from + i * step), height = 42 + 15 * Math.sin(s / 1500) + 8 * Math.sin(s / 390);
+    for (const [distance, y] of [[2600, -8], [2950, height], [3500, -12]]) {
+      const p = at(s, -seaSide * distance, 0); hillPoints.push(p.x, y, p.z);
+    }
+    if (i) for (let j = 0; j < 2; j++) { const a = (i - 1) * 3 + j; hillIndices.push(a, a + 1, a + 3, a + 1, a + 4, a + 3); }
+  }
+  const hillGeometry = new THREE.BufferGeometry(); hillGeometry.setAttribute('position', new THREE.Float32BufferAttribute(hillPoints, 3));
+  hillGeometry.setIndex(hillIndices); hillGeometry.computeVertexNormals();
+  const hills = new THREE.Mesh(hillGeometry, new THREE.MeshLambertMaterial({ color: 0xa8b8bf, side: THREE.DoubleSide }));
+  hills.name = 'coastal-distant-hills'; ctx.scene.add(hills);
+  const industrial = new ChunkedBatch(900);
+  for (let s = ctx.route.extent.from - 200; s < ctx.route.extent.to + 300; s += 560) {
+    const b = industrial.at(s), t = ctx.track.trackAt(s), phase = Math.abs(Math.round(s / 560));
+    const lat = seaSide * (470 + 70 * Math.sin(phase * 2.3));
+    const point = (ds: number, dl: number) => at(s + ds, lat + seaSide * dl, 0);
+    const box = (ds: number, dl: number, y: number, w: number, h: number, d: number, color: number) => {
+      const p = point(ds, dl); b.add('body', P.box, M(p.x, y, p.z, -t.phi, w, h, d), color);
+    };
+    box(0, 0, .15, 88, .3, 125, 0x959e9c);
+    box(-24, -15, 5.5, 48, 11, 45, 0xadb9b9);
+    box(-24, -15, 11.2, 50, .5, 47, 0x829796);
+    box(33, 14, 4, 60, 8, 35, 0xb7bebb);
+    for (const ds of [-23, 7, 37]) {
+      const p = point(ds, 55);
+      b.add('body', P.cyl, M(p.x, 5, p.z, 0, 16, 10, 16), 0xbcc6c2);
+      b.add('body', P.cyl, M(p.x, 10.12, p.z, 0, 16.5, .24, 16.5), 0xa2b2b0);
+    }
+    if (phase % 3 === 0) {
+      // 控えめな煙突・港湾クレーン。煙や追加フレーム更新は持たない。
+      box(52, -28, 17, 1.8, 34, 1.8, 0x9baba8);
+      box(52, -28, 31, 1.9, 1.6, 1.9, 0xa66e60);
+      box(-42, 110, 12, 1.6, 24, 1.6, 0x91aaa5);
+      box(-42, 110, 24, 32, .9, .9, 0x91aaa5);
+      box(-35, 124, 12, .2, 24, .2, 0x768f8a);
+    }
+  }
+  for (const group of industrial.build({ body: new THREE.MeshLambertMaterial({ vertexColors: true }) }, ctx.scene)) {
+    group.name = 'coastal-industry'; cullByDistance(ctx, group, 1750);
+  }
+}
+
 /** 車止め先の遠方構造物（終端を隠す） */
 export function buildEndBlock(ctx: GameContext): void {
   const s = ctx.route.scenery.endBlockS;
@@ -123,6 +191,8 @@ export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot
   const MT = isMountain(T) ? T : null;
   const level = (s: number, lat: number) => !MT || (MT.flat(s) > .97 && Math.abs(MT.terrainY(s, lat) - MT.groundY(s)) < .9);
   const blocked = (s: number) => T.nearCrossing(s, 3) || T.structureAt(s, 60)?.kind === 'tunnel' || (!MT && T.groundY(s) < -.3) || !level(s, 0);
+  const overpasses = (route.coastalLandmarks ?? []).filter(l => l.kind === 'road-overpass' || l.kind === 'tram-overpass');
+  const blockedBuilding = (s: number, half = 0) => overpasses.some(l => Math.abs(s - l.s) < 45 + half);
 
   for (const side of [-1, 1]) {
     // 市街地の奥: 商業ビル・中層ビル
@@ -130,6 +200,7 @@ export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot
       if (!T.isCity(s) || blocked(s)) { s += 10; continue; }
       const mid = rnd() < .4, model = pick(mid ? M.mid : M.city), k = mid ? KIT_SCALE.mid : KIT_SCALE.city;
       const half = Math.max(model.size.x, model.size.z) * k / 2;
+      if (blockedBuilding(s, half)) { s += 10; continue; }
       if (!level(s, latOf(side, 70 + half))) { s += 10; continue; }
       put(model, s, latOf(side, 70 + half + rnd() * 10), facing(side), k);
       s += half * 2 + 3 + rnd() * 6;
@@ -138,6 +209,7 @@ export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot
     for (let s = TS0; s < TS1 + 400;) {
       if (!nearCity(s, 250) || blocked(s)) { s += 20; continue; }
       const fm = pick(M.far), fl = latOf(side, 100 + rnd() * 140); // 乱数の消費順は従来どおり
+      if (blockedBuilding(s, Math.max(fm.size.x, fm.size.z) * KIT_SCALE.far * 1.5 / 2)) { s += 20; continue; }
       if (level(s, fl)) put(fm, s, fl, rnd() * 6, KIT_SCALE.far * (1 + rnd() * .5));
       s += 12 + rnd() * 25;
     }

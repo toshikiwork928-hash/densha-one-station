@@ -23,6 +23,8 @@ uniform vec3 uZenith, uHorizon, uFog, uSunDir, uSunColor, uCloudLit, uCloudShade
 uniform float uSunSize, uSunDisc, uCover, uStars, uTime, uDim, uMtnVis, uSunLow, uSnow, uCumulus, uCirrus, uStratus;
 uniform vec3 uMtnAlb[4];
 uniform vec2 uSunH;
+uniform float uCoastal;
+uniform vec2 uCoastalEast;
 uniform sampler2D uRidge, uCumu;
 varying vec3 vDir;
 float hash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
@@ -161,15 +163,19 @@ void main() {
     float cosEl = sqrt(max(1.0 - uSunDir.y * uSunDir.y, 0.0));
     vec3 L = vec3(sinD * cosEl, uSunDir.y, cosD * cosEl);           // (接線, 上, 奥行き) 座標の太陽方向
     for (int i = 0; i < 4; i++) {
-      float rh = i == 0 ? rg.x : i == 1 ? rg.y : i == 2 ? rg.z : rg.w;
+      float ridgeScale = mix(1.0, 0.08, uCoastal);
+      float rh = (i == 0 ? rg.x : i == 1 ? rg.y : i == 2 ? rg.z : rg.w) * ridgeScale;
       float t = float(i) / 3.0;
       float cov = smoothstep(0.0, max(fwidth(h) * 1.6, 1e-5) + (1.0 - uMtnVis) * 0.016 * (1.0 - 0.5 * t), rh - h); // 悪天候ほど稜線が滲む
+      // 海沿い平地: 東のごく低い遠景だけ。西と線路前後は平らな地平線。
+      cov *= mix(1.0, smoothstep(0.35, 0.7, dot(dn, uCoastalEast)), uCoastal);
       if (cov <= 0.0) continue;
       float g = i == 0 ? (rgR.x - rgL.x) : i == 1 ? (rgR.y - rgL.y) : i == 2 ? (rgR.z - rgL.z) : (rgR.w - rgL.w);
-      g /= 0.0092;                                                // 稜線の傾き（高さ / 方位ラジアン）
+      g *= ridgeScale / 0.0092;                                    // 稜線の傾き（高さ / 方位ラジアン）
       float up = clamp((rh - h) / max(rh, 1e-3), 0.0, 1.0);        // 0 = 稜線, 1 = 麓
       float hb = i == 0 ? 0.30 : i == 1 ? 0.17 : i == 2 ? 0.08 : 0.02;
       float haze = hb + (1.0 - uMtnVis) * (1.0 - 0.4 * t);
+      haze = mix(haze, max(haze, 0.85), uCoastal);
       haze = clamp(haze + up * up * (0.55 - 0.2 * t), 0.0, 1.0);
       float tex = noise(vec2(u * 1300.0 + float(i) * 31.0, h * 260.0)) * 0.5 + noise(vec2(u * 420.0, h * 90.0 + float(i))) * 0.5;
       vec3 n = normalize(vec3(-g * 0.45, 0.8, -0.6));
@@ -193,7 +199,7 @@ const MTN_ALB = [0x5f86bd, 0x437898, 0x2c6d5a, 0x215834].map(h => new THREE.Colo
 const MTN_ALB_MOUNTAIN = [0x7f9cc2, 0x7393b4, 0x6889a8, 0x5f809c].map(h => new THREE.Color(h));
 const tmpA = new THREE.Color(), tmpS = new THREE.Color();
 
-export function createSkyDome(scene: THREE.Scene, octaves: number, theme: 'coast' | 'mountain' = 'coast'): SkyDome {
+export function createSkyDome(scene: THREE.Scene, octaves: number, theme: 'coast' | 'mountain' = 'coast', coastalEast?: THREE.Vector2): SkyDome {
   const atlas = createCumulusAtlas(); // 積雲スプライトはフレームに分割して生成し、できあがったら雲を浮かべる
   let cumulusFade = 0;
   const uniforms = {
@@ -204,6 +210,7 @@ export function createSkyDome(scene: THREE.Scene, octaves: number, theme: 'coast
     uCumu: { value: atlas.texture }, uCumulus: { value: 0 }, uCirrus: { value: 0 }, uStratus: { value: 0 },
     uSunH: { value: new THREE.Vector2(0, -1) }, uRidge: { value: createRidgeTexture(theme === 'mountain' ? 1.6 : 1) },
     uMtnVis: { value: 1 }, uSunLow: { value: 0 }, uSnow: { value: 0 },
+    uCoastal: { value: coastalEast ? 1 : 0 }, uCoastalEast: { value: coastalEast ?? new THREE.Vector2(1, 0) },
     uSunSize: { value: .04 }, uSunDisc: { value: 1 }, uCover: { value: .3 }, uStars: { value: 0 }, uTime: { value: 0 }, uDim: { value: 0 },
   };
   const mat = new THREE.ShaderMaterial({

@@ -46,7 +46,7 @@ export function reverseRoute(down: Route, opt: {
   const L = totalLength(down), m = (s: number) => L - s;
   const n = down.stations.length, ri = (i: number) => n - 1 - i;
   // 標高: 下りの終点側の標高から始める
-  let endY = 0;
+  let endY = down.elevation0 ?? 0;
   for (const g of down.gradients ?? []) endY += (g.to - g.from) * g.permil / 1000;
   const stations: Station[] = [...down.stations].reverse().map(st => {
     const from = m(st.platform.to), to = m(st.platform.from), ahead = st.platform.to - st.stopS;
@@ -124,5 +124,6 @@ export function reverseRoute(down: Route, opt: {
     ...(down.meets ? { meets: down.meets.map(mt => ({ ...mt, station: ri(mt.station) })) } : {}),
     crossings,
     structures,
+    coastalLandmarks: down.coastalLandmarks?.map(l => ({ ...l, s: m(l.s), side: -(l.side ?? -1) as 1 | -1, direction: -(l.direction ?? -1) as 1 | -1 })),
   };
 }

@@ -15,6 +15,7 @@ import { buildTown } from './town-jp';
 import { createCab } from './cab';
 import { createPlayerTrain, type PlayerTrain } from './player-train';
 import { createOvertaking } from './overtaking';
+import { buildCoastalLandmarks } from './coastal-landmarks';
 
 export interface World {
   oncoming: OncomingSystem;
@@ -28,6 +29,7 @@ export function buildWorld(ctx: GameContext): World {
   buildTerrain(ctx);
   buildTrackMesh(ctx);
   buildStructures(ctx);
+  buildCoastalLandmarks(ctx);
   buildCatenary(ctx); // rng 不使用
   buildBackdrop(ctx);
   buildSigns(ctx);

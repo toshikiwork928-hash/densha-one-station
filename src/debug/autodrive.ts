@@ -2,6 +2,7 @@
 // コンソールから: __qa.run('local'|'express'|'limited') → 全線通しを描画せずに走らせ、停車・待避・行き違い（overtake 列に 'meet' 行）の経過を返す
 import type { GameContext } from '../core/context';
 import type { ServiceId } from '../route/types';
+import { terminalSpeedLimit } from '../game/terminal-ats';
 
 export function attachAutodrive(ctx: GameContext, advance: (sec: number, dt?: number, hook?: () => boolean | void) => void): void {
   const st = ctx.state, route = ctx.route, track = ctx.track;
@@ -25,7 +26,7 @@ export function attachAutodrive(ctx: GameContext, advance: (sec: number, dt?: nu
     const target = st.target >= 0 ? route.stations[st.target].stopS : 1e9;
     let vAllow = Math.min(track.limitAt(tr.s), st.sigLimit) / 3.6;
     for (let d = 5; d < 2500; d += 5) {
-      const q = tr.s + d, over = q >= target, lim = over ? 0 : track.limitAt(q) / 3.6;
+      const q = tr.s + d, over = q >= target, lim = over ? 0 : Math.min(track.limitAt(q), terminalSpeedLimit(route, st.target, q)) / 3.6;
       vAllow = Math.min(vAllow, Math.sqrt(lim * lim + 2 * pl * Math.max(0, (over ? target - tr.s : d) - 1.5)));
       if (over) break;
     }

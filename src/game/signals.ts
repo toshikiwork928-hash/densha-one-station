@@ -3,6 +3,7 @@ import type { GameContext } from '../core/context';
 import type { SignalAspect } from '../core/events';
 import { islandZone, loopZone, type LoopZone } from '../route/service';
 import type { Meet } from './meet';
+import { terminalSpeedLimit } from './terminal-ats';
 import { ASPECT_LABEL, ASPECT_LIMIT, PRECEDING_LENGTH, aspectOf, buildPrecedingKeys, precedingHead, type PrecedingPlan } from './preceding';
 
 const ATS_ACK_TIME = 5; // 警報から確認までの猶予 [s]
@@ -72,6 +73,7 @@ export function createSignalSystem(ctx: GameContext, forceEB: () => void, meet?:
     if (passed >= 0 && RANK[pa] < RANK[passedAsp]) pa = passedAsp;
     else passedAsp = pa;
     st.sigLimit = pa === 'R' ? Infinity : ASPECT_LIMIT[pa];
+    st.sigLimit = Math.min(st.sigLimit, terminalSpeedLimit(route, st.target, st.train.s));
     const n = st.nextSignal;
     const key = n >= 0 ? `${sigs[n].id}:${st.signals[n]}` : 'none';
     if (n >= 0 && key !== lastEmit) {
@@ -127,6 +129,14 @@ export function createSignalSystem(ctx: GameContext, forceEB: () => void, meet?:
       }
       refreshAspects();
       if (!moving) return;
+      const terminalLimit = terminalSpeedLimit(route, st.target, s);
+      const terminalDistance = route.terminalApproach && st.target === route.stations.length - 1
+        ? route.stations[st.target].stopS - s : Infinity;
+      if (terminalDistance <= 1500 && !st.flags.terminalNotice) {
+        st.flags.terminalNotice = true;
+        banner('終着進入予告：停止位置まで1000mで65km/h以下。その後もATS速度照査で段階的に減速', 6);
+      }
+      if (st.train.v * 3.6 > terminalLimit + 3) brake(`終着進入 ${Math.floor(terminalLimit)}km/h 照査超過`);
       // 停止現示への接近
       const n = st.nextSignal;
       // 単線: 停車駅の出発信号（停止位置の先）は、手前で止まるので警報しない

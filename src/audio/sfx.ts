@@ -60,7 +60,7 @@ export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
       const brakes = createBrakes(core);
       p = {
         core, brakes,
-        vvvf: createVvvf(core),
+        vvvf: createVvvf(core, core.run, () => settings.value.traction),
         resistance: createResistance(core),
         running: createRunning(core, () => ctx.route),
         station: createStation(core, brakes),

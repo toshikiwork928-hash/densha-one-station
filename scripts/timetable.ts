@@ -6,6 +6,7 @@ import { shiokaze, shiokazeUp } from '../src/route/routes/shiokaze';
 import { mountain, mountainUp } from '../src/route/routes/mountain';
 import { meetDwell } from '../src/game/meet';
 import { waitDwell } from '../src/game/overtake';
+import { terminalSpeedLimit } from '../src/game/terminal-ats';
 import { applyService } from '../src/route/service';
 import { buildTrack } from '../src/route/track';
 import type { Route, ServiceId } from '../src/route/types';
@@ -38,10 +39,10 @@ function run(route: Route, id: ServiceId) {
         for (let d = 0; d < 800; d += 20) g = Math.min(g, track.gradeAt(tr.s + d));
         plan = Math.max(.2, perf.bMax * .75 - 9.81 * -g / 1000);
       }
-      let vAllow = track.limitAt(tr.s) / 3.6;
+      let vAllow = Math.min(track.limitAt(tr.s), terminalSpeedLimit(route, stops[si], tr.s)) / 3.6;
       for (let d = 5; d < 2500; d += 5) {
         const q = tr.s + d;
-        const lim = q >= target ? 0 : track.limitAt(q) / 3.6;
+        const lim = q >= target ? 0 : Math.min(track.limitAt(q), terminalSpeedLimit(route, stops[si], q)) / 3.6;
         vAllow = Math.min(vAllow, Math.sqrt(lim * lim + 2 * plan * Math.max(0, (q >= target ? target - tr.s : d) - 1)));
         if (q >= target) break;
       }
@@ -104,6 +105,8 @@ export const TT: Record<ServiceId, ServiceSpec['timetable']> = ${body(dn)};
 export const TT_UP: Record<ServiceId, ServiceSpec['timetable']> = ${body(upT)};
 `);
 
+// --shiokaze-only は汐風線だけ更新。別作業中の山岳線の生成物を触らない。
+if (!process.argv.includes('--shiokaze-only')) {
 const mDn = table(mountain), mUp = table(mountainUp);
 writeFileSync('src/route/routes/mountain-timetable.ts', `// 霧峰線の時刻表（scripts/timetable.ts が生成。手で直さない）
 import type { ServiceSpec } from '../types';
@@ -118,3 +121,4 @@ export const MT_UP: Record<'local', ServiceSpec['timetable']> = {
   local: ${mUp.local},
 };
 `);
+}

@@ -8,6 +8,7 @@ import { GeoBatch, M, P, onLight } from './batch';
 import { canvasTex } from './canvas-tex';
 import { getTerrain } from './terrain';
 import { buildMountainStations } from './mountain-stations';
+import { buildElevatedConcourse, buildHeritageFacade, buildCoastalSpecialStations } from './coastal-stations';
 
 const platMat = new THREE.MeshLambertMaterial({ color: 0xc9c5bc });
 const bodyMat = new THREE.MeshLambertMaterial({ vertexColors: true });
@@ -65,8 +66,11 @@ export function buildStation(ctx: GameContext, sta: Station, prevName: string, n
     box(-4.3, 4.1, z, 4.2, .16, .14, 0x8a9096);
   }
   // 柵（ホーム裏側）
-  for (let z = -len / 2; z <= len / 2; z += 2.5) box(-6.55, 1.75, z, .06, 1.3, .06, 0x8a9096);
-  box(-6.55, 2.35, 0, .05, .06, len, 0x8a9096); box(-6.55, 1.8, 0, .02, .9, len, 0x9fb0a8);
+  const thirdLineSide = sta.layout === 'hamadera' && (opt.lat ?? 0) === (ctx.route.id.endsWith('-up') ? 4 : 0);
+  if (!thirdLineSide) {
+    for (let z = -len / 2; z <= len / 2; z += 2.5) box(-6.55, 1.75, z, .06, 1.3, .06, 0x8a9096);
+    box(-6.55, 2.35, 0, .05, .06, len, 0x8a9096); box(-6.55, 1.8, 0, .02, .9, len, 0x9fb0a8);
+  }
   // ベンチ・自販機・ごみ箱・時計
   for (let z = -rl / 2 + 8; z <= rl / 2 - 8; z += 16) {
     box(-5.4, 1.55, z, .45, .06, 2.2, 0x2a6aa8); box(-5.62, 1.85, z, .06, .45, 2.2, 0x2a6aa8);
@@ -216,6 +220,7 @@ export function buildIsland(ctx: GameContext, sta: Station, prevName: string, ne
 
 /** 島式駅の駅舎（自線側の最も外の線路 loopLat の外）と跨線橋。centers = 跨線橋が階段でつながる島式ホームの中心の横位置。compact = 駅舎・広場を小さくする（島式1面2線） */
 function buildIslandConcourse(ctx: GameContext, sta: Station, loopLat: number, centers: number[], compact = false): void {
+  if (sta.elevated) { buildElevatedConcourse(ctx, sta, centers, loopLat); return; }
   const { track } = ctx;
   const sc = (sta.platform.from + sta.platform.to) / 2, t = track.trackAt(sc);
   const grp = new THREE.Group(); grp.position.copy(track.at(sc, 0, 0)); grp.rotation.y = -t.phi; ctx.scene.add(grp);
@@ -261,6 +266,8 @@ export function buildStations(ctx: GameContext): void {
   st.forEach((sta, i) => {
     const prev = st[i - 1]?.name ?? ctx.route.prevName ?? '';
     const next = st[i + 1]?.name ?? ctx.route.nextName ?? '';
+    if (sta.layout === 'hamadera') buildHeritageFacade(ctx, sta);
+    buildCoastalSpecialStations(ctx, sta);
     if (sta.island) {
       // 島式1面2線: 下り線と上り線の間に島式ホーム1本（線路は駅の前後で両側へ開く）。幅 = 線間 + 2×spread − 3.4（ホーム端から線路中心 1.7m）
       const L0 = Math.min(...ctx.route.tracks), L1 = Math.max(...ctx.route.tracks), sp = sta.island.spread;
@@ -279,7 +286,9 @@ export function buildStations(ctx: GameContext): void {
     }
     const sc = (sta.platform.from + sta.platform.to) / 2;
     const dy = sta.elevated ? T.groundY(sc) - T.trackY(sc) : 0;
-    buildStation(ctx, sta, prev, next, { elevatedDy: dy });
+    const special = sta.layout === 'hamadera' || sta.layout === 'hagoromo';
+    buildStation(ctx, sta, prev, next, { elevatedDy: dy, minimal: special });
+    if (sta.layout === 'hagoromo') buildElevatedConcourse(ctx, sta, [-4.1, 8.1], 0);
     // 相対式ホーム: 対向線側にもホーム（上りの運転で使う）
     const L1 = Math.max(...ctx.route.tracks);
     if (L1 > 0) buildStation(ctx, sta, next, prev, { lat: L1, side: sta.platform.side === 'L' ? 'R' : 'L', minimal: true, elevatedDy: dy });

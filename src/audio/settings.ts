@@ -1,8 +1,9 @@
 // 音量設定（localStorage に保存）とタイトル画面の音量 UI
-export interface AudioSettings { master: number; sfx: number; voice: number; muted: boolean }
+export type TractionSound = 'soft' | 'legacy';
+export interface AudioSettings { master: number; sfx: number; voice: number; muted: boolean; traction: TractionSound }
 
 const KEY = 'densha-one-station.audio';
-const DEFAULTS: AudioSettings = { master: .8, sfx: 1, voice: .9, muted: false };
+const DEFAULTS: AudioSettings = { master: .8, sfx: 1, voice: .9, muted: false, traction: 'soft' };
 
 export interface SettingsStore {
   readonly value: AudioSettings;
@@ -17,7 +18,7 @@ export function createSettings(): SettingsStore {
     if (raw) {
       const o = JSON.parse(raw) as Partial<AudioSettings>;
       const num = (x: unknown, d: number) => (typeof x === 'number' && isFinite(x) ? Math.max(0, Math.min(1, x)) : d);
-      value = { master: num(o.master, DEFAULTS.master), sfx: num(o.sfx, DEFAULTS.sfx), voice: num(o.voice, DEFAULTS.voice), muted: o.muted === true };
+      value = { master: num(o.master, DEFAULTS.master), sfx: num(o.sfx, DEFAULTS.sfx), voice: num(o.voice, DEFAULTS.voice), muted: o.muted === true, traction: o.traction === 'legacy' ? 'legacy' : 'soft' };
     }
   } catch { /* 保存領域が使えない環境 */ }
   const fns: ((s: AudioSettings) => void)[] = [];
@@ -56,9 +57,19 @@ export function renderSettingsUi(container: HTMLElement, store: SettingsStore): 
   store.onChange(s => { if (cb.isConnected) cb.checked = s.muted; });
   const ml = document.createElement('span'); ml.className = 'env-lbl'; ml.textContent = '消音';
   mute.append(ml, cb, '（M キーでも切替）');
+  const traction = document.createElement('label'); traction.className = 'env-row';
+  const tl = document.createElement('span'); tl.className = 'env-lbl'; tl.textContent = '走行音';
+  const select = document.createElement('select'); select.setAttribute('aria-label', 'VVVF走行音');
+  for (const [value, label] of [['soft', '改良（柔らかい音）'], ['legacy', '従来（比較用）']]) {
+    const option = document.createElement('option'); option.value = value; option.textContent = label; select.append(option);
+  }
+  select.value = store.value.traction;
+  select.addEventListener('change', () => { store.set({ traction: select.value as TractionSound }); select.blur(); });
+  select.addEventListener('keydown', e => e.stopPropagation());
+  traction.append(tl, select);
   const hint = document.createElement('div'); hint.className = 'env-hint';
-  hint.textContent = '音はすべてコード合成。車内放送の声は、使っている端末・ブラウザの日本語音声です（ja-JP 音声のある環境のみ）';
-  box.append(row('全体', 'master'), row('効果音', 'sfx'), row('放送', 'voice'), mute);
+  hint.textContent = '走行音は独自合成。実車録音ではありません。改良／従来を切り替えて比較できます（VVVF車のみ）。放送は端末・ブラウザの日本語音声です。';
+  box.append(row('全体', 'master'), row('効果音', 'sfx'), row('放送', 'voice'), mute, traction);
   box.append(hint);
   container.append(box);
 }

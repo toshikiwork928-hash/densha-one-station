@@ -12,6 +12,8 @@ export interface Gradient { from: number; to: number; permil: number }
 export interface SpeedLimit { from: number; to: number; kmh: number; /** バナー用の種別名 */ label?: string }
 
 export interface Station {
+  /** 沿岸線の駅固有意匠。線路運行は loop / island に従う。 */
+  layout?: 'relative' | 'island' | 'loop' | 'hagoromo' | 'hamadera';
   name: string;
   kana?: string;
   /** 停止位置目標 [m]（先頭位置） */
@@ -127,6 +129,10 @@ export interface OncomingStop {
 }
 
 export interface Route {
+  /** コース終着駅への接近を連続速度照査（実路線ATSの仕様そのものではない）。 */
+  terminalApproach?: boolean;
+  /** 描画専用の沿岸線ランドマーク。進行反転時は位置・左右・分岐向きを反転する。 */
+  coastalLandmarks?: { kind: 'road-overpass' | 'tram-overpass' | 'steel-bridge' | 'branch'; s: number; length?: number; label?: string; side?: 1 | -1; direction?: 1 | -1 }[];
   id: string;
   name: string;
   /** 路線（線区）の識別子。同じ線区の下り・上りで共通（例 'shiokaze'、'mountain'）。メニューの路線選択に使う */

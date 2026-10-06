@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VVVF走行音比較</title>
+<style>body{max-width:760px;margin:32px auto;padding:0 20px;font:16px/1.7 sans-serif;background:#152332;color:#eef4f8}button{padding:12px 20px;font:inherit}audio{display:block;width:100%;margin:12px 0}pre{white-space:pre-wrap}section{padding:16px;border:1px solid #648096;margin:20px 0}</style>
+<h1>VVVF走行音比較</h1><p>独自合成。停止中P → 0〜90km/h力行 → 惰行 → 回生 → 消音。24秒。実車録音ではない。</p>
+<button id="render">比較音を作る</button><div id="result"></div>
+<script type="module">
+import { createCore } from './engine.ts';
+import { createVvvf } from './vvvf.ts';
+const button = document.querySelector('#render'), result = document.querySelector('#result');
+function wav(buffer) {
+  const d = buffer.getChannelData(0), ab = new ArrayBuffer(44 + d.length * 2), view = new DataView(ab);
+  const text = (o, s) => [...s].forEach((c, i) => view.setUint8(o + i, c.charCodeAt(0)));
+  text(0,'RIFF'); view.setUint32(4,36+d.length*2,true); text(8,'WAVE'); text(12,'fmt ');
+  view.setUint32(16,16,true); view.setUint16(20,1,true); view.setUint16(22,1,true);
+  view.setUint32(24,buffer.sampleRate,true); view.setUint32(28,buffer.sampleRate*2,true); view.setUint16(32,2,true); view.setUint16(34,16,true);
+  text(36,'data'); view.setUint32(40,d.length*2,true);
+  d.forEach((v,i) => view.setInt16(44+i*2,Math.round(Math.max(-1,Math.min(1,v))*32767),true));
+  return URL.createObjectURL(new Blob([ab], {type:'audio/wav'}));
+}
+function rms(d, sr, start, end) { let sum=0; const a=Math.floor(start*sr), b=Math.floor(end*sr); for(let i=a;i<b;i++)sum+=d[i]*d[i]; return Math.sqrt(sum/(b-a)); }
+async function render(sound) {
+  const sr=22050, duration=24, ac=new OfflineAudioContext(2,sr*duration,sr);
+  const output=ac.createGain(), merger=ac.createChannelMerger(2); merger.connect(ac.destination);
+  output.connect(merger,0,0);
+  const hp=ac.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=1000; hp.Q.value=.707;
+  const lp=ac.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=4500; lp.Q.value=.707;
+  output.connect(hp).connect(lp).connect(merger,0,1);
+  const core=createCore(ac,output); core.master.gain.value=.8;
+  const engine=createVvvf(core,core.run,()=>sound);
+  const points=Array.from({length:duration*40},(_,i)=>({t:i/40, promise:ac.suspend(i/40)}));
+  const done=ac.startRendering();
+  for(const point of points) {
+    await point.promise; const t=point.t;
+    if(t<2)engine.update(0,5);
+    else if(t<14)engine.update((t-2)*7.5/3.6,5);
+    else if(t<16)engine.update(90/3.6,0);
+    else if(t<22)engine.update(Math.max(0,90-(t-16)*15)/3.6,-5);
+    else engine.silence();
+    await ac.resume();
+  }
+  const buffer=await done, full=buffer.getChannelData(0), high=buffer.getChannelData(1);
+  const section=document.createElement('section');
+  const heading=document.createElement('h2');heading.textContent=sound==='soft'?'改良':'従来';
+  const audio=document.createElement('audio');audio.controls=true;audio.src=wav(buffer);
+  const metrics=document.createElement('pre');
+  let peak=0, finite=true;for(const v of full){peak=Math.max(peak,Math.abs(v));if(!Number.isFinite(v))finite=false;}
+  metrics.textContent=JSON.stringify({finite,peak:+peak.toFixed(6),stoppedP_rms:+rms(full,sr,.3,1.8).toFixed(6),start_rms:+rms(full,sr,2.2,4.5).toFixed(6),start_1k_4_5k_rms:+rms(high,sr,2.2,4.5).toFixed(6),power_rms:+rms(full,sr,4,13).toFixed(6),power_1k_4_5k_rms:+rms(high,sr,4,13).toFixed(6),coast_rms:+rms(full,sr,14.5,15.8).toFixed(6),regen_rms:+rms(full,sr,16.4,21).toFixed(6),silence_rms:+rms(full,sr,23.5,24).toFixed(8)},null,2);
+  section.append(heading,audio,metrics);result.append(section);
+}
+button.addEventListener('click',async()=>{button.disabled=true;result.replaceChildren();button.textContent='作成中…';try{await render('soft');await render('legacy');button.textContent='作成完了';}catch(e){result.textContent=String(e);button.textContent='再試行';button.disabled=false;}});
+</script></html>

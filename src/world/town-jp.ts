@@ -319,6 +319,27 @@ function bamboo(b: GeoBatch, rnd: Rng, r: number): void {
   }
 }
 
+/** 沿岸公園の低い松。既存の軽量針葉樹パーツを扁平な樹冠に使う。 */
+function coastalParkTile(b: GeoBatch, rnd: Rng, w: number, d: number, path: boolean, plant: boolean): void {
+  // parentAt のローカルXは線路方向、Zは線路から離れる方向。
+  b.add('body', P.plane, M(0, .075, 0, 0, d + .05, w + .05, 1, -Math.PI / 2), 0x82916c);
+  if (path) {
+    b.add('body', P.box, M(0, .1, 0, 0, d + .06, .055, 3.2), 0xc4bba3);
+    if (rnd() < .12) {
+      b.add('body', P.box, M(0, .48, 3, 0, 2.1, .08, .6), 0x866548);
+      b.add('body', P.box, M(0, .78, 3.3, 0, 2.1, .5, .08), 0x866548);
+      for (const x of [-.75, .75]) b.add('body', P.box, M(x, .23, 3, 0, .08, .45, .45), 0x606965);
+    }
+  }
+  if (!plant || path) return;
+  const x = (rnd() - .5) * d * .45, z = (rnd() - .5) * w * .6, height = 5.5 + rnd() * 2;
+  b.add('body', TRUNK, M(x, height / 2, z, 0, .38, height, .38), 0x665440);
+  for (let i = 0; i < 3; i++) {
+    const spread = 4.5 - i * .8;
+    b.add('body', TIERS[i], M(x + (i - 1) * .65, height - .6 + i * .45, z + (i % 2 ? .55 : -.3), i, spread, 1.55, spread), [0x344e3d, 0x3e6046, 0x486b4b][i]);
+  }
+}
+
 /** 街並みを構築（同期）。木の位置を返す */
 export function buildTown(ctx: GameContext): TownResult {
   const { track, route, scene } = ctx, T = getTerrain(ctx);
@@ -341,6 +362,12 @@ export function buildTown(ctx: GameContext): TownResult {
   const latOf = (sd: number, d: number) => sd < 0 ? L0 - d : L1 + d;
   // 山岳線: 町並み・田畑・道路は平地（川沿いの町・平野）で、地面が線路と同じ高さの所だけ
   const MT = isMountain(T) ? T : null;
+  const coastal = !!route.coastalLandmarks?.length && !MT;
+  const parkSide = route.coastalLandmarks?.find(l => l.kind === 'branch')?.side ?? -1;
+  const parkAt = (sd: number, s: number) => coastal && sd === parkSide && !T.isCity(s);
+  const overpasses = (route.coastalLandmarks ?? []).filter(l => l.kind === 'road-overpass' || l.kind === 'tram-overpass');
+  // 斜交する床版の線路方向投影と建物の奥行きに、余裕を含める。
+  const blockedBuilding = (from: number, to: number) => overpasses.some(l => from < l.s + 45 && to > l.s - 45);
   const flatOk = (s: number) => !MT || MT.flat(s) > .97;
   const levelAt = (s: number, lat: number) => !MT || Math.abs(MT.terrainY(s, lat) - MT.groundY(s)) < .9;
   const wires = new Map<number, number[]>();
@@ -363,6 +390,7 @@ export function buildTown(ctx: GameContext): TownResult {
   const tunnelNear = (s: number, m: number) => T.structureAt(s, m)?.kind === 'tunnel';
   const zone = (s: number): 'city' | 'suburb' | 'rural' => {
     if (T.isCity(s)) return 'city';
+    if (coastal) return 'suburb'; // 海浜公園周辺も市街地。田園・農家に切り替えない。
     let dc = Infinity;
     for (const z of route.scenery.cityZones) dc = Math.min(dc, Math.abs(s - z.from), Math.abs(s - z.to));
     return dc < 450 || hash(Math.floor(s / 350), 7) > .6 ? 'suburb' : 'rural';
@@ -483,6 +511,7 @@ export function buildTown(ctx: GameContext): TownResult {
     const rows = [17.5, 33, 49];
     rows.forEach((d0, ri) => {
       for (let s = S0 + rnd() * 8; s < S1;) {
+        if (parkAt(sd, s)) { s += 20; continue; }
         const z = zone(s);
         if (ri === 2 && z !== 'suburb') { s += 20; continue; } // 3列目は郊外のみ
         if (z === 'rural' && ri > 0 && rnd() < .9) { s += 20 + rnd() * 30; continue; }
@@ -496,6 +525,7 @@ export function buildTown(ctx: GameContext): TownResult {
         } else if (z === 'rural') [type, w, dep] = r < .5 ? ['farm', 12 + rnd() * 3, 10] : ['house', 8 + rnd() * 3, 8];
         else [type, w, dep] = r < .8 ? ['house', 7.5 + rnd() * 3.5, 7 + rnd() * 2.5] : r < .95 ? ['apt', 13 + rnd() * 5, 8] : ['conbini', 16, 12];
         const lotW = w + (type === 'conbini' ? 4 : 2.5);
+        if (blockedBuilding(s, s + lotW)) { s += 6; continue; }
         if (!lotFree(sd, s, s + lotW, d0)) { s += 6; continue; }
         const sc = s + lotW / 2, setback = type === 'conbini' ? 11 : type === 'shop' ? .6 : 2.2 + rnd() * 1.5;
         const dc = d0 + setback + dep / 2, lat = latOf(sd, dc);
@@ -533,7 +563,8 @@ export function buildTown(ctx: GameContext): TownResult {
     for (let s = S0; s < S1; s += FS) {
       const z = zone(s + FS / 2);
       if (z === 'city' || tunnelNear(s, 60)) continue;
-      const dStart = z === 'rural' ? 17.5 : 66;
+      if (coastal && sd !== parkSide) continue; // 公園の東側は上の住宅列を使う。
+      const dStart = coastal ? 17.5 : z === 'rural' ? 17.5 : 66;
       for (let d = dStart; d < 330; d += FW) {
         const sc = s + FS / 2;
         if (!lotFree(sd, s, s + FS, d) || T.groundY(sc) < -.3) continue;
@@ -541,7 +572,8 @@ export function buildTown(ctx: GameContext): TownResult {
         if (d < 72 && occ.some(o => o.sd === sd && o.d > d && o.a < s + FS && o.b > s)) continue;
         const lat = latOf(sd, d + FW / 2), h = hash(Math.floor(sc / FS), Math.floor(d / FW) + sd * 100);
         const b = chunks.at(sc); b.parent = parentAt(sc, lat, sd);
-        if (h < .04) bamboo(b, rnd, 7 + rnd() * 4);
+        if (coastal) coastalParkTile(b, rnd, FW, FS, Math.floor(d / FW) % 5 === 1, h < .56);
+        else if (h < .04) bamboo(b, rnd, 7 + rnd() * 4);
         else if (h < .07) { farmhouse(new Kit(b, rnd, atlas), 12, 10); ptree(sc + 8, latOf(sd, d + 2), T.groundY(sc), 1 + rnd() * .4, false); }
         else if (h < .1) for (let i = 0; i < 4; i++) ptree(sc + (rnd() - .5) * FS, latOf(sd, d + rnd() * FW), T.groundY(sc), .9 + rnd() * .6);
         else field(b, rnd, FW, FS);

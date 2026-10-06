@@ -26,7 +26,9 @@ import { attachTouch } from './input/touch';
 import { attachGamepad } from './input/gamepad';
 
 const saved = loadSelection();
-const route = resolveRoute(saved?.routeId);
+const inspectionRoute = import.meta.env.DEV && new URLSearchParams(location.search).has('inspect')
+  ? new URLSearchParams(location.search).get('route') : null;
+const route = resolveRoute(inspectionRoute ?? saved?.routeId);
 document.title = `${lineOfRoute(route.id).name} 運転シミュレーター`;
 const { renderer, scene, camera } = createRenderCore($<HTMLCanvasElement>('c'));
 const env = createEnvironment(scene);
@@ -64,11 +66,13 @@ world.loadAssets()
   .then(failed => { ctx.assetsReady = true; ctx.events.emit('assetsReady', { failed: Math.max(0, failed) }); });
 
 const clock = new THREE.Clock();
+let inspectScene: (() => void) | undefined;
 function step(dt: number, time: number) {
   game.update(dt);
   ctx.events.emit('frame', { dt, time, state: ctx.state.state });
   env.update(dt, time);
   cab.update(time);
+  inspectScene?.();
   renderer.render(scene, camera);
 }
 function loop() {
@@ -90,4 +94,7 @@ if (import.meta.env.DEV) {
     }
   };
   void import('./debug/autodrive').then(m => m.attachAutodrive(ctx, (window as any).__advance));
+  if (new URLSearchParams(location.search).has('inspect')) {
+    void import('./debug/scene-inspector').then(m => { inspectScene = m.attachSceneInspector(ctx); });
+  }
 }
