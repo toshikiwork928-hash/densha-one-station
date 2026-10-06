@@ -19,13 +19,23 @@ const NOSE_LEN = 3.7;
  *  鼻先の下半分（スカート〜FACE_Y）はほぼ垂直、FACE_Y〜SLOPE_Y は後ろへ SLOPE_D 傾いて上がり、そこから屋根まで大きな弧 */
 const FACE_Y = 1.24, SLOPE_Y = 2.37, SLOPE_D = .72;
 const noseTopAt = (d: number) => {
-  if (d <= SLOPE_D) return FACE_Y + (SLOPE_Y - FACE_Y) * Math.pow(d / SLOPE_D, .85);
+  if (d <= SLOPE_D) return FACE_Y + (SLOPE_Y - FACE_Y) * Math.pow(d / SLOPE_D, 1.6); // 下は緩く前へ張り出し、上で立ち上がって弧へつながる（凹みを作らない）
   const t = Math.min(1, (NOSE_LEN - d) / (NOSE_LEN - SLOPE_D));
   return SLOPE_Y + (YTOP_L - SLOPE_Y) * Math.pow(Math.max(0, 1 - t * t), 1 / 2.2);
 };
 /** 上から見た鼻先の角の丸み（横幅の係数。鼻先は幅の 8割、PLAN_R 後ろで全幅） */
 const PLAN_R = .9;
 const planW = (d: number) => { const t = 1 - Math.min(1, d / PLAN_R); return .8 + .2 * Math.sqrt(Math.max(0, 1 - t * t)); };
+/** 正面から見た顔の丸み: 鼻先ほど左右の端を後ろへ下げる（横方向に反った、球のように膨らんだ顔）。BOW = 端での後退量 [m] */
+const BOW = .55, BOW_D = 2.4;
+/** 中央の舳先: 顔の中央が前へ突き出す（幅 PROW_W、突き出し PROW [m]）。屋根の近くでは消える */
+const PROW = .22, PROW_W = .2;
+const smo = (t: number) => { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 * t); };
+/** 外板の前後方向のずれ（+ = 後ろ）。x, y = 位置、d = 鼻先からの距離 */
+const zOff = (x: number, y: number, d: number) => {
+  const front = 1 - smo(d / BOW_D);
+  return BOW * (x / HW_L) ** 2 * front - PROW * Math.exp(-((x / PROW_W) ** 2)) * (1 - smo((y - 3.35) / .45)) * (1 - smo(d / 2.8));
+};
 /** 車体断面 HALF（右半分）の高さ y での半幅 */
 const halfAt = (y: number) => {
   if (y <= HALF[0][1]) return HALF[0][0];
@@ -35,7 +45,10 @@ const halfAt = (y: number) => {
 /** 鼻先から d の断面: 車体の断面を高さ方向に縮め（屋根の丸みがそのまま正面から見た顔の丸みになる）、横幅は planW で絞る */
 const secScale = (d: number) => (noseTopAt(d) - Y0) / (YTOP_L - Y0);
 /** 車体断面の点 (x0, y0) を鼻先から d の断面へ写した位置 */
-const nosePt = (hz: number, d: number, x0: number, y0: number) => new THREE.Vector3(x0 * planW(d), Y0 + (y0 - Y0) * secScale(d), -hz + d);
+const nosePt = (hz: number, d: number, x0: number, y0: number) => {
+  const x = x0 * planW(d), y = Y0 + (y0 - Y0) * secScale(d);
+  return new THREE.Vector3(x, y, -hz + d + zOff(x, y, d));
+};
 /** 鼻先から d の断面の、高さ y での半幅（その高さに届かなければ -1） */
 const widthAt = (d: number, y: number) => {
   const y0 = Y0 + (y - Y0) / secScale(d);
@@ -118,7 +131,7 @@ function resample(half: V2[], n: number): V2[] {
   return out;
 }
 
-const sm = (e0: number, e1: number, x: number) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
+const sm = (e0: number, e1: number, x: number): number => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
 
 /** 前面窓: 高さ WS_Y、鼻先から WS_D まで（前面から側面へ回り込む。真横からは細長い窓）。正面の幅は顔の約 2/3（断面の半幅に対する比 WS_X まで） */
 const WS_Y: V2 = [2.47, 3.19], WS_D = 2.3, WS_X = .7;
@@ -180,7 +193,7 @@ function buildNose(b: GeoBatch, lit: GeoBatch, tl: GeoBatch, glows: THREE.Vector
   // 鼻先の垂直な面（d = 0 の断面の蓋）
   {
     const cp: number[] = [], cn: number[] = [], cc: number[] = [];
-    const ring = sec.map(([x0, y0]) => nosePt(hz, 0, x0, y0)), ctr = new THREE.Vector3(0, (Y0 + FACE_Y) / 2, -hz);
+    const ring = sec.map(([x0, y0]) => nosePt(hz, 0, x0, y0)), ctr = new THREE.Vector3(0, (Y0 + FACE_Y) / 2, -hz + zOff(0, (Y0 + FACE_Y) / 2, 0));
     for (let i = 0; i < ring.length - 1; i++) for (const p of [ctr, ring[i + 1], ring[i]]) {
       cp.push(p.x, p.y, p.z); cn.push(0, 0, -1);
       noseColor(tmp, 0, p.x, p.y, 0); cc.push(tmp.r, tmp.g, tmp.b);
@@ -189,8 +202,10 @@ function buildNose(b: GeoBatch, lit: GeoBatch, tl: GeoBatch, glows: THREE.Vector
   }
   // 外板上の点と法線（正面から見た位置 x, y）
   const surf = (x: number, y: number) => {
-    const d = surfD(x, y), p = new THREE.Vector3(x, y, -hz + d);
-    const ex = new THREE.Vector3(.02, 0, surfD(x + .02, y) - d), ey = new THREE.Vector3(0, .02, surfD(x, y + .02) - d);
+    const zAt = (qx: number, qy: number) => { const qd = surfD(qx, qy); return qd + zOff(qx, qy, qd); };
+    const d = surfD(x, y), z = zAt(x, y), p = new THREE.Vector3(x, y, -hz + z);
+    const ex = new THREE.Vector3(.02, 0, zAt(x + .02, y) - z), ey = new THREE.Vector3(0, .02, zAt(x, y + .02) - z);
+    void d;
     const nrm = ex.clone().cross(ey).normalize(); if (nrm.z > 0) nrm.negate();
     return { p, nrm };
   };
@@ -214,9 +229,11 @@ function buildNose(b: GeoBatch, lit: GeoBatch, tl: GeoBatch, glows: THREE.Vector
   }
   // 鼻先の下半分（垂直な面）= スカート: 上から見た輪郭を押し出し、高さ SK_Y0 〜 車体の下端
   const SK_D = 2.2, SK_Y0 = .4;
-  const skirtP = (d: number, sx: number): [number, number] => [sx * HALF[0][0] * planW(d) * .98, -hz + d];
+  const skirtP = (d: number, sx: number): [number, number] => { const x = sx * HALF[0][0] * planW(d) * .98; return [x, -hz + d + zOff(x, .9, d)]; };
   const outline: THREE.Vector2[] = [];
   for (let k = 0; k <= 16; k++) { const [x, z] = skirtP(SK_D * (1 - k / 16), 1); outline.push(new THREE.Vector2(x, -z)); }
+  // 前端（d = 0 の辺）: 中央の舳先へ向かって前へ反る
+  for (let k = 1; k < 12; k++) { const x = HALF[0][0] * planW(0) * .98 * (1 - 2 * k / 12); outline.push(new THREE.Vector2(x, hz - zOff(x, .9, 0))); }
   for (let k = 0; k <= 16; k++) { const [x, z] = skirtP(SK_D * k / 16, -1); outline.push(new THREE.Vector2(x, -z)); }
   const skirt = new THREE.ExtrudeGeometry(new THREE.Shape(outline), { depth: Y0 + .02 - SK_Y0, bevelEnabled: false }).rotateX(-Math.PI / 2).translate(0, SK_Y0, 0);
   b.add('paint', basePart(skirt), new THREE.Matrix4(), 0x1f2570);
@@ -231,7 +248,7 @@ function buildNose(b: GeoBatch, lit: GeoBatch, tl: GeoBatch, glows: THREE.Vector
     // 外向きの法線（輪郭の接線を横へ回す）
     bolt(x, z, sx * (z2 - z), -sx * (x2 - x));
   }
-  for (const bx of [-.6, -.3, 0, .3, .6]) bolt(bx, -hz, 0, -1);
+  for (const bx of [-.6, -.3, .3, .6]) bolt(bx, -hz + zOff(bx, .9, 0), 0, -1);
   // ワイパー（前面窓の下端）
   for (const sx of [-1, 1]) {
     const { p } = surf(sx * .5, WS_Y[0] + .06);
