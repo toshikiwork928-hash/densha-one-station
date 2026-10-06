@@ -24,15 +24,21 @@ export const QUALITY_SPEC: Record<Quality, {
 
 const KEY = 'densha.env.v1';
 
-function defaultQuality(): Quality {
+export function mobileDisplay(): boolean {
   try {
-    if (matchMedia('(pointer: coarse)').matches || Math.min(innerWidth, innerHeight) < 600) return 'low';
+    return matchMedia('(pointer: coarse)').matches || Math.min(innerWidth, innerHeight) < 600;
   } catch { /* 無視 */ }
-  return 'mid';
+  return false;
+}
+
+/** スマホの中・高は雲や天候表現を上げる。動的影と高DPRはGPU負荷を抑えるため使わない。 */
+export function qualitySpec(quality: Quality, mobile = mobileDisplay()): typeof QUALITY_SPEC[Quality] {
+  const spec = QUALITY_SPEC[quality];
+  return mobile ? { ...spec, pixelRatio: 1, shadows: false, shadowSize: 0, castBudget: 0 } : spec;
 }
 
 export function loadSettings(): EnvSettings {
-  const def: EnvSettings = { timeOfDay: 'noon', weather: 'clear', intensity: .6, quality: defaultQuality() };
+  const def: EnvSettings = { timeOfDay: 'noon', weather: 'clear', intensity: .6, quality: mobileDisplay() ? 'low' : 'mid' };
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return def;

@@ -44,7 +44,7 @@ export function buildStructures(ctx: GameContext): void {
 
   for (const st of list) {
     if (st.kind === 'tunnel') {
-      // 山岳線は地面の帯を距離カリングするので、覆工・床・トラフはトンネル区間の帯と同じ包含球・距離で一体に消す
+      // 山岳線は地面の帯を距離カリングするので、覆工・床・トラフ・坑口はトンネル区間の帯と同じ包含球・距離で一体に消す
       //（帯だけ消えて覆工が谷に浮いて見えないように）
       const tg = new THREE.Group(); scene.add(tg);
       if (MT) {
@@ -63,7 +63,7 @@ export function buildStructures(ctx: GameContext): void {
       // 坑口（両端）
       for (const [s, back] of [[st.from, true], [st.to, false]] as const) {
         // 山岳線: 尾根が広いので断面を広く取り、下端は坑口の外の地表に合わせる（谷側の段差もふさぐ）
-        if (MT) buildPortal(ctx, s, back, (q, l) => MT.sample(q, l), 400, (q, l) => MT.sample(q, l, undefined, false), 0x3d5a36);
+        if (MT) buildPortal(ctx, s, back, (q, l) => MT.sample(q, l), 400, (q, l) => MT.sample(q, l, undefined, false), 0x3d5a36, tg);
         else buildPortal(ctx, s, back, T.terrainY.bind(T));
       }
       // ケーブルトラフ
@@ -153,8 +153,8 @@ function pier(b: GeoBatch, ctx: GameContext, s: number, beamDepth: number, river
 
 /** 坑口: 山の断面（アーチ穴あき）＋コンクリート面壁 */
 function buildPortal(ctx: GameContext, s: number, back: boolean, terrainY: (s: number, lat: number) => number,
-  range = 150, bottomY?: (s: number, lat: number) => number, capColor = 0x55703f): void {
-  const { track, scene } = ctx, t = track.trackAt(s), base = t.y;
+  range = 150, bottomY?: (s: number, lat: number) => number, capColor = 0x55703f, parent: THREE.Object3D = ctx.scene): void {
+  const { track } = ctx, t = track.trackAt(s), base = t.y;
   const sx = back ? 1 : -1; // 前向き坑口は x を反転して作る
   const arch = archProfile().map(([l, y]) => new THREE.Vector2(sx * l, y));
   // 山の断面
@@ -169,7 +169,7 @@ function buildPortal(ctx: GameContext, s: number, back: boolean, terrainY: (s: n
   shape.holes.push(hole);
   const capMat = new THREE.MeshLambertMaterial({ color: capColor, side: THREE.DoubleSide });
   const cap = new THREE.Mesh(new THREE.ShapeGeometry(shape), capMat);
-  const grp = new THREE.Group(); grp.position.copy(track.at(s, 0, 0)); grp.rotation.y = -t.phi + (back ? 0 : Math.PI); scene.add(grp);
+  const grp = new THREE.Group(); grp.position.copy(track.at(s, 0, 0)); grp.rotation.y = -t.phi + (back ? 0 : Math.PI); parent.add(grp);
   grp.add(cap);
   // 面壁（アーチ穴あきの板を押し出し）
   const c = TUNNEL_CENTER * sx, W = 8.5, H = TUNNEL_WALL_H + TUNNEL_HALF + 2.2;

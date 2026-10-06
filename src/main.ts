@@ -12,6 +12,7 @@ import { createState } from './game/state';
 import { loadSelection } from './game/ranking';
 import { createGame } from './game/loop';
 import { createRenderCore } from './render/renderer';
+import { installRenderRecovery } from './render/recovery';
 import { attachIllustratedLook } from './render/illustrated';
 import { createCabCamera } from './render/camera';
 import { createEnvironment } from './env/environment';
@@ -25,12 +26,15 @@ import { attachKeyboard } from './input/keyboard';
 import { attachTouch } from './input/touch';
 import { attachGamepad } from './input/gamepad';
 
+const renderCanvas = $<HTMLCanvasElement>('c');
+const recovery = installRenderRecovery(renderCanvas);
 const saved = loadSelection();
 const inspectionRoute = import.meta.env.DEV && new URLSearchParams(location.search).has('inspect')
   ? new URLSearchParams(location.search).get('route') : null;
 const route = resolveRoute(inspectionRoute ?? saved?.routeId);
 document.title = `${lineOfRoute(route.id).name} 運転シミュレーター`;
-const { renderer, scene, camera } = createRenderCore($<HTMLCanvasElement>('c'));
+const { renderer, scene, camera } = createRenderCore(renderCanvas);
+renderer.debug.onShaderError = () => recovery.fail('描画プログラムをGPUで実行できなかった。');
 const env = createEnvironment(scene);
 
 const ctx: GameContext = {
@@ -76,14 +80,23 @@ function step(dt: number, time: number) {
   renderer.render(scene, camera);
 }
 function loop() {
+  if (recovery.failed) return;
   const dt = Math.min(MAX_DT, clock.getDelta());
-  step(dt, clock.elapsedTime);
+  try {
+    step(dt, clock.elapsedTime);
+    if (!renderer.getContext().isContextLost()) recovery.healthyFrame();
+  } catch (error) { console.error(error); recovery.fail('描画処理でエラーが発生した。'); return; }
   requestAnimationFrame(loop);
 }
 loop();
 
 // デバッグ用（開発時のみ）
 if (import.meta.env.DEV) {
+  if (new URLSearchParams(location.search).has('render-test')) {
+    const button = document.createElement('button'); button.textContent = 'GPU接続消失を模擬';
+    button.style.cssText = 'position:fixed;top:0;right:0;z-index:9999';
+    button.onclick = () => renderer.forceContextLoss(); document.body.append(button);
+  }
   (window as any).__densha = ctx;
   // 描画せずにゲーム時間を進める（QA 用）
   let simT = 0;

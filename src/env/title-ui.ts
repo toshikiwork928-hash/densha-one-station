@@ -4,6 +4,7 @@ import {
   QUALITIES, QUALITY_LABEL, TIMES, TIME_LABEL, WEATHERS, WEATHER_LABEL,
   type EnvSettings,
 } from './settings';
+import { mobileDisplay } from './settings';
 
 export interface EnvPanelApi {
   get(): EnvSettings;
@@ -48,6 +49,7 @@ export function buildEnvPanel(api: EnvPanelApi): HTMLElement {
 
   const hint = document.createElement('div'); hint.className = 'env-hint';
   hint.textContent = 'Shift+T 時間帯 / Shift+Y 天候 / X ワイパー（走行中も可）';
+  if (mobileDisplay()) hint.textContent += '。スマホでは全画質で動的影なし・描画解像度を制限';
 
   root.append(rTime, rWeather, rInt, rQual, hint);
 

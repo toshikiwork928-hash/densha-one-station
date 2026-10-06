@@ -13,6 +13,8 @@ import { createShadows } from './shadows';
 import { createSkyDome } from './sky';
 import { buildEnvPanel, refreshEnvPanels, type EnvPanelApi } from './title-ui';
 import { createWindshield } from './windshield';
+import { qualitySpec } from './settings';
+import { beginQualityChange } from '../render/recovery';
 
 export interface EnvSystem {
   get(): EnvSettings;
@@ -53,7 +55,7 @@ export function attachEnvSystem(ctx: GameContext): EnvSystem {
   });
 
   function applyQuality() {
-    const q = QUALITY_SPEC[settings.quality];
+    const q = qualitySpec(settings.quality);
     renderer.setPixelRatio(Math.min(q.pixelRatio, devicePixelRatio || 1));
     renderer.setSize(innerWidth, innerHeight, false);
     shadows.configure(q.shadows, q.shadowSize, q.castBudget);
@@ -69,7 +71,7 @@ export function attachEnvSystem(ctx: GameContext): EnvSystem {
     const prev = settings;
     settings = { ...settings, ...p };
     saveSettings(settings);
-    if (settings.quality !== prev.quality) applyQuality();
+    if (settings.quality !== prev.quality) { beginQualityChange(); applyQuality(); }
     ctx.envState = envOf(settings);
     ctx.trainEnv.adhesion = adhesionFor(settings.weather, settings.intensity);
     computeLook(ctx.envState, target);

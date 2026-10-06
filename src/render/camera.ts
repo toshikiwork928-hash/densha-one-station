@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import { loopZone } from '../route/service';
-import { getTerrain } from '../world/terrain';
+import { TUNNEL_CENTER, getTerrain } from '../world/terrain';
 import { isMountain } from '../world/mountain-terrain';
 
 export interface CabCamera {
@@ -77,30 +77,43 @@ export function createCabCamera(ctx: GameContext): CabCamera {
     switch (kind) {
       case 'trackside': {
         const shot: Shot = { kind, s: s + ahead, lat: side * (9 + (shotN % 3) * 4), h: 1.8 + (shotN % 2) * 3, t0: time, fov: 32 };
-        return MT ? fitTrackside(shot) ?? { kind: 'chase', s: 0, lat: side * 6, h: 5, t0: time, fov: 55 } : shot;
+        // 置けなければ後方追従（トンネルに入っても覆工の内側に収まるよう線路の真上寄り）
+        return MT ? fitTrackside(shot) ?? { kind: 'chase', s: 0, lat: TUNNEL_CENTER, h: 4.5, t0: time, fov: 55 } : shot;
       }
       case 'low': return { kind, s: s + ahead * .8, lat: -2.7, h: .5, t0: time, fov: 50 };
-      case 'chase': return { kind, s: 0, lat: side * 6, h: 5, t0: time, fov: 55 };
+      // 山岳線は切土・トンネルが多いので、後方追従は線路の真上寄り（トンネルでも覆工の内側）
+      case 'chase': return { kind, s: 0, lat: MT ? TUNNEL_CENTER : side * 6, h: MT ? 4.5 : 5, t0: time, fov: 55 };
       case 'heli': return { kind, s: 0, lat: 40, h: 45, t0: time, fov: 45 };
       default: return { kind: 'chase', s: 0, lat: -L * 0, h: 5, t0: time, fov: 55 };
     }
   }
 
-  /** 山岳線: 沿線カメラを地表（斜面・切土）より上に置き、列車が斜面に隠れない側を選ぶ。トンネル内・坑口際なら null（別ショット） */
+  /** 山岳線: 沿線カメラを地表（斜面・切土）より上に置き、列車が斜面・建物・木に隠れない側を選ぶ。トンネル内・坑口際や両側とも置けなければ null（別ショット） */
+  const ray = new THREE.Raycaster(), rayFrom = new THREE.Vector3(), rayTo = new THREE.Vector3();
   function fitTrackside(shot: Shot): Shot | null {
     const T = MT!;
     if (T.structureAt(shot.s, 25)?.kind === 'tunnel') return null;
     const y0 = T.trackY(shot.s);
-    for (const lat of [shot.lat, -shot.lat]) {
+    ray.camera = ctx.camera; // Sprite の判定に要る
+    const near = Math.sign(shot.lat) * 9;
+    for (const lat of new Set([shot.lat, -shot.lat, near, -near])) {
       const g = T.terrainY(shot.s, lat);
       const h = Math.max(shot.h, g + CAM_CLEAR - y0);
       if (h > shot.h + 8) continue; // 法面の上に高く持ち上がる側は避ける
-      // 見通し: カメラから線路（撮る範囲）までの間に地表が出ないこと
+      // 見通し: 近づく列車（後方）〜通過後（前方）の線路との間に地表・建物・木が無いこと
       let clear = true;
-      for (const ds of [0, 30]) for (let k = 1; k < 6 && clear; k++) {
-        const u = k / 6, q = shot.s + ds * u, l = lat * (1 - u);
-        const yl = y0 + h + (T.trackY(shot.s + ds) + 2 - y0 - h) * u;
-        if (T.terrainY(q, l) > yl - .3) clear = false;
+      for (const ds of [-60, 0, 30]) {
+        for (let k = 1; k < 6 && clear; k++) {
+          const u = k / 6, q = shot.s + ds * u, l = lat * (1 - u);
+          const yl = y0 + h + (T.trackY(shot.s + ds) + 2 - y0 - h) * u;
+          if (T.terrainY(q, l) > yl - .3) clear = false;
+        }
+        if (!clear) break;
+        rayFrom.copy(ctx.track.at(shot.s, lat, h)); rayTo.copy(ctx.track.pathAt(shot.s + ds, 0, 2)).sub(rayFrom);
+        const d = rayTo.length();
+        ray.set(rayFrom, rayTo.normalize()); ray.far = Math.max(0, d - 4);
+        if (ray.intersectObjects(ctx.scene.children, true).some(hit => (hit.object as THREE.Mesh).isMesh)) clear = false;
+        if (!clear) break;
       }
       if (clear) return { ...shot, lat, h };
     }
@@ -128,7 +141,10 @@ export function createCabCamera(ctx: GameContext): CabCamera {
         break;
       case 'heli': {
         const a = dur * .12;
-        camPos.copy(pat(mid + Math.cos(a) * 60, shot.lat + Math.sin(a) * 20, shot.h));
+        const hs = mid + Math.cos(a) * 60, hl = shot.lat + Math.sin(a) * 20;
+        camPos.copy(pat(hs, hl, shot.h));
+        // 山岳線: 山腹・尾根より上を回る
+        if (MT) camPos.y = Math.max(camPos.y, MT.terrainY(hs, ctx.track.pathLat(hs) + hl) + 6);
         camLook.copy(pat(mid, 0, 1));
         break;
       }
