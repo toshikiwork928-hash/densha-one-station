@@ -66,7 +66,9 @@ const HALTS = [
 
 const ENTRY_S = 5850, THROAT_S = 9400, STOP_END = NAMBA_END - 4.5;
 const DECEL = .9, ACCEL = .8, V_RUN = 60 / 3.6, V_THROAT = 30 / 3.6;
-const DWELL = 25, DWELL_TERM = 40, SPAWN_RANGE = 2500, MAX_ALIVE = 5, SPAWN_GAP = 10;
+const DWELL = 25, DWELL_TERM = 40, SPAWN_RANGE = 2500, MAX_ALIVE = 4, SPAWN_GAP = 10;
+/** 同じ向きの列車の出現間隔の下限 [s] と、出現位置の前方に空ける距離 [m]（各駅で停まる列車の後ろに詰まらないように） */
+const HEADWAY = 80, SPAWN_CLEAR = 500;
 /** 難波行きの出現位置は自列車からこれ以上離さない [m]（消える距離 SPAWN_RANGE + 600 の内側。自列車が難波の近くでも出せるように） */
 const SPAWN_MAX_DIST = 2900;
 
@@ -131,7 +133,9 @@ export function buildKoyaTraffic(ctx: GameContext): void {
     return x => profileLat(main, x);
   };
 
-  let idx = 0, cool = 5;
+  let idx = 0, cool = 5, clock = 0;
+  /** 向きごとの最後の出現時刻（上り・下り） */
+  const lastSpawn = [-HEADWAY, -HEADWAY];
   /** 難波行きの出現位置: 合流の手前（ENTRY_S）。自列車が難波に近いときは自列車から SPAWN_MAX_DIST の位置（高野線の上で、見えない距離） */
   const entryOf = (ps: number) => Math.max(ENTRY_S, Math.min(ps - SPAWN_MAX_DIST, STOP_END - 800));
   const canSpawn = (s: Slot, ps: number): boolean => {
@@ -141,9 +145,9 @@ export function buildKoyaTraffic(ctx: GameContext): void {
     for (const t of trains) {
       if (t.slot.dir !== s.dir) continue;
       // 同じ向きの列車と出現位置が近いうちは出さない
-      if (s.dir === 1 ? t.pos - t.len < entry + 60 && t.pos > entry - 400 : t.pos + t.len > STOP_END - 40) return false;
+      if (s.dir === 1 ? t.pos - t.len < entry + SPAWN_CLEAR && t.pos > entry - 400 : t.pos + t.len > STOP_END - SPAWN_CLEAR) return false;
     }
-    return true;
+    return clock - lastSpawn[s.dir === 1 ? 0 : 1] >= HEADWAY;
   };
 
   function spawn(slot: Slot, ps: number): void {
@@ -224,11 +228,11 @@ export function buildKoyaTraffic(ctx: GameContext): void {
   events.on('frame', ({ dt }) => {
     if ((st.state !== 'run' && st.state !== 'dwell') || st.paused) return;
     const ps = st.train.s, step_dt = Math.min(dt, .1);
-    cool -= step_dt;
+    cool -= step_dt; clock += step_dt;
     if (cool <= 0 && trains.length < MAX_ALIVE) {
       // 順番の枠が出せない向きなら、先の枠から出せるものを探す（待たずに次の向きへ）
       const k = [0, 1, 2, 3].find(j => canSpawn(SLOTS[(idx + j) % SLOTS.length], ps));
-      if (k != null) { spawn(SLOTS[(idx + k) % SLOTS.length], ps); idx += k + 1; cool = SPAWN_GAP; }
+      if (k != null) { const sl = SLOTS[(idx + k) % SLOTS.length]; spawn(sl, ps); lastSpawn[sl.dir === 1 ? 0 : 1] = clock; idx += k + 1; cool = SPAWN_GAP; }
     }
     for (let i = trains.length - 1; i >= 0; i--) {
       const t = trains[i];
@@ -243,8 +247,9 @@ export function buildKoyaTraffic(ctx: GameContext): void {
       if (vis) place(t, t.slot.dir);
     }
   });
+  if (import.meta.env.DEV) (window as any).__koyaDebug = () => trains.map(t => ({ dir: t.slot.dir, kind: t.slot.v.kind, pos: Math.round(t.pos), len: Math.round(t.len), kmh: Math.round(t.v * 3.6), wait: Math.round(t.wait) }));
   events.on('reset', () => {
     for (const t of trains) release(t);
-    trains.length = 0; idx = 0; cool = 5;
+    trains.length = 0; idx = 0; cool = 5; clock = 0; lastSpawn[0] = lastSpawn[1] = -HEADWAY;
   });
 }
