@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import type { OncomingSpec, ServiceId, Station, TrainKind } from '../route/types';
 import { customPlatformSide, islandOffset, loopShape, loopZone, sameClass, serviceOf, WAKAYAMA_DEST, type LoopZone } from '../route/service';
-import { classOfSpec, HOURLY, planOncoming, runClasses, runConsist, rushStopScenes, type TrainClass } from '../route/oncoming-stops';
+import { classOfSpec, hourlyOf, planOncoming, runClasses, runConsist, rushStopScenes, tokkyuOrder, type TrainClass } from '../route/oncoming-stops';
 import { onLight } from './batch';
 import { placeCar } from './emu';
 import { createTrainSet, setTrainNight, TRAIN_KINDS, type TrainCar } from './train-models';
@@ -320,13 +320,18 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
     return -1;
   }
 
+  /** 対向列車の本線（急行線）の横位置: 停車しない対向列車の設定の横位置（無ければ 4） */
+  const mainOncomingLat = route.oncoming.find(o => !o.stop && !o.follow && o.lat !== route.oncomingLocal?.lat)?.lat ?? 4;
   /** 種別表示 → 種別（停車駅を引くため） */
   const serviceIdOf = (label: string): ServiceId => label.includes('サザン') ? 'southern' : label.includes('特急') ? 'limited'
     : label.includes('空港急行') ? 'airport' : label.includes('急行') ? 'express' : 'local';
   /** すれ違う編成の途中の停車駅: 種別の停車駅（普通は全駅）のうち、出現位置より先にあり、走る線にホームがある駅 */
   function haltsOf(o: OncomingTrain, id: ServiceId): Halt[] {
     const svc = route.services?.find(v => v.id === id) ?? route.services?.find(v => sameClass(v.id, id));
-    const stops = id === 'local' || !svc ? route.stations.map((_, i) => i) : svc.stops;
+    // ラピートαは堺・岸和田を通過（この路線の範囲で停まるのは なんば・新今宮・天下茶屋）
+    const alpha = o.spec.label?.includes('α');
+    const stops = (id === 'local' || !svc ? route.stations.map((_, i) => i) : svc.stops)
+      .filter(i => !alpha || ['なんば', '難波', '新今宮', '天下茶屋'].includes(route.stations[i].name));
     const len = o.spec.cars * (o.spec.carLen + o.spec.gap), dwell = id === 'local' ? HALT_DWELL_LOCAL : HALT_DWELL_FAST;
     return stops.map((i): Halt => ({ station: i, headS: route.stations[i].platform.from + HALT_MARGIN, scene: false, dwell, done: false }))
       .filter(h => {
@@ -349,7 +354,7 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
     const rushHour = level > 0;
     // 南海本線（複線）は種別の格ごとの本数の比率（平日ダイヤ）に合わせる。本数・出現の位置は変えず、
     // 停車する普通が比率を超える分を停車しないすれ違いへ回し、停車しない編成の種別を割り当て直す
-    const share = route.lineId === 'shiokaze' && !route.singleTrack ? HOURLY[tod] : undefined;
+    const share = route.lineId === 'shiokaze' && !route.singleTrack ? hourlyOf(tod, towardNamba) : undefined;
     const seedKey = `${route.id}|${ctx.service?.id ?? ''}|${tod}`;
     const items = trains.map(o => ({ spec: o.spec0, kind: o.spec0.kind!, rush: o.rush }));
     const modes = planOncoming(items, {
@@ -363,8 +368,18 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
       if (modes[i] === 'run' && o.spec0.stop) { const { stop: _s, ...rest } = o.spec0; o.spec = rest; } else o.spec = o.spec0;
       o.kind = o.spec0.kind!;
       const cls = classes?.[i];
-      // 固定の特急（待避線の普通に続く特急など）の次は、ラピートとサザンを入れ替える
-      if (classes && !cls && modes[i] !== 'off' && classOfSpec(o.spec0, o.kind) === 'tokkyu') nth.tokkyu = o.kind === 'limited' ? 1 : 0;
+      if (classes && !cls && modes[i] !== 'off' && classOfSpec(o.spec0, o.kind) === 'tokkyu') {
+        const order = tokkyuOrder(tod, towardNamba);
+        // 固定のラピート（待避線の普通に続く特急など）は、時間帯と向きの α/β の表示に
+        if (o.kind === 'limited') {
+          const { id: _id, ...c } = runConsist('tokkyu', order.findIndex(x => x !== 'southern'), tod, towardNamba);
+          o.spec = { ...o.spec, ...c, dest: towardNamba ? WAKAYAMA_DEST.limited[0] : 'なんば' };
+          if (!sets.has(keyOf(o))) build(o);
+        }
+        // 固定の特急の次は、もう一方の特急から（ラピートの次はサザン、サザンの次はラピート）
+        const k = order.findIndex(x => (o.kind === 'limited') === (x === 'southern'));
+        nth.tokkyu = k < 0 ? 0 : k;
+      }
       // 日中の急行系は空港急行だけ（固定の編成の「急行」も空港急行に）
       if (classes && !cls && tod === 'noon' && classOfSpec(o.spec0, o.kind) === 'kyuko' && o.spec.label !== '空港急行') {
         o.spec = { ...o.spec, label: '空港急行', dest: towardNamba ? WAKAYAMA_DEST.airport[0] : 'なんば' };
@@ -374,8 +389,10 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
         // 対向列車は自列車と逆向き: 自列車がなんば方面なら和歌山方面
         const { id, ...c } = runConsist(cls, nth[cls]++, tod, towardNamba);
         o.spec = { ...o.spec, ...c, dest: towardNamba ? WAKAYAMA_DEST[id][0] : 'なんば' };
-        // 複々線の区間がある路線（堺〜なんば）は、普通は緩行線の進路を走る
-        if (cls === 'local' && route.oncomingLocal) o.spec.lat = route.oncomingLocal.lat;
+        // 複々線の区間がある路線（堺〜なんば）は、普通は緩行線、急行系・特急は急行線の進路を走る
+        // （ラッシュ時の普通の停車シーンを停車しないすれ違いにしたものは緩行線の横位置を持っているので、急行線へ戻す）
+        const ol = route.oncomingLocal;
+        if (ol) o.spec.lat = cls === 'local' ? ol.lat : o.spec.lat === ol.lat ? mainOncomingLat : o.spec.lat;
         o.kind = c.kind!;
         o.halts = haltsOf(o, id);
         if (!sets.has(keyOf(o))) build(o); // 出現時の負荷を避けて先に作る
@@ -414,7 +431,7 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
   });
 
   // 開発時の確認用: 各編成の状態
-  if (import.meta.env.DEV) (window as any).__oncomingDebug = () => trains.map(o => ({ mode: o.mode, kind: o.kind, rush: o.rush, started: o.started, stop: o.spec.stop?.station, loop: !!o.zone, active: o.active, done: o.done, phase: o.phase, head: Math.round(o.head), len: Math.round(lenOf(o)), lat: +laneLat(o, o.head).toFixed(1), kmh: Math.round(o.v * 3.6), tStop: Math.round(o.tStop), tPlayer: Math.round(o.tPlayer), label: o.spec.label, halts: o.halts.map(h => route.stations[h.station].name) }));
+  if (import.meta.env.DEV) (window as any).__oncomingDebug = () => trains.map(o => ({ mode: o.mode, kind: o.kind, rush: o.rush, started: o.started, stop: o.spec.stop?.station, loop: !!o.zone, active: o.active, done: o.done, phase: o.phase, head: Math.round(o.head), len: Math.round(lenOf(o)), lat: +laneLat(o, o.head).toFixed(1), kmh: Math.round(o.v * 3.6), tStop: Math.round(o.tStop), tPlayer: Math.round(o.tPlayer), label: o.spec.label, specLat: o.spec.lat, halts: o.halts.map(h => route.stations[h.station].name) }));
 
   return {
     activeSpans: () => [

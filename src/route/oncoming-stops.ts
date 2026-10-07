@@ -159,13 +159,32 @@ export function planOncoming(items: OncomingPlanItem[], opt: {
 
 /** 種別の格: 普通 / 急行系（急行・空港急行。区間急行・準急の分も含める） / 特急（ラピート・サザン） */
 export type TrainClass = 'local' | 'kyuko' | 'tokkyu';
-/** 片方向・1時間あたりの本数（南海本線の平日ダイヤ。ユーザー指定 2026-10-07）。
- *  特急はラピート・サザンが交互に各 2 本（全時間帯）。日中の急行系は空港急行のみ（急行は走らない）。区間急行・準急は作らず急行系に含める */
-export const HOURLY: Record<TimeOfDay, Record<TrainClass, number>> = {
-  noon: { local: 4, kyuko: 4, tokkyu: 4 },
-  morning: { local: 6, kyuko: 10, tokkyu: 4 },
-  evening: { local: 6, kyuko: 8, tokkyu: 4 },
-  night: { local: 6, kyuko: 8, tokkyu: 4 },
+/** 対向列車の向きごと・1時間あたりの本数（南海本線 堺・なんば・新今宮駅の平日時刻表 2026-10 から。区間急行・準急は急行系に含める）。
+ *  wakayama = 和歌山方面へ向かう対向列車（自列車がなんば方面）、namba = なんば方面へ向かう対向列車。日中の急行系は空港急行のみ。
+ *  特急は全時間帯 4 本（ラピート 2・サザン 2 が交互。堺を通過するラピートαを含む） */
+export const HOURLY_BY_DIR: Record<'wakayama' | 'namba', Record<TimeOfDay, Record<TrainClass, number>>> = {
+  wakayama: {
+    morning: { local: 6, kyuko: 7, tokkyu: 4 },
+    noon: { local: 4, kyuko: 4, tokkyu: 4 },
+    evening: { local: 7, kyuko: 7, tokkyu: 4 },
+    night: { local: 6, kyuko: 6, tokkyu: 4 },
+  },
+  namba: {
+    morning: { local: 6, kyuko: 9, tokkyu: 4 },
+    noon: { local: 4, kyuko: 4, tokkyu: 4 },
+    evening: { local: 6, kyuko: 5, tokkyu: 4 },
+    night: { local: 5, kyuko: 5, tokkyu: 4 },
+  },
+};
+/** 対向列車の本数の比率（towardWakayama = 対向列車が和歌山方面へ向かう） */
+export const hourlyOf = (tod: TimeOfDay, towardWakayama: boolean): Record<TrainClass, number> => HOURLY_BY_DIR[towardWakayama ? 'wakayama' : 'namba'][tod];
+/** 特急の並び（ラピートとサザンが交互）。ラピートは時間帯と向きで α（堺を通過）/ β:
+ *  和歌山方面 朝 α・日中 α と β・夕夜 β、なんば方面 朝 β・日中〜夜 β と α */
+export const tokkyuOrder = (tod: TimeOfDay, towardWakayama: boolean): ('rapitA' | 'rapitB' | 'southern')[] => {
+  const r: ('rapitA' | 'rapitB')[] = towardWakayama
+    ? (tod === 'morning' ? ['rapitA'] : tod === 'noon' ? ['rapitA', 'rapitB'] : ['rapitB'])
+    : (tod === 'morning' ? ['rapitB'] : ['rapitB', 'rapitA']);
+  return r.flatMap(x => [x, 'southern' as const]);
 };
 
 /** 対向列車の設定の格（種別表示 → 車種の既定の順に判定） */
@@ -228,7 +247,8 @@ export function runConsist(cls: TrainClass, k: number, tod: TimeOfDay, towardWak
   // サザンは和歌山方の 4両が 10000系（座席指定車）
   const sk: TrainKind[] = towardWakayama ? ['southern-10000', 'commuter-old'] : ['commuter-old', 'southern-10000'];
   const southern: C = { id: 'southern', kind: sk[0], cars: 8, units: [4, 4], label: '特急サザン', unitKinds: sk };
-  const tokkyu: C[] = [{ id: 'limited', kind: 'limited', cars: 6, units: [6], label: '特急ラピートβ' }, southern];
+  const rapit = (a: boolean): C => ({ id: 'limited', kind: 'limited', cars: 6, units: [6], label: a ? '特急ラピートα' : '特急ラピートβ' });
+  const tokkyu: C[] = tokkyuOrder(tod, towardWakayama).map(id => id === 'southern' ? southern : rapit(id === 'rapitA'));
   const list = cls === 'local' ? local : cls === 'kyuko' ? kyuko : tokkyu;
   return list[k % list.length];
 }

@@ -197,7 +197,7 @@ export function capGeo(half: V2[], rg: Ring, ytop: number, hw: number, facing: -
 export function ledTexture(label: string, dest: string): THREE.CanvasTexture {
   const [k, g] = cv(512, 128);
   g.fillStyle = '#0b0b0b'; g.fillRect(0, 0, 512, 128);
-  const col: Record<string, string> = { 普通: '#e8e8e8', 急行: '#ff5a3a', 空港急行: '#ff8a2a', 特急: '#ff4a6a', 特急ラピート: '#ff4a6a', 特急ラピートβ: '#ff4a6a', 特急サザン: '#ff3b3b', サザン: '#ff3b3b', 準急: '#5ad06a', 快速: '#ff9a2a' };
+  const col: Record<string, string> = { 普通: '#e8e8e8', 急行: '#ff5a3a', 空港急行: '#ff8a2a', 特急: '#ff4a6a', 特急ラピート: '#ff4a6a', 特急ラピートα: '#ff4a6a', 特急ラピートβ: '#ff4a6a', 特急サザン: '#ff3b3b', サザン: '#ff3b3b', 準急: '#5ad06a', 快速: '#ff9a2a' };
   const kc = col[label] ?? '#ffb347';
   g.textAlign = 'center'; g.textBaseline = 'middle';
   g.fillStyle = kc; g.font = `800 58px ${FONT}`; g.fillText(label, 78, 66, 140);
@@ -213,7 +213,7 @@ export function ledTexture(label: string, dest: string): THREE.CanvasTexture {
 export function ledTypeTexture(label: string): THREE.CanvasTexture {
   const [k, g] = cv(256, 64);
   g.fillStyle = '#0b0b0b'; g.fillRect(0, 0, 256, 64);
-  const col: Record<string, string> = { 普通: '#e8e8e8', 急行: '#ff5a3a', 空港急行: '#ff8a2a', 特急: '#ff4a6a', 特急ラピート: '#ff4a6a', 特急ラピートβ: '#ff4a6a', 特急サザン: '#ff3b3b', サザン: '#ff3b3b', 準急: '#5ad06a', 快速: '#ff9a2a' };
+  const col: Record<string, string> = { 普通: '#e8e8e8', 急行: '#ff5a3a', 空港急行: '#ff8a2a', 特急: '#ff4a6a', 特急ラピート: '#ff4a6a', 特急ラピートα: '#ff4a6a', 特急ラピートβ: '#ff4a6a', 特急サザン: '#ff3b3b', サザン: '#ff3b3b', 準急: '#5ad06a', 快速: '#ff9a2a' };
   g.textAlign = 'center'; g.textBaseline = 'middle';
   g.fillStyle = col[label] ?? '#ffb347'; g.font = `800 46px ${FONT}`; g.fillText(label, 128, 34, 220);
   g.fillStyle = 'rgba(0,0,0,.45)';
