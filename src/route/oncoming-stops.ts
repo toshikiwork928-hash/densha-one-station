@@ -175,7 +175,7 @@ export function classOfSpec(spec: OncomingSpec, kind: TrainKind = spec.kind ?? '
   return kind === 'limited' || kind === 'southern-10000' || kind === 'limited-30000' ? 'tokkyu' : kind === 'commuter-old' ? 'kyuko' : 'local';
 }
 
-/** 走行中にすれ違う編成（停車しない編成。待避線の普通に続く優等列車は除く）の格を決める（急行系か特急。普通は駅に停まるので使わない）。
+/** 走行中にすれ違う編成（停車しない編成。待避線の普通に続く優等列車は除く）の格を決める（すれ違う編成は world/oncoming.ts で自分の種別の停車駅に停まる）。
  *  停車する編成も含めた全体が share の比率に近づくように、足りない格から順に割り当て、同じ格が続かないように並べる。
  *  戻り値は items と同じ並び（すれ違いでない要素は null） */
 export function runClasses(items: OncomingPlanItem[], modes: OncomingMode[], share: Record<TrainClass, number>, seedKey: string): (TrainClass | null)[] {
@@ -189,11 +189,10 @@ export function runClasses(items: OncomingPlanItem[], modes: OncomingMode[], sha
   const exact = classes.map(c => m * share[c] / total), target = exact.map(Math.floor);
   const rest = m - target.reduce((a, b) => a + b, 0);
   exact.map((x, k) => [x - target[k], k]).sort((a, b) => b[0] - a[0]).slice(0, rest).forEach(([, k]) => target[k]++);
-  // 普通は駅に停まるので、停車しないすれ違いには使わない（通過する普通になる）。すれ違いは急行系・特急だけ
-  const need = classes.map((c, k) => c === 'local' ? 0 : Math.max(0, target[k] - fixed[c]));
+  const need = classes.map((c, k) => Math.max(0, target[k] - fixed[c]));
   // 枠と必要数の差は比率で埋める / 削る
-  while (need.reduce((a, b) => a + b, 0) < slots.length) { const k = [1, 2].sort((a, b) => share[classes[b]] / (need[b] + 1) - share[classes[a]] / (need[a] + 1))[0]; need[k]++; }
-  while (need.reduce((a, b) => a + b, 0) > slots.length) { const k = [1, 2].filter(j => need[j] > 0).sort((a, b) => share[classes[a]] / need[a] - share[classes[b]] / need[b])[0]; need[k]--; }
+  while (need.reduce((a, b) => a + b, 0) < slots.length) { const k = [0, 1, 2].sort((a, b) => share[classes[b]] / (need[b] + 1) - share[classes[a]] / (need[a] + 1))[0]; need[k]++; }
+  while (need.reduce((a, b) => a + b, 0) > slots.length) { const k = [0, 1, 2].filter(j => need[j] > 0).sort((a, b) => share[classes[a]] / need[a] - share[classes[b]] / need[b])[0]; need[k]--; }
   // 並べ方: 並び順（ほぼ出会う順）に見て、残りの多い格から、直前の編成（固定の編成も含む。待避線の普通に続く特急など）と同じ格を避けて取る
   const rng = mulberry32(hashSeed(seedKey + '|class'));
   const left = [...need], out: (TrainClass | null)[] = items.map(() => null);

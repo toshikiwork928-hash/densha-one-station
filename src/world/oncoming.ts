@@ -8,8 +8,8 @@
 // spec.kind 未指定なら 普通(新型4両) → 急行(旧型6両) → 特急(6両) の順に割り当てる
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
-import type { OncomingSpec, Station, TrainKind } from '../route/types';
-import { customPlatformSide, islandOffset, loopShape, loopZone, serviceOf, WAKAYAMA_DEST, type LoopZone } from '../route/service';
+import type { OncomingSpec, ServiceId, Station, TrainKind } from '../route/types';
+import { customPlatformSide, islandOffset, loopShape, loopZone, sameClass, serviceOf, WAKAYAMA_DEST, type LoopZone } from '../route/service';
 import { classOfSpec, HOURLY, planOncoming, runClasses, runConsist, rushStopScenes, type TrainClass } from '../route/oncoming-stops';
 import { onLight } from './batch';
 import { placeCar } from './emu';
@@ -50,7 +50,14 @@ interface OncomingTrain {
   horn: boolean;
   /** ラッシュ時（朝・夜）だけ出す編成 */
   rush: boolean;
+  /** 途中の停車駅（停車しないすれ違いの編成が、自分の種別の停車駅で停まる。自列車は待たない）。s の大きい順 */
+  halts: Halt[];
+  /** 制動・停車中の停車駅（停車シーンの stop か halts の要素） */
+  cur: Halt | null;
 }
+
+/** 停車駅。scene = 停車シーン（自列車を待つ）。dwell = 停車時間 [s]（scene 以外） */
+interface Halt { station: number; headS: number; scene: boolean; dwell: number; done: boolean }
 
 export interface OncomingSystem {
   /** 走行中の対向列車の範囲（先頭 s < 最後尾 s）。踏切制御用。停車中の列車は含めない */
@@ -69,6 +76,10 @@ const MIX: { kind: TrainKind; cars: number; kmhScale: number }[] = [
 const DECEL = .9, ACCEL = .8;
 /** 停車してから発車できるまでの最短時間（自列車が来る前でも）・自列車の停車後に待つ時間・待ち続ける上限・戸閉めの時間 [s] */
 const MIN_DWELL = 12, AFTER_PLAYER = 8, MAX_DWELL = 300, CLOSE_T = 5;
+/** 途中の停車駅の停車時間（戸閉めの前まで）[s]: 普通 / 急行・特急 */
+const HALT_DWELL_LOCAL = 18, HALT_DWELL_FAST = 22;
+/** 停止位置: ホームの手前端（対向列車から見て）からの余裕 [m]（route/oncoming-stops.ts の HEAD_MARGIN と同じ） */
+const HALT_MARGIN = 8;
 /** 出現させる最小距離 [m]（自列車の前方これ以上遠くでないと、出現が見えるので出さない） */
 const MIN_SPAWN_DIST = 800;
 /** 自列車の後方にこれ以上離れたら消す [m]（編成長に加える） */
@@ -121,7 +132,7 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
     const mix = MIX[i % MIX.length];
     const spec: OncomingSpec = spec0.kind ? spec0 : { ...spec0, kind: mix.kind, cars: mix.cars, kmh: Math.round(spec0.kmh * mix.kmhScale) };
     const zone = spec.stop?.loop ? spec.stop.zone ?? loopZone(route.stations[spec.stop.station]) : null;
-    return { spec, spec0: spec, mode: 'stop', kind: spec.kind!, idx: i, zone, view: null, active: false, done: false, started: false, head: 0, v: 0, phase: 'cruise', left: false, tStop: 0, tClose: 0, tPlayer: 0, horn: false, rush: i >= route.oncoming.length } as OncomingTrain;
+    return { spec, spec0: spec, mode: 'stop', kind: spec.kind!, idx: i, zone, view: null, active: false, done: false, started: false, head: 0, v: 0, phase: 'cruise', left: false, tStop: 0, tClose: 0, tPlayer: 0, horn: false, rush: i >= route.oncoming.length, halts: [], cur: null } as OncomingTrain;
   });
   const RUSH_TIMES = new Set(['morning', 'night']);
   const lenOf = (o: OncomingTrain) => o.view ? o.view.length : o.spec.cars * (o.spec.carLen + o.spec.gap);
@@ -188,33 +199,46 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
   }
 
   /** 戻り値 = すれ違いの近さ 0..1（非走行なら -1） */
+  /** 次の停車駅: 停車シーン（発車前）→ 途中の停車駅（先頭より先にあるもの） */
+  function nextHalt(o: OncomingTrain): Halt | null {
+    const stop = o.spec.stop;
+    if (stop && !o.left) return { station: stop.station, headS: stop.headS, scene: true, dwell: 0, done: false };
+    return o.halts.find(h => !h.done && h.headS < o.head - 1) ?? null;
+  }
+
   function update(o: OncomingTrain, dt: number, ps: number, pv: number): number {
-    const O = o.spec, vmax = O.kmh / 3.6, stop = O.stop, view = o.view!;
+    const O = o.spec, vmax = O.kmh / 3.6, view = o.view!;
     const len = view.length;
     const hold = followLimit(o), cap = Math.min(hold, o.zone ? zoneCap(o.zone, o.head, len) : Infinity);
     switch (o.phase) {
-      case 'cruise':
+      case 'cruise': {
         o.v = Math.min(vmax, cap);
-        if (stop && !o.left && o.head - stop.headS <= o.v * o.v / (2 * DECEL)) o.phase = 'brake';
+        const h = nextHalt(o);
+        if (h && o.head - h.headS <= o.v * o.v / (2 * DECEL) + 1) { o.cur = h; o.phase = 'brake'; }
         break;
+      }
       case 'brake': {
-        const d = Math.max(o.head - stop!.headS, .5);
+        const stop = o.cur!;
+        const d = Math.max(o.head - stop.headS, .5);
         const vb = Math.max(0, o.v - Math.max(DECEL, o.v * o.v / (2 * d)) * dt);
         // 前の編成・分岐器制限に合わせて遅い間は、停止位置に着いたとは扱わない
         if (cap < vb) { o.v = cap; break; }
         o.v = vb;
         // 停止位置の手前 1.5m 以内で止まったら位置を合わせる
-        if (o.v < .15 || o.head - stop!.headS < .3) {
-          if (o.head - stop!.headS < 1.5) o.head = stop!.headS;
+        if (o.v < .15 || o.head - stop.headS < .3) {
+          if (o.head - stop.headS < 1.5) o.head = stop.headS;
           o.v = 0; o.phase = 'stopped'; o.tStop = 0; o.tPlayer = 0;
         }
         break;
       }
       case 'stopped': {
         o.tStop += dt;
-        const sta = route.stations[stop!.station];
+        const stop = o.cur!;
+        // 途中の停車駅: 停車時間が過ぎたら発車（自列車は待たない）
+        if (!stop.scene) { if (o.tStop >= stop.dwell) { o.phase = 'closing'; o.tClose = 0; } break; }
+        const sta = route.stations[stop.station];
         // 自列車が同じ駅に停車している間だけ数える。自列車が通過する駅では、通過し終えたら条件を満たす
-        if (st.state === 'dwell' && st.target === stop!.station) o.tPlayer += dt;
+        if (st.state === 'dwell' && st.target === stop.station) o.tPlayer += dt;
         const playerStops = !sta.pass, playerGone = !playerStops && ps > sta.platform.to + 30;
         if (o.tStop >= MIN_DWELL && ((playerStops && o.tPlayer >= AFTER_PLAYER) || playerGone || o.tStop >= MAX_DWELL) && (followerClear(o) || o.tStop >= MAX_DWELL)) { o.phase = 'closing'; o.tClose = 0; }
         break;
@@ -222,7 +246,8 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
       case 'closing':
         o.tClose += dt;
         if (o.tClose >= CLOSE_T) {
-          o.phase = 'accel'; o.left = true;
+          o.phase = 'accel';
+          if (o.cur?.scene) o.left = true; else if (o.cur) o.cur.done = true;
           const d = o.head - ps;
           if (Math.abs(d) < 500) { o.horn = true; events.emit('oncomingHorn', { distance: Math.max(0, d) }); }
         }
@@ -234,13 +259,13 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
     }
     o.head -= o.v * dt;
     // 停車中は戸を開ける（ホーム側のみ）、動き出したら閉める
-    if (stop) {
-      const open = o.phase === 'stopped', side = doorSide(route.stations[stop.station], !!o.zone, laneLat(o, stop.headS + len / 2));
+    if (o.cur) {
+      const open = o.phase === 'stopped', side = doorSide(route.stations[o.cur.station], !!o.zone, laneLat(o, o.cur.headS + len / 2));
       for (const c of view.cars) c.setDoors(open, side);
     }
     place(o);
     const tail = o.head + len, d = o.head - ps;
-    if (!o.horn && !stop && d > 0 && d < 260) { o.horn = true; events.emit('oncomingHorn', { distance: d }); }
+    if (!o.horn && !O.stop && d > 0 && d < 260) { o.horn = true; events.emit('oncomingHorn', { distance: d }); }
     if (tail < ps - VANISH - route.trainLength) { finish(o); return 0; }
     // すれ違い中（先頭〜最後尾が自車横）は風切り音。相対速度が小さいとき（停車中どうし）は鳴らさない。待避線の編成は線が遠い分だけ弱める
     const dist = d > 0 ? d : tail > ps ? 0 : ps - tail;
@@ -268,7 +293,7 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
   const meetSpecs: OncomingTrain[] = (route.meets ?? []).map((m, i) => ({
     mode: 'stop' as const, spec0: undefined as unknown as OncomingSpec,
     spec: { spawnAt: Infinity, startS: 0, cars: m.cars, carLen: 18, gap: .8, kmh: m.kmh, lat: 0, kind: m.kind, ...(m.label ? { label: m.label } : {}), ...(m.dest ? { dest: m.dest } : {}) },
-    kind: m.kind, idx: -1 - i, zone: null, view: null, active: false, done: false, started: false, head: 0, v: 0, phase: 'cruise', left: false, tStop: 0, tClose: 0, tPlayer: 0, horn: false, rush: false,
+    kind: m.kind, idx: -1 - i, zone: null, view: null, active: false, done: false, started: false, head: 0, v: 0, phase: 'cruise', left: false, tStop: 0, tClose: 0, tPlayer: 0, horn: false, rush: false, halts: [], cur: null,
   }));
   for (const o of meetSpecs) if (!sets.has(keyOf(o))) build(o);
   let meetHornStage = '';
@@ -293,6 +318,23 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
       return Math.max(0, 1 - dist / 60) * Math.min(1, (pv + o.v) / 8) * .8;
     }
     return -1;
+  }
+
+  /** 種別表示 → 種別（停車駅を引くため） */
+  const serviceIdOf = (label: string): ServiceId => label.includes('サザン') ? 'southern' : label.includes('特急') ? 'limited'
+    : label.includes('空港急行') ? 'airport' : label.includes('急行') ? 'express' : 'local';
+  /** すれ違う編成の途中の停車駅: 種別の停車駅（普通は全駅）のうち、出現位置より先にあり、走る線にホームがある駅 */
+  function haltsOf(o: OncomingTrain, id: ServiceId): Halt[] {
+    const svc = route.services?.find(v => v.id === id) ?? route.services?.find(v => sameClass(v.id, id));
+    const stops = id === 'local' || !svc ? route.stations.map((_, i) => i) : svc.stops;
+    const len = o.spec.cars * (o.spec.carLen + o.spec.gap), dwell = id === 'local' ? HALT_DWELL_LOCAL : HALT_DWELL_FAST;
+    return stops.map((i): Halt => ({ station: i, headS: route.stations[i].platform.from + HALT_MARGIN, scene: false, dwell, done: false }))
+      .filter(h => {
+        const sta = route.stations[h.station];
+        if (h.headS > o.spec.startS - 100 || h.headS + len > sta.platform.to + 1) return false; // 出現位置の先・ホームに収まる
+        return sta.layout !== 'custom' || !!customPlatformSide(sta, laneLat(o, h.headS + len / 2));
+      })
+      .sort((a, b) => b.headS - a.headS);
   }
 
   // 停車シーンの間引き: プレイ開始後の最初のフレームで決める（種別・時間帯が確定してから。同じプレイ中は変わらない）
@@ -323,13 +365,25 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
       const cls = classes?.[i];
       // 固定の特急（待避線の普通に続く特急など）の次は、ラピートとサザンを入れ替える
       if (classes && !cls && modes[i] !== 'off' && classOfSpec(o.spec0, o.kind) === 'tokkyu') nth.tokkyu = o.kind === 'limited' ? 1 : 0;
+      // 日中の急行系は空港急行だけ（固定の編成の「急行」も空港急行に）
+      if (classes && !cls && tod === 'noon' && classOfSpec(o.spec0, o.kind) === 'kyuko' && o.spec.label !== '空港急行') {
+        o.spec = { ...o.spec, label: '空港急行', dest: towardNamba ? WAKAYAMA_DEST.airport[0] : 'なんば' };
+        if (!sets.has(keyOf(o))) build(o);
+      }
       if (cls) {
         // 対向列車は自列車と逆向き: 自列車がなんば方面なら和歌山方面
         const { id, ...c } = runConsist(cls, nth[cls]++, tod, towardNamba);
         o.spec = { ...o.spec, ...c, dest: towardNamba ? WAKAYAMA_DEST[id][0] : 'なんば' };
+        // 複々線の区間がある路線（堺〜なんば）は、普通は緩行線の進路を走る
+        if (cls === 'local' && route.oncomingLocal) o.spec.lat = route.oncomingLocal.lat;
         o.kind = c.kind!;
+        o.halts = haltsOf(o, id);
         if (!sets.has(keyOf(o))) build(o); // 出現時の負荷を避けて先に作る
-      }
+      } else if (classes && modes[i] !== 'off') {
+        // 停車シーンの編成は停車駅を発車した後、待避線の普通に続く優等列車は待避の駅を過ぎた後の、自分の停車駅に停まる
+        const after = o.spec.stop ? o.spec.stop.headS : o.spec.follow ? route.stations[trains[i - 1]?.spec0.stop?.station ?? 0]?.platform.from : undefined;
+        o.halts = after == null ? [] : haltsOf(o, serviceIdOf(o.spec.label ?? TRAIN_KINDS[o.kind].service)).filter(h => h.headS < after - 50);
+      } else o.halts = [];
       if (modes[i] === 'off') o.done = true;
     });
   }
@@ -344,7 +398,8 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
         const ok = canSpawn(o, ps);
         if (ok === 'skip') { o.done = true; continue; }
         if (ok) {
-          Object.assign(o, { active: true, started: true, head: o.spec.startS, v: o.spec.kmh / 3.6, phase: 'cruise', left: false, tStop: 0, tClose: 0, tPlayer: 0, horn: false });
+          Object.assign(o, { active: true, started: true, head: o.spec.startS, v: o.spec.kmh / 3.6, phase: 'cruise', left: false, tStop: 0, tClose: 0, tPlayer: 0, horn: false, cur: null });
+          for (const h of o.halts) h.done = false;
           o.view = acquire(o);
         }
       }
@@ -359,7 +414,7 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
   });
 
   // 開発時の確認用: 各編成の状態
-  if (import.meta.env.DEV) (window as any).__oncomingDebug = () => trains.map(o => ({ mode: o.mode, kind: o.kind, rush: o.rush, started: o.started, stop: o.spec.stop?.station, loop: !!o.zone, active: o.active, done: o.done, phase: o.phase, head: Math.round(o.head), len: Math.round(lenOf(o)), lat: +laneLat(o, o.head).toFixed(1), kmh: Math.round(o.v * 3.6), tStop: Math.round(o.tStop), tPlayer: Math.round(o.tPlayer) }));
+  if (import.meta.env.DEV) (window as any).__oncomingDebug = () => trains.map(o => ({ mode: o.mode, kind: o.kind, rush: o.rush, started: o.started, stop: o.spec.stop?.station, loop: !!o.zone, active: o.active, done: o.done, phase: o.phase, head: Math.round(o.head), len: Math.round(lenOf(o)), lat: +laneLat(o, o.head).toFixed(1), kmh: Math.round(o.v * 3.6), tStop: Math.round(o.tStop), tPlayer: Math.round(o.tPlayer), label: o.spec.label, halts: o.halts.map(h => route.stations[h.station].name) }));
 
   return {
     activeSpans: () => [
