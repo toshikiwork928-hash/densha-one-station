@@ -112,7 +112,23 @@ for (const route of [shiokaze, shiokazeUp]) {
   const q = structuredClone(shiokazeUp); q.timeOfDay = 'night'; const sv = applyService(q, 'local')!;
   const park = q.stations.findIndex(s => s.name === '浜寺公園');
   assert.ok(approachText(q, park, sv).includes('ハマデラコウエンで特急ラピートと急行の通過待ちをします。'), approachText(q, park, sv));
-  assert.ok(approachText(q, 9, sv).includes('イズミオオツで特急ラピートと急行の待ち合わせをします。'), approachText(q, 9, sv));
+  assert.ok(approachText(q, 9, sv).includes('イズミオオツで特急ラピートと空港急行の待ち合わせをします。'), approachText(q, 9, sv));
+  // 羽衣の到着前は高師浜線の乗り換え案内
+  assert.ok(approachText(q, q.stations.findIndex(s => s.name === '羽衣'), sv).includes('タカシノハマ線はお乗り換えください。'));
+}
+// 特急はラピートとサザン、急行は急行と空港急行が交互（夜の堺 → 岸和田: 浜寺公園はラピート・急行、泉大津はサザン・空港急行）
+{
+  const q = structuredClone(throughUp); q.timeOfDay = 'night'; const sv = applyService(q, 'local')!;
+  const name = (st: string) => sv.waits!.filter(w => q.stations[w.station].name === st).map(w => w.passedBy);
+  assert.deepEqual(name('浜寺公園'), ['limited', 'express']); assert.deepEqual(name('泉大津'), ['southern', 'airport']);
+}
+// 乗り換え案内: 新今宮（JR線）、天下茶屋（なんば行きは高野線も）
+{
+  const up = structuredClone(namba), sv = applyService(up, 'local')!, dn = structuredClone(nambaUp), sd = applyService(dn, 'local')!;
+  const ix = (r: Route, n: string) => r.stations.findIndex(s => s.name === n);
+  assert.ok(approachText(up, ix(up, '新今宮'), sv).includes('JR線はお乗り換えです。'));
+  assert.ok(approachText(up, ix(up, '天下茶屋'), sv).includes('コウヤ線、地下鉄サカイスジ線、阪急キョウト・キタセンリ方面はお乗り換えください。'));
+  assert.ok(approachText(dn, ix(dn, '天下茶屋'), sd).endsWith('。地下鉄サカイスジ線、阪急キョウト・キタセンリ方面はお乗り換えください。') || approachText(dn, ix(dn, '天下茶屋'), sd).includes('です。地下鉄サカイスジ線'), approachText(dn, ix(dn, '天下茶屋'), sd));
 }
 const parkDown = shiokaze.stations.find(s => s.layout === 'hamadera')!;
 const parkUp = shiokazeUp.stations.find(s => s.layout === 'hamadera')!;

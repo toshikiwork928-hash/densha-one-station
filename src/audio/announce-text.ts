@@ -40,13 +40,26 @@ export function departText(route: Route, index: number, afterWait: boolean, svc?
   return parts.join('');
 }
 
+/** 乗り換え案内（到着前の放送）。towardNamba = なんば方面の列車。固有名詞は読み間違いを避けてカタカナ */
+const TRANSFERS: Record<string, (towardNamba: boolean) => string> = {
+  新今宮: () => 'JR線はお乗り換えです。',
+  天下茶屋: n => n ? 'コウヤ線、地下鉄サカイスジ線、阪急キョウト・キタセンリ方面はお乗り換えください。' : '地下鉄サカイスジ線、阪急キョウト・キタセンリ方面はお乗り換えください。',
+  羽衣: () => 'タカシノハマ線はお乗り換えください。',
+};
+export function transferPhrase(route: Route, index: number, svc?: ServiceSpec): string {
+  const f = TRANSFERS[route.stations[index].name];
+  if (!f) return '';
+  const dest = svc?.destination ?? route.stations[route.stations.length - 1].name;
+  return f(dest === 'なんば' || dest === '難波');
+}
+
 /** 駅の手前（800m）の放送。終点の手前は御礼を添える。普通が待避する駅では、到着前にも待ち合わせ・通過待ちを案内する */
 export function approachText(route: Route, index: number, svc?: ServiceSpec): string {
   const sta = route.stations[index], side = sta.platform.side === 'L' ? '左' : '右';
   const tr = sta.enterLoop ? sta.loopTrack : sta.mainTrack, track = tr ? `${tr}に到着します。` : '';
-  const wait = waitPhrase(route, svc, index).replace(/^当駅で/, `${spoken(sta)}で`);
-  if (isTerminus(route, index, svc)) return `本日もご乗車いただきありがとうございました。まもなく終点、${spoken(sta)}、${track}お出口は${side}側です。${wait}`;
-  return `まもなく、${spoken(sta)}、${track}お出口は${side}側です。${wait}`;
+  const wait = waitPhrase(route, svc, index).replace(/^当駅で/, `${spoken(sta)}で`), tr2 = transferPhrase(route, index, svc);
+  if (isTerminus(route, index, svc)) return `本日もご乗車いただきありがとうございました。まもなく終点、${spoken(sta)}、${track}お出口は${side}側です。${tr2}${wait}`;
+  return `まもなく、${spoken(sta)}、${track}お出口は${side}側です。${tr2}${wait}`;
 }
 
 /** 普通がこの駅で優等列車を待つときの放送（待ち合わせ = 優等列車が停車、通過待ち = 通過。複数なら並べた順に「〜の通過待ちと〜の待ち合わせ」）。
