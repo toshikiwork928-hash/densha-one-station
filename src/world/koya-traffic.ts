@@ -1,6 +1,7 @@
-// 南海本線 堺〜難波（route.id = 'namba'）専用: 高野線の電車（走行・停車）と汐見橋線の停車中の 2300系、萩ノ茶屋・今宮戎のホーム（描画のみ）
+// 南海本線 堺〜難波（route.id = 'namba'）専用: 高野線の電車（走行・停車）と汐見橋線の停車中の 2000系（2両）、萩ノ茶屋・今宮戎のホーム（描画のみ）
 // どちらも ctx.rng を消費しない（buildIsland の人の配置だけ独自の乱数を使う）。buildKoyaTraffic は車両生成で DOM を使うので world/index.ts からだけ呼ぶ
-// 走行する電車: 高野線上り（難波行き = s 増加）は右の遠方から合流して難波の 4番線・3番線へ、下り（s 減少）は難波の 2番線・1番線から出て右へ去る
+// 走行する電車: 高野線上り（難波行き = s 増加）は右の遠方から合流して難波の 4番線へ、下り（s 減少）は難波の 2番線から出て右へ去る
+// （3番線・1番線は留置の 30000系・6300系が使う。world/namba-terminal.ts の buildNambaParked）
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import { createRng } from '../core/rng';
@@ -28,21 +29,31 @@ export function buildKoyaPlatforms(ctx: GameContext): void {
 
 // ---- 走行する電車 ----
 interface Variant { kind: TrainKind; units: number[]; label: string; dest: string }
-interface Slot { dir: 1 | -1; v: Variant; /** 難波側の番線（up: 4 / 3、down: 2 / 1） */ bay: number }
+interface Slot { dir: 1 | -1; v: Variant; /** 難波側の番線（up: 4、down: 2。3・1番線は留置用） */ bay: number }
 const V = {
   new4: (label: string, dest: string): Variant => ({ kind: 'commuter-new', units: [4], label, dest }),
   new6: (label: string, dest: string): Variant => ({ kind: 'commuter-new', units: [4, 2], label, dest }),
   old2: (label: string, dest: string): Variant => ({ kind: 'commuter-2300', units: [2], label, dest }),
   old4: (label: string, dest: string): Variant => ({ kind: 'commuter-2300', units: [2, 2], label, dest }),
+  ss4: (label: string, dest: string): Variant => ({ kind: 'commuter-6300', units: [4], label, dest }),
+  ss6: (label: string, dest: string): Variant => ({ kind: 'commuter-6300', units: [4, 2], label, dest }),
+  ss8: (label: string, dest: string): Variant => ({ kind: 'commuter-6300', units: [4, 4], label, dest }),
+  kouya: (dest: string): Variant => ({ kind: 'limited-30000', units: [4], label: 'こうや', dest }),
+  z8: (label: string, dest: string): Variant => ({ kind: 'commuter-2000', units: [4, 4], label, dest }),
 };
 /** 出現の順番（上り・下りを交互に。両数・車種・種別が混在） */
 const SLOTS: Slot[] = [
   { dir: 1, v: V.new6('急行', '難波'), bay: 4 },
+  { dir: -1, v: V.ss8('準急', '和泉中央'), bay: 2 },
+  { dir: 1, v: V.kouya('難波'), bay: 4 },
   { dir: -1, v: V.old4('各停', '河内長野'), bay: 2 },
-  { dir: 1, v: V.old2('各停', '難波'), bay: 3 },
-  { dir: -1, v: V.new6('急行', '橋本'), bay: 1 },
+  { dir: 1, v: V.old2('各停', '難波'), bay: 4 },
+  { dir: -1, v: V.z8('急行', '橋本'), bay: 2 },
+  { dir: 1, v: V.ss6('各停', '難波'), bay: 4 },
+  { dir: -1, v: V.kouya('極楽橋'), bay: 2 },
+  { dir: 1, v: V.z8('急行', '難波'), bay: 4 },
+  { dir: -1, v: V.ss4('各停', '北野田'), bay: 2 },
   { dir: 1, v: V.new4('各停', '難波'), bay: 4 },
-  { dir: -1, v: V.new4('各停', '橋本'), bay: 2 },
 ];
 
 /** 停車駅（高野線がホームに沿う区間）。local = 各停だけ停車 */
@@ -72,9 +83,9 @@ export function buildKoyaTraffic(ctx: GameContext): void {
   const pa = new THREE.Vector3(), pb = new THREE.Vector3();
   onLight(ctx, (n, t) => setTrainNight(Math.max(n, t)));
 
-  // ---- 汐見橋線: 行き止まりの手前に停まる 2300系（ドアはホーム = 左の側だけ） ----
+  // ---- 汐見橋線: 行き止まりの手前に停まる 2000系 2両（支線用。ドアはホーム = 左の側だけ） ----
   {
-    const lat = prof('shiomibashi'), cars = createTrainSet('commuter-2300', 2, ctx.renderer, { dest: '汐見橋', label: '普通', units: [2] });
+    const lat = prof('shiomibashi'), cars = createTrainSet('commuter-2000', 2, ctx.renderer, { dest: '汐見橋', label: '普通', units: [2] });
     const group = new THREE.Group(); group.name = 'koya-parked-shiomibashi';
     let d = 5965 + 4; // 先頭を車止めの手前 4m に置き、s の増える向きへ連ねる（向きは s 減少 = 進行方向の右がホーム）
     for (const c of cars) {

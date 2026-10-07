@@ -1,6 +1,6 @@
-// 山岳線用 2300系（架空塗装）: 18m 級ステンレス車体・片側2扉・2両ユニット（両車とも運転台・パンタ付き）・ワンマン対応
-//  前面: FRP の平面的な顔を深緑で塗装、窓まわりは黒、中央にステンレス無塗装の貫通扉、前照灯は貫通扉の上、尾灯は下部の左右
-//  側面: 扉間に大きな1枚窓 3枚、車端は小さな下降窓、窓の上下に緑のグラデーション帯
+// 山岳線用 2300系: 18m 級ステンレス車体・片側2扉・2両ユニット（両車とも運転台・パンタ付き）・ワンマン対応
+//  前面: FRP の平面的な顔を朱色一色で塗装、窓まわりは黒、中央の貫通扉も朱色、前照灯は貫通扉の上、尾灯は下部の左右
+//  側面: 扉間に大きな1枚窓 3枚、車端は小さな下降窓、窓の上に朱色の細い線、窓の下に朱色〜橙のグラデーションの太い帯（実車はフィルム）
 //  屋根: セミ集中式冷房2基、シングルアームパンタ（連結面寄り）、無線アンテナ
 import * as THREE from 'three';
 import { GeoBatch, M, P } from '../batch';
@@ -20,19 +20,19 @@ const DOORS = [-4.3, 4.3], DOOR_W = 1.3;
 const R = .16, CREW_OFF = .6, CREW_W = .6;
 /** 窓の上下端（側窓・客用扉の窓・乗務員扉の窓で共通） */
 const WIN: V2 = [2.05, 2.9];
-const GREEN = '#1f6a45', GREEN_D = '#164a33', LEAF = '#8cc63e';
-const FACE_GREEN = '#1c5a3c';
+const RED = '#e04a26', RED_D = '#c8361c', LINE = '#f5a46a';
+const FACE_RED = '#e2502a';
 const ROOF_Y = 3.48;
 
-/** 窓の上下の帯（緑のグラデーション。前寄りは濃く、後ろへ明るく抜ける） */
+/** 窓の上下の帯（朱色。上は窓の上の細い線、下は窓の下の太い帯で、上から 朱 → 細い白 → 朱から橙へ抜けるグラデーション） */
 function bands(s: ReturnType<typeof sideSheet>, hz: number) {
-  const grad = (y0: number, y1: number) => {
-    const g = s.c.createLinearGradient(s.X(-hz), 0, s.X(hz), 0);
-    g.addColorStop(0, GREEN_D); g.addColorStop(.5, GREEN); g.addColorStop(1, GREEN_D);
-    s.rect(-hz - 1, hz + 1, y0, y1, g as unknown as string, .35, .1);
-  };
-  grad(2.99, 3.15); s.rect(-hz - 1, hz + 1, 2.95, 2.985, LEAF, .35, .1); // 上の帯は窓の上端（WIN[1] + 枠）に沿わせる
-  grad(1.8, 1.96); s.rect(-hz - 1, hz + 1, 1.725, 1.765, LEAF, .35, .1);
+  s.rect(-hz - 1, hz + 1, 2.98, 3.06, RED, .35, .1); // 上の線は窓の上端（WIN[1] + 枠）に沿わせる
+  s.rect(-hz - 1, hz + 1, 3.08, 3.1, LINE, .35, .1);
+  s.rect(-hz - 1, hz + 1, 1.88, 1.97, RED, .35, .1);
+  s.rect(-hz - 1, hz + 1, 1.84, 1.88, '#f4efe8', .35, .1);
+  const g = s.c.createLinearGradient(0, s.Y(1.84), 0, s.Y(1.58));
+  g.addColorStop(0, RED_D); g.addColorStop(.6, RED); g.addColorStop(1, LINE);
+  s.rect(-hz - 1, hz + 1, 1.58, 1.84, g as unknown as string, .35, .1);
 }
 
 /** 側面（head = 前端 -Z に乗務員扉）。open = 客用扉を開けた状態 */
@@ -89,19 +89,19 @@ export function paint2300Side(Lb: number, head: boolean, open = false): SheetMap
 /** 前面シート（正面から見て左 = +X） */
 export function paint2300Face(): SheetMaps {
   const s = faceSheet(HW_23, YTOP_23);
-  s.base(FACE_GREEN, .28, .15);
+  s.base(FACE_RED, .28, .15);
   // 窓まわりの黒
   s.rect(-HW_23, HW_23, 2.1, 3.48, '#111316', .15, .25, .04);
   s.glass(.5, 1.24, 2.26, 3.16, '', .03, ['#2e3a46', '#10151b']);
   s.glass(-1.24, -.5, 2.26, 3.16, '', .03, ['#2e3a46', '#10151b']);
   // 帯（側面の帯を前面へ回す）
-  s.rect(-HW_23, HW_23, 1.84, 1.96, '#2a7a52', .3, .1);
-  s.rect(-HW_23, HW_23, 1.725, 1.765, LEAF, .3, .1);
-  // 下部（ステンレス色の台枠カバー）
-  s.rect(-HW_23, HW_23, Y0, 1.22, '#aeb4ba', .4, .7);
-  // 貫通扉（ステンレス無塗装・窓は小さめ）
-  s.rect(-.46, .46, 1.18, 3.46, '#9aa0a7', .4, .7, .03);
-  s.rect(-.4, .4, 1.22, 3.4, '#cfd4d9', .35, .8, .02);
+  s.rect(-HW_23, HW_23, 1.84, 1.96, RED_D, .3, .1);
+  s.rect(-HW_23, HW_23, 1.725, 1.765, LINE, .3, .1);
+  // 下部（前面の朱色のまま裾まで。少し濃い）
+  s.rect(-HW_23, HW_23, Y0, 1.22, '#cc3e20', .3, .15);
+  // 貫通扉（前面と同じ朱色・窓は小さめ）
+  s.rect(-.46, .46, 1.18, 3.46, '#b8341c', .3, .15, .03);
+  s.rect(-.4, .4, 1.22, 3.4, FACE_RED, .28, .15, .02);
   s.glass(-.26, .26, 2.42, 3.08, '#3d434a', .03);
   s.rect(-.18, .18, 1.24, 1.3, '#8a9097');
   // 尾灯・標識灯のケース（下部左右）
@@ -109,7 +109,7 @@ export function paint2300Face(): SheetMaps {
   // 車番・ワンマン表示（架空）
   s.text('2301', .98, 1.36, .16, '#eef2f4', 600);
   s.rect(-1.22, -.72, 1.29, 1.43, '#f2f4f6', .4, 0, .02);
-  s.text('ワンマン', -.97, 1.36, .1, '#1c5a3c', 800);
+  s.text('ワンマン', -.97, 1.36, .1, RED_D, 800);
   return s.textures();
 }
 

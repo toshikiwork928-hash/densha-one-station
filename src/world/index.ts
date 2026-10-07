@@ -20,6 +20,7 @@ import { buildHagoromoTrain } from './hagoromo-train';
 import { buildNambaTerminal } from './namba-terminal';
 import { buildSuminoeDepot, buildSuminoeDepotTrains } from './suminoe-depot';
 import { buildKoyaPlatforms, buildKoyaTraffic } from './koya-traffic';
+import { buildNambaParked } from './namba-parked';
 import { buildNambaLandmarks } from './namba-landmarks';
 import { nambaFrame } from './namba-frame';
 import { createRunPasses } from './run-pass';
@@ -56,6 +57,7 @@ export function buildWorld(ctx: GameContext): World {
     buildNambaLandmarks(nctx);
     buildKoyaPlatforms(nctx);
     buildKoyaTraffic(nctx); // 高野線・汐見橋線の電車（描画のみ）
+    buildNambaParked(nctx); // 難波の他の番線に停まっている電車（描画のみ）
   }
   const player = createPlayerTrain(ctx);
   createOvertaking(ctx); // [G] 待避の通過列車・待避線の先行普通

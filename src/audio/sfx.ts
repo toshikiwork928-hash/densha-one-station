@@ -163,8 +163,9 @@ export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
     const tr = ctx.state.train, st = e.state;
     if (st === 'title') return;
     const live = st === 'run' || st === 'dwell';
-    // 主回路音: 旧型通勤車（commuter-old）は抵抗制御、それ以外（未選択含む）は VVVF
-    const [drive, idle] = ctx.service?.kind === 'commuter-old' ? [p.resistance, p.vvvf] : [p.vvvf, p.resistance];
+    // 主回路音: 旧型通勤車（commuter-old = 7100系）とサザンの座席指定車（southern-10000 = 10000系）は抵抗制御、それ以外（未選択含む）は VVVF
+    const k = ctx.service?.kind, resist = k === 'commuter-old' || k === 'southern-10000';
+    const [drive, idle] = resist ? [p.resistance, p.vvvf] : [p.vvvf, p.resistance];
     if (idle !== lastIdle) { idle.silence(); lastIdle = idle; }
     drive.update(live ? tr.v : 0, live ? tr.notch : 0);
     p.running.update(tr.v, tr.s);

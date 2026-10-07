@@ -42,7 +42,7 @@ const dnServices: ServiceSpec[] = [
     id: 'southern', name: '特急サザン', cars: 8, units: [4, 4], kind: 'southern-10000', unitKinds: ['southern-10000', 'commuter-old'],
     lineLimit: 110, stops: [0, 13], timetable: NT.southern,
   },
-  { id: 'limited', name: '特急ラピート', cars: 6, units: [6], kind: 'limited', lineLimit: 110, stops: [0, 13], timetable: NT.limited },
+  { id: 'limited', name: '特急ラピートβ', cars: 6, units: [6], kind: 'limited', lineLimit: 110, stops: [0, 13], timetable: NT.limited },
 ];
 setDestinations(dnServices, 'wakayama');
 

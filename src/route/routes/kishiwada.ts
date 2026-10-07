@@ -131,7 +131,7 @@ export const kishiwada: Route = {
       id: 'southern', name: '特急サザン', cars: 8, units: [4, 4], kind: 'southern-10000', unitKinds: ['southern-10000', 'commuter-old'],
       lineLimit: 110, stops: [0, 4], timetable: KT.southern,
     },
-    { id: 'limited', name: '特急ラピート', cars: 6, units: [6], kind: 'limited', lineLimit: 110, stops: [0, 4], timetable: KT.limited },
+    { id: 'limited', name: '特急ラピートβ', cars: 6, units: [6], kind: 'limited', lineLimit: 110, stops: [0, 4], timetable: KT.limited },
   ],
   // 途中に待避駅が無いので、先行の普通は優等列車に追いつかれない間隔で先に出す
   precedingHeadway: { express: 240, airport: 240, limited: 330, southern: 330 },

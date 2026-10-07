@@ -2,10 +2,10 @@
 // route は各モジュールが参照を保持しているので、種別の切替は route の中身を書き換えて反映する（元データは初回に退避）
 import type { LatProfile, Route, ServiceId, ServiceSpec, SpeedLimit, Station, TimeOfDay, TrainKind } from './types';
 
-/** 1両の長さ [m]（既定。2300系は 18m） */
+/** 1両の長さ [m]（既定。2300系・2000系・30000系の 17m 級は 18m） */
 export const CAR_LEN = 20;
 /** 車種ごとの1両の長さ [m] */
-export const carLenOf = (kind: TrainKind): number => kind === 'commuter-2300' ? 18 : CAR_LEN;
+export const carLenOf = (kind: TrainKind): number => kind === 'commuter-2300' || kind === 'commuter-2000' || kind === 'limited-30000' ? 18 : CAR_LEN;
 /** 停止位置目標 stopS の基準両数（短い編成は手前に止める） */
 export const BASE_CARS = 6;
 /** n 両編成の停止位置のずれ [m]（基準 6両・20m 車なら 4両 → 20m 手前）。編成の中央をそろえる: (基準 − 両数) × 1両の長さ / 2 */
@@ -228,7 +228,7 @@ export const seaSideOf = (route: Route): 1 | -1 => route.seaSide ?? route.coasta
 /** 列車の行先（行先表示・放送）。種別に本来の行先（なんば・和歌山市など）があればそれ、無ければコースの終点 */
 export const destOf = (route: Route, svc?: ServiceSpec): string => svc?.destination ?? route.stations[route.stations.length - 1]?.name ?? '';
 /** 和歌山方面（コースの終点が岸和田・泉大津でも）の種別ごとの本来の行先 */
-const WAKAYAMA_DEST: Record<ServiceId, [string, string]> = {
+export const WAKAYAMA_DEST: Record<ServiceId, [string, string]> = {
   local: ['羽倉崎', 'はぐらざき'], express: ['和歌山市', 'わかやまし'], airport: ['関西空港', 'かんさいくうこう'],
   limited: ['関西空港', 'かんさいくうこう'], southern: ['和歌山港', 'わかやまこう'],
 };

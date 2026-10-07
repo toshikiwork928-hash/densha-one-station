@@ -1,6 +1,7 @@
 // 通勤形 20m 級4扉（架空塗装の青帯＋橙線）
 //  new: ステンレス車体・黒い前面・中央貫通扉・角ばったスカート・シングルアーム
 //  old: 鋼製（銀灰色塗装）・丸みのある前面・屋根上の2灯前照灯・分散冷房・菱形パンタ
+//  6300系（ss = true）: old と同じ形で、車体は塗装なしのステンレス（銀）。材質（塗装シート）だけを替える
 import * as THREE from 'three';
 import { GeoBatch, M, P } from '../batch';
 import {
@@ -38,13 +39,27 @@ const LOOK: Record<CommuterVariant, Look> = {
   },
 };
 
+/** 6300系（old の形・ステンレス無塗装）の外板。帯・窓は old のまま */
+const stainless = (L: Look): Look => ({ ...L, base: ['#d8dce0', '#b5bbc2'], roof: '#a3a8ae', rough: .36, metal: .78, door: '#c8cdd3' });
+const lookOf = (v: CommuterVariant, ss: boolean): Look => ss ? stainless(LOOK[v]) : LOOK[v];
+
 /** 側面（head = 先頭車。前端 = -Z 側に乗務員扉と帯の立ち上がり） */
-/** open = 客用ドアを開けた状態（開口部は暗い車内、夜は点灯） */
-export function paintCommuterSide(v: CommuterVariant, Lb: number, head: boolean, open = false): SheetMaps {
-  const L = LOOK[v], s = sideSheet(Lb, YTOP), hz = Lb / 2;
+/** open = 客用ドアを開けた状態（開口部は暗い車内、夜は点灯）。ss = ステンレス無塗装（6300系） */
+export function paintCommuterSide(v: CommuterVariant, Lb: number, head: boolean, open = false, ss = false): SheetMaps {
+  const L = lookOf(v, ss), s = sideSheet(Lb, YTOP), hz = Lb / 2;
   const grd = s.c.createLinearGradient(0, 0, 0, s.H); grd.addColorStop(0, L.base[0]); grd.addColorStop(1, L.base[1]);
   s.base(grd, L.rough, L.metal);
   s.rect(-hz - 1, hz + 1, L.roofY, YTOP + .1, L.roof, .6, L.metal * .6);
+  if (ss) {
+    // 6300系: 腰板（窓の下）と幕板（窓の上）のコルゲート（横方向の細い波板）。帯・扉・窓はこの上に描く
+    const rib = (y0: number, y1: number) => {
+      for (let y = y0; y < y1; y += .055) {
+        s.rect(-hz, hz, y, y + .018, 'rgba(255,255,255,.22)');
+        s.rect(-hz, hz, y + .018, y + .03, 'rgba(0,0,0,.1)');
+      }
+    };
+    rib(Y0 + .08, L.win[0] - .08); rib(L.win[1] + .1, L.roofY - .04);
+  }
   const band = (b: V2, col: string, z0 = -hz - 1) => s.rect(z0, hz + 1, b[0], b[1], col, .35, .1);
   // 先頭車: 乗務員扉（幅0.64m）→ 窓（約1.1m）→ 客用扉。1つ目の客用扉は中間車より後ろ（+0.35m）へずらして窓の幅を取る
   const crewZ = -hz + CREW_OFF;
@@ -109,13 +124,16 @@ export function paintCommuterSide(v: CommuterVariant, Lb: number, head: boolean,
   else s.glass((DOORS[0] - DOOR_W / 2 - hz) / 2 - sq, (DOORS[0] - DOOR_W / 2 - hz) / 2 + sq, w0, w1, '#565c63', .03);
   // 号車札・小表示（文字なし）
   s.rect(DOORS[1] + .9, DOORS[1] + 1.2, 3.46, 3.53, '#2b3138');
-  if (v === 'old') for (let z = -hz + .2; z < hz; z += 2.1) s.rect(z, z + .02, Y0, 3.55, 'rgba(0,0,0,.06)'); // 外板継ぎ目
+  if (ss) {
+    // 外板継ぎ目（コルゲートは地塗りの直後に描いた）
+    for (let z = -hz + 1.6; z < hz; z += 2.9) s.rect(z, z + .015, Y0, L.roofY, 'rgba(0,0,0,.05)');
+  } else if (v === 'old') for (let z = -hz + .2; z < hz; z += 2.1) s.rect(z, z + .02, Y0, 3.55, 'rgba(0,0,0,.06)'); // 外板継ぎ目
   return s.textures();
 }
 
-/** 前面シート */
-export function paintCommuterFace(v: CommuterVariant): SheetMaps {
-  const L = LOOK[v], s = faceSheet(HW, YTOP);
+/** 前面シート（ss = ステンレス無塗装の 6300系） */
+export function paintCommuterFace(v: CommuterVariant, ss = false): SheetMaps {
+  const L = lookOf(v, ss), s = faceSheet(HW, YTOP);
   const grd = s.c.createLinearGradient(0, 0, 0, s.H); grd.addColorStop(0, L.base[0]); grd.addColorStop(1, L.base[1]);
   s.base(grd, L.rough, L.metal);
   if (v === 'new') {
@@ -135,7 +153,11 @@ export function paintCommuterFace(v: CommuterVariant): SheetMaps {
     s.rect(-.42, .42, 3.47, 3.72, '#0d0f11', .2, .2);
   } else {
     // 実効幅は端部の丸み（r = .3）を除いた ±1.15。前面窓・表示器はその内側に収める（外周が車体の角で見切れない）
-    s.base('#c9cdd3', L.rough, L.metal); // 前面は明るい灰色
+    s.base(ss ? '#ccd0d5' : '#c9cdd3', L.rough, L.metal); // 前面は明るい灰色（6300系はステンレス）
+    if (ss) for (let y = Y0 + .06; y < 2.28; y += .055) { // 6300系: 前面の腰部もコルゲート（帯・貫通扉はこの上に描く）
+      s.rect(-HW, HW, y, y + .018, 'rgba(255,255,255,.22)');
+      s.rect(-HW, HW, y + .018, y + .03, 'rgba(0,0,0,.1)');
+    }
     s.rect(-HW, HW, L.frontBand[0], L.frontBand[1], BLUE, .35, .1);
     s.rect(-HW, HW, L.frontLine[0], L.frontLine[1], ORANGE, .35, .1);
     s.rect(-HW, HW, 1.4, 1.43, '#f3f5f8', .35, .1); // 細い白線
@@ -151,7 +173,7 @@ export function paintCommuterFace(v: CommuterVariant): SheetMaps {
     // 貫通扉の窓: 縦長の長方形（幅0.42m・高さは前面窓と同じ）
     s.glass(-.21, .21, FW[0], FW[1], '#22262b', .05);
     // 車号は中央（貫通扉の窓の下、青い帯の中に白文字）
-    s.text('7185', 0, 1.81, .2, '#f4f6fa', 600);
+    s.text(ss ? '6301' : '7185', 0, 1.81, .2, '#f4f6fa', 600);
     // 行先表示器（左窓の上）の枠
     s.rect(.52, 1.12, 3.16, 3.4, '#15171a', .3, 0, .02);
     s.emit(-HW, HW, Y0, YTOP + .1, '#000'); // 夜は運転台の窓を光らせない

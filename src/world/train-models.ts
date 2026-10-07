@@ -1,4 +1,4 @@
-// 車両モデルの窓口。種別ごとの外観を手続き生成する（通勤形 新・旧、特急形、山岳線用 2300系）
+// 車両モデルの窓口。種別ごとの外観を手続き生成する（通勤形 新・旧、特急形、山岳線用 2300系。モブの 1000系・2000系・6300系・30000系）
 // 1両 = 材質別に結合したメッシュ数個。ジオメトリ・材質・テクスチャは種別ごとに共有し、行先 LED のみ編成ごと
 import * as THREE from 'three';
 import type { TrainKind } from '../route/types';
@@ -7,6 +7,8 @@ import { buildCommuterCar, paintCommuterFace, paintCommuterSide, HW, YTOP } from
 import { buildLimitedCar, paintLimitedSide, HW_L } from './trains/limited';
 import { build2300Car, paint2300Face, paint2300Side } from './trains/c2300';
 import { buildSouthernCar, ledSouthernTexture, paintSouthernFace, paintSouthernSide } from './trains/southern';
+import { buildNewLiveryCar, paintNewLiveryFace, paintNewLiverySide } from './trains/c1000';
+import { build30000Car, paint30000Face, paint30000Side } from './trains/c30000';
 import { CAR_LEN, carLenOf } from '../route/service';
 
 /** 1両分の生成結果。原点 = 車体中心・レール面高さ、前 = -Z */
@@ -38,6 +40,11 @@ export const TRAIN_KINDS: Record<TrainKind, { label: string; service: string }> 
   limited: { label: '特急形', service: '特急' },
   'commuter-2300': { label: '山岳線用（18m・2扉・2両ユニット）', service: '各停' },
   'southern-10000': { label: '特急形（サザン座席指定車・2扉）', service: '特急' },
+  // 以下は運転しない車種（対向列車・高野線の電車・留置車両）
+  'commuter-1000': { label: '1000系（本線・6両）', service: '普通' },
+  'commuter-2000': { label: '2000系（17m・2扉・2両ユニット）', service: '普通' },
+  'commuter-6300': { label: '6300系（高野線・ステンレス）', service: '各停' },
+  'limited-30000': { label: '30000系（特急こうや）', service: '特急' },
 };
 
 export { CAR_LEN, carLenOf };
@@ -51,10 +58,10 @@ export function formation(n: number): CarKind[] {
   return Array.from({ length: n }, (_, i): CarKind => i === 0 || i === n - 1 ? 'head' : i % 3 === 2 ? 'pan' : 'mid');
 }
 
-/** 既定のユニット分け（通勤形は 4両 + 端数、2300系は 2両ずつ、特急形は1ユニット） */
+/** 既定のユニット分け（通勤形は 4両 + 端数、2300系・2000系は 2両ずつ、特急形・1000系の6両は1ユニット） */
 export function defaultUnits(kind: TrainKind, n: number): number[] {
-  const u = kind === 'commuter-2300' ? 2 : 4;
-  if (kind === 'limited' || n <= u) return [Math.max(1, n)];
+  const u = kind === 'commuter-2300' || kind === 'commuter-2000' ? 2 : 4;
+  if (kind === 'limited' || kind === 'limited-30000' || (kind === 'commuter-1000' && n === 6) || n <= u) return [Math.max(1, n)];
   const out: number[] = []; let r = n;
   while (r > u) { out.push(u); r -= u; }
   out.push(r);
@@ -124,15 +131,35 @@ function kindKit(kind: TrainKind, renderer: THREE.WebGLRenderer): KindKit {
       paint, glass, base: { env: .9, paintEnv: .6 },
       openMats: [], open: h => openMat(k!, h, () => sheetMat(paint2300Side(LB, h, true), env, false, .9)),
     };
+  } else if (kind === 'commuter-1000' || kind === 'commuter-2000') {
+    const m = kind === 'commuter-1000' ? '1000' : '2000', envI = m === '2000' ? .9 : .7;
+    const paint = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .5, metalness: .35, envMap: env, envMapIntensity: .6 });
+    k = {
+      geo: c => geos.get(c) ?? (geos.set(c, buildNewLiveryCar(m, c, LB)), geos.get(c)!),
+      side: { head: sheetMat(paintNewLiverySide(m, LB, true), env, false, envI), mid: sheetMat(paintNewLiverySide(m, LB, false), env, false, envI) },
+      face: sheetMat(paintNewLiveryFace(m), env, false, envI),
+      paint, glass, base: { env: envI, paintEnv: .6 },
+      openMats: [], open: h => openMat(k!, h, () => sheetMat(paintNewLiverySide(m, LB, h, true), env, false, envI)),
+    };
+  } else if (kind === 'limited-30000') {
+    const paint = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .45, metalness: .25, envMap: env, envMapIntensity: .6 });
+    k = {
+      geo: c => geos.get(c) ?? (geos.set(c, build30000Car(c, LB)), geos.get(c)!),
+      side: { head: sheetMat(paint30000Side(LB, true), env, false, .8), mid: sheetMat(paint30000Side(LB, false), env, false, .8) },
+      face: sheetMat(paint30000Face(), env, false, .8),
+      paint, glass, base: { env: .8, paintEnv: .6 },
+      openMats: [], open: h => openMat(k!, h, () => sheetMat(paint30000Side(LB, h, true), env, false, .8)),
+    };
   } else {
-    const v = kind === 'commuter-new' ? 'new' : 'old', envI = v === 'new' ? .9 : .6;
+    // 8300系・7100系。6300系（ss）は 7100系と同じ形でステンレス無塗装
+    const v = kind === 'commuter-new' ? 'new' : 'old', ss = kind === 'commuter-6300', envI = v === 'new' || ss ? .9 : .6;
     const paint = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .5, metalness: v === 'new' ? .35 : .15, envMap: env, envMapIntensity: .6 });
     k = {
       geo: c => geos.get(c) ?? (geos.set(c, buildCommuterCar(v, c, LB)), geos.get(c)!),
-      side: { head: sheetMat(paintCommuterSide(v, LB, true), env, false, envI), mid: sheetMat(paintCommuterSide(v, LB, false), env, false, envI) },
-      face: sheetMat(paintCommuterFace(v), env, false, envI),
+      side: { head: sheetMat(paintCommuterSide(v, LB, true, false, ss), env, false, envI), mid: sheetMat(paintCommuterSide(v, LB, false, false, ss), env, false, envI) },
+      face: sheetMat(paintCommuterFace(v, ss), env, false, envI),
       paint, glass, base: { env: envI, paintEnv: .6 },
-      openMats: [], open: h => openMat(k!, h, () => sheetMat(paintCommuterSide(v, LB, h, true), env, false, envI)),
+      openMats: [], open: h => openMat(k!, h, () => sheetMat(paintCommuterSide(v, LB, h, true, ss), env, false, envI)),
     };
   }
   kindKits.set(kind, k);
@@ -227,7 +254,7 @@ export const createTrainSet: CreateTrainSet = (kind, cars, renderer, opts = {}) 
   const label = opts.label ?? TRAIN_KINDS[kind].service, dest = opts.dest ?? '堺';
   const shown = label === '特急サザン' ? 'サザン' : label, express = isExpress(label);
   // 前面の表示器: 8300系・2300系は左に種別・右に行先の2面、10000系は赤地の種別と白地の行先の1面、それ以外は1面に種別と行先
-  const leds = (k: TrainKind) => k === 'commuter-new' || k === 'commuter-2300'
+  const leds = (k: TrainKind) => k === 'commuter-new' || k === 'commuter-2300' || k === 'commuter-1000'
     ? { led: ledMatPart('type', shown, dest), led2: ledMatPart('dest', shown, dest) }
     : k === 'southern-10000' ? { led: ledSouthernMat(label, dest), led2: undefined } : { led: ledMat(shown, dest), led2: undefined };
   const units = opts.units?.length ? opts.units : defaultUnits(kind, Math.max(1, cars));

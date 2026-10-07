@@ -1,7 +1,7 @@
 // 2つの区間の路線データを、境目の駅（a の終着 = b の始発。同じ形の駅）でつないで通しのデータを作る。
 // a の終着駅のホーム泉大津側の端と b の始発駅のホームの端をそろえ、b の位置を offset だけずらす。
 // 線形は a を境目の駅の手前（ホームの端、直線）で切り、そこから b の線形を続ける（どちらも境目の駅は直線なので方位はつながる）。
-import { seaSideOf } from './service';
+import { sameClass, seaSideOf } from './service';
 import type { LatProfile, Route, ServiceSpec, Sign, Station } from './types';
 
 const segLen = (r: Route) => r.segments.reduce((a, g) => a + (g.type === 'straight' ? g.length : g.radius * g.angle), 0);
@@ -64,7 +64,9 @@ export function concatRoutes(a: Route, b: Route, opt: ConcatOptions): Route {
   // 種別ごとの走行線・制限・番線・ドアの側（区間データの同じ種別から）。駅 index は b を通しの index へ
   const ib0 = (i: number) => i + na - 1;
   const services = opt.services.map(v => {
-    const av = a.services?.find(x => x.id === v.id), bv = b.services?.find(x => x.id === v.id);
+    // 区間データに無い種別（堺〜泉大津の特急サザン）は同じ格の種別（特急ラピート）の走行線・番線・ドアの側を使う
+    const pick = (r: Route) => r.services?.find(x => x.id === v.id) ?? r.services?.find(x => sameClass(x.id, v.id));
+    const av = pick(a), bv = pick(b);
     const lane = v.lane ?? joinProfile(av?.lane, bv?.lane, a.tracks[0]);
     const laneLimits = v.laneLimits ?? [...(av?.laneLimits ?? []), ...(bv?.laneLimits ?? []).map(L => ({ ...L, from: sh(L.from), to: sh(L.to) }))];
     const remap = <T,>(ra?: Record<number, T>, rb?: Record<number, T>) => ra || rb ? { ...ra, ...Object.fromEntries(Object.entries(rb ?? {}).filter(([k]) => +k > 0).map(([k, x]) => [ib0(+k), x])) } : undefined;

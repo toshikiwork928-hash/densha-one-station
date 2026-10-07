@@ -29,6 +29,11 @@ export const TRAIN_PERF: Record<TrainKind, TrainPerf> = {
   // 10000系（特急サザンの座席指定車）: 7100系と併結する抵抗制御車。加速 2.5km/h/s・最高 110km/h（7100系と同等）
   'southern-10000': { a0: kmh(2.5), vBase: kmh(35), k: 1.25, bMax: 1.1, eb: 1.4, vMax: kmh(110) },
   limited: { a0: kmh(2.5), vBase: kmh(55), k: 1, bMax: 1.15, eb: 1.45, vMax: kmh(120) },
+  // 以下はモブ（運転しない）。表を埋めるための近い値
+  'commuter-1000': { a0: kmh(2.5), vBase: kmh(40), k: 1, bMax: 1.2, eb: 1.45, vMax: kmh(110) },
+  'commuter-2000': { a0: kmh(2.5), vBase: kmh(35), k: 1.2, bMax: 1.2, eb: 1.45, vMax: kmh(110) },
+  'commuter-6300': { a0: kmh(2.5), vBase: kmh(35), k: 1.25, bMax: 1.1, eb: 1.4, vMax: kmh(100) },
+  'limited-30000': { a0: kmh(2.5), vBase: kmh(35), k: 1.25, bMax: 1.1, eb: 1.4, vMax: kmh(110) },
 };
 /** 種別なし路線の従来性能 */
 export const DEFAULT_PERF: TrainPerf = { a0: .92, vBase: 9.7, k: 1, bMax: 1.15, eb: 1.45, vMax: kmh(120) };

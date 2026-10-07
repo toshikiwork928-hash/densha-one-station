@@ -107,12 +107,12 @@ for (const route of [shiokaze, shiokazeUp]) {
     }
   }
 }
-// 夜の堺 → 泉大津: 浜寺公園で特急・急行の通過待ち、終着の泉大津の到着前に「特急ラピートの通過待ちと急行の待ち合わせ」ではなく待ち合わせとして案内
+// 夜の堺 → 泉大津: 浜寺公園で特急・急行の通過待ち、終着の泉大津の到着前に「特急ラピートβの通過待ちと急行の待ち合わせ」ではなく待ち合わせとして案内
 {
   const q = structuredClone(shiokazeUp); q.timeOfDay = 'night'; const sv = applyService(q, 'local')!;
   const park = q.stations.findIndex(s => s.name === '浜寺公園');
-  assert.ok(approachText(q, park, sv).includes('ハマデラコウエンで特急ラピートと急行の通過待ちをします。'), approachText(q, park, sv));
-  assert.ok(approachText(q, 9, sv).includes('イズミオオツで特急ラピートと空港急行の待ち合わせをします。'), approachText(q, 9, sv));
+  assert.ok(approachText(q, park, sv).includes('ハマデラコウエンで特急ラピートβと急行の通過待ちをします。'), approachText(q, park, sv));
+  assert.ok(approachText(q, 9, sv).includes('イズミオオツで特急ラピートβと空港急行の待ち合わせをします。'), approachText(q, 9, sv));
   // 羽衣の到着前は高師浜線の乗り換え案内
   assert.ok(approachText(q, q.stations.findIndex(s => s.name === '羽衣'), sv).includes('タカシノハマ線はお乗り換えください。'));
 }
@@ -288,7 +288,7 @@ for (const [route, parts] of [[throughUp, [shiokazeUp, kishiwada]], [through, [k
   const ids = route.signals!.map(g => g.id);
   assert.equal(new Set(ids).size, ids.length, '信号 id の重複なし');
 }
-// 放送・行先: 堺方面（なんば方面）は全種別「なんば」、和歌山方面は 普通 羽倉崎・急行 和歌山市・空港急行 関西空港・特急ラピート 関西空港・特急サザン 和歌山港。
+// 放送・行先: 堺方面（なんば方面）は全種別「なんば」、和歌山方面は 普通 羽倉崎・急行 和歌山市・空港急行 関西空港・特急ラピートβ 関西空港・特急サザン 和歌山港。
 // コースの終着駅は列車の行先ではないので、「終点」と言わない
 {
   const want: Record<string, Record<ServiceId, string>> = {
@@ -296,7 +296,7 @@ for (const [route, parts] of [[throughUp, [shiokazeUp, kishiwada]], [through, [k
     wakayama: { local: '羽倉崎', express: '和歌山市', airport: '関西空港', limited: '関西空港', southern: '和歌山港' },
   };
   const kana: Record<string, string> = { なんば: 'ナンバ', 羽倉崎: 'ハグラザキ', 和歌山市: 'ワカヤマシ', 関西空港: 'カンサイクウコウ', 和歌山港: 'ワカヤマコウ' };
-  const names: Record<ServiceId, string> = { local: '普通', express: '急行', airport: '空港急行', limited: '特急ラピート', southern: '特急サザン' };
+  const names: Record<ServiceId, string> = { local: '普通', express: '急行', airport: '空港急行', limited: '特急ラピートβ', southern: '特急サザン' };
   const courses: [Route, 'namba' | 'wakayama'][] = [[shiokaze, 'namba'], [kishiwadaUp, 'namba'], [through, 'namba'], [shiokazeUp, 'wakayama'], [kishiwada, 'wakayama'], [throughUp, 'wakayama']];
   for (const [route, toward] of courses) {
     for (const v of route.services!) {
@@ -328,7 +328,7 @@ for (const [route, parts] of [[throughUp, [shiokazeUp, kishiwada]], [through, [k
 // 普通の待避駅では、到着前の放送でも待ち合わせ・通過待ちを案内する（堺〜泉大津: 高石で特急の通過待ち）
 {
   const r = structuredClone(shiokaze), sv = applyService(r, 'local')!;
-  assert.ok(approachText(r, 3, sv).endsWith('タカイシで特急ラピートの通過待ちをします。'), approachText(r, 3, sv));
+  assert.ok(approachText(r, 3, sv).endsWith('タカイシで特急ラピートβの通過待ちをします。'), approachText(r, 3, sv));
   assert.ok(!approachText(r, 5, sv).includes('待'), '昼の浜寺公園は待避なし');
   assert.ok(!approachText(r, 1, sv).includes('待'), '待避しない駅は案内なし');
 }

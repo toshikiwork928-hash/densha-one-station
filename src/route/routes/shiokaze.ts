@@ -130,7 +130,7 @@ export const shiokaze: Route = {
       lineLimit: 100, stops: [0, 4, 9], timetable: TT.express, platformSides: { 9: 'R' }, trackNames: { 9: '4番線' },
     },
     { ...airportService([0, 4, 9], TT.airport), platformSides: { 9: 'R' }, trackNames: { 9: '4番線' } },
-    { id: 'limited', name: '特急ラピート', cars: 6, units: [6], kind: 'limited', lineLimit: 110, stops: [0, 9], timetable: TT.limited, platformSides: { 9: 'R' }, trackNames: { 9: '4番線' } },
+    { id: 'limited', name: '特急ラピートβ', cars: 6, units: [6], kind: 'limited', lineLimit: 110, stops: [0, 9], timetable: TT.limited, platformSides: { 9: 'R' }, trackNames: { 9: '4番線' } },
   ],
   // 堺: 下り本線が外へずれて上りの3番線の場所を空ける。3番線・1番線は追加の線路
   trackProfiles: { 4: [[-1000, 4], ...SAKAI.down] },

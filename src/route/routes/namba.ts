@@ -14,7 +14,7 @@
 //     下りは駅の堺側で外側の緩行線が分かれる。左端に汐見橋線の行き止まりの線と片面ホーム（2300系が停車）
 //   岸里玉出〜なんば: 本線（0・4）の右に高野線（上り 9・下り 13）が並ぶ。天下茶屋・新今宮は 片面（上り本線）・島式（下り本線と高野線上り）・片面（高野線下り）。
 //     萩ノ茶屋・今宮戎は高野線だけの島式ホーム（本線は通過、ホームなし）。新今宮は JR の上を越えるため高い
-//   なんば: 頭端式 9面8線。左から 9番線（8番線併用。特急ラピート）・7番線（普通）・6番線（急行・空港急行）・5番線（特急サザン）・4〜1番線（高野線）
+//   なんば: 頭端式 9面8線。左から 9番線（8番線併用。特急ラピートβ）・7番線（普通）・6番線（急行・空港急行）・5番線（特急サザン）・4〜1番線（高野線）
 import type { ExtraTrack, LatProfile, Route, ServiceSpec, Sign, Station } from '../types';
 import { airportService, customPlatformSide, profileLat, setDestinations } from '../service';
 import { mirrorProfile, reverseRoute, totalLength } from '../reverse';
@@ -218,7 +218,7 @@ const services: ServiceSpec[] = [
     lineLimit: 110, stops: FAST, timetable: NB.southern, lane: LANE.southern, ...fast('5番線', 'R'),
   },
   {
-    id: 'limited', name: '特急ラピート', cars: 6, units: [6], kind: 'limited', lineLimit: 110, stops: FAST, timetable: NB.limited,
+    id: 'limited', name: '特急ラピートβ', cars: 6, units: [6], kind: 'limited', lineLimit: 110, stops: FAST, timetable: NB.limited,
     lane: LANE.limited, ...fast('9番線', 'L'),
   },
 ];
@@ -328,7 +328,7 @@ const DOWN_LOCAL_LIMITS = [
 ];
 /** 下りの停車シーン（上りの駅 index）: 七道（普通）・天下茶屋（急行）・新今宮（空港急行）。上りの対向列車は上り本線（外側の急行線）に停まる */
 const STOP_SCENES_UP: StopScene[] = [
-  { station: 1, kind: 'commuter-new', cars: 4, kmh: 74 },
+  { station: 1, kind: 'commuter-1000', cars: 6, kmh: 74, label: '普通' },
   { station: 6, kind: 'commuter-old', cars: 6, kmh: 70, label: '急行' },
   { station: 7, kind: 'commuter-new', cars: 8, kmh: 60, label: '空港急行' },
 ];
@@ -344,9 +344,9 @@ export const nambaUp: Route = reverseRoute(namba, {
   r.precedingHeadway = { express: 560, airport: 560, limited: 600, southern: 600 };
   // 上りの '30'（下り急行線）を通る対向列車は写さない。複々線の上り急行線（外側）を走り抜ける特急を足す
   r.oncoming = r.oncoming.filter(o => o.lat === 4 && !!o.stop);
-  // 対向（上り）の普通は複々線の駅で内側の上り緩行線に停まる（'30' = 上りの普通の進路を下りの座標へ写したもの）
+  // 対向（上り）の普通は複々線の駅と岸里玉出（5）で上り緩行線に停まる（'30' = 上りの普通の進路を下りの座標へ写したもの）。上り急行線にはホームが無い
   r.trackProfiles = { ...r.trackProfiles, 30: mirrorProfile(namba, LANE.local) };
-  r.oncomingLocal = { stations: QUAD_STATIONS.map(i => n - 1 - i), lat: 30 };
+  r.oncomingLocal = { stations: [...QUAD_STATIONS, 5].map(i => n - 1 - i), lat: 30 };
   r.oncoming.push({ spawnAt: mS(6200), startS: mS(2500), cars: 6, carLen: 20, gap: .8, kmh: 95, lat: 4, kind: 'limited', label: '特急', dest: 'なんば' });
   for (const v of r.services!) {
     const phys = v.id === 'local' ? PHYS_DOWN.local : v.id === 'southern' ? PHYS_DOWN.southern : v.id === 'limited' ? PHYS_DOWN.limited : PHYS_DOWN.express;

@@ -23,6 +23,11 @@ const KIND_INFO: Record<TrainKind, { name: string; desc: string }> = {
   'commuter-2300': { name: '2300系（山岳線用）', desc: '18m 車体・2両ユニット・VVVF。急勾配・急曲線向け' },
   'southern-10000': { name: '10000系（サザン座席指定車）', desc: '鋼製・2扉・リクライニング席。7100系と併結の抵抗制御' },
   limited: { name: '50000系（特急車）', desc: '流線形の先頭・定出力域が広く高速が得意' },
+  // 以下は運転できない車種（対向列車などのモブ）。表を埋めるための項目
+  'commuter-1000': { name: '1000系', desc: '本線の通勤車（6両）' },
+  'commuter-2000': { name: '2000系', desc: '17m・2扉の通勤車' },
+  'commuter-6300': { name: '6300系', desc: '高野線のステンレス通勤車' },
+  'limited-30000': { name: '30000系（こうや）', desc: '高野線の特急車' },
 };
 
 const carsOfUnits = (u: number[]) => u.reduce((a, n) => a + n, 0);
