@@ -4,9 +4,9 @@ import type { ServiceSpec } from '../types';
 type Id = 'local' | 'express' | 'airport' | 'limited' | 'southern';
 /** 上り（堺 → 難波） */
 export const NB: Record<Id, ServiceSpec['timetable']> = {
-  local: { 0: { arr: 0, dep: 0 }, 1: { arr: 105, dep: 130 }, 2: { arr: 235, dep: 260 }, 3: { arr: 340, dep: 365 }, 4: { arr: 425, dep: 450 }, 5: { arr: 540, dep: 565 }, 6: { arr: 640, dep: 665 }, 7: { arr: 770, dep: 795 }, 8: { arr: 915 } },
-  express: { 0: { arr: 0, dep: 0 }, 1: { arr: 105 }, 2: { arr: 180 }, 3: { arr: 225 }, 4: { arr: 250 }, 5: { arr: 310 }, 6: { arr: 375, dep: 400 }, 7: { arr: 515, dep: 540 }, 8: { arr: 665 } },
-  airport: { 0: { arr: 0, dep: 0 }, 1: { arr: 100 }, 2: { arr: 175 }, 3: { arr: 220 }, 4: { arr: 245 }, 5: { arr: 305 }, 6: { arr: 365, dep: 390 }, 7: { arr: 495, dep: 520 }, 8: { arr: 640 } },
-  limited: { 0: { arr: 0, dep: 0 }, 1: { arr: 95 }, 2: { arr: 170 }, 3: { arr: 215 }, 4: { arr: 240 }, 5: { arr: 300 }, 6: { arr: 360, dep: 385 }, 7: { arr: 490, dep: 515 }, 8: { arr: 635 } },
-  southern: { 0: { arr: 0, dep: 0 }, 1: { arr: 105 }, 2: { arr: 180 }, 3: { arr: 225 }, 4: { arr: 250 }, 5: { arr: 310 }, 6: { arr: 375, dep: 400 }, 7: { arr: 515, dep: 540 }, 8: { arr: 665 } },
+  local: { 0: { arr: 0, dep: 0 }, 1: { arr: 115, dep: 140 }, 2: { arr: 245, dep: 270 }, 3: { arr: 350, dep: 375 }, 4: { arr: 435, dep: 460 }, 5: { arr: 550, dep: 575 }, 6: { arr: 655, dep: 680 }, 7: { arr: 785, dep: 810 }, 8: { arr: 955 } },
+  express: { 0: { arr: 0, dep: 0 }, 1: { arr: 95 }, 2: { arr: 165 }, 3: { arr: 205 }, 4: { arr: 230 }, 5: { arr: 280 }, 6: { arr: 335, dep: 360 }, 7: { arr: 475, dep: 500 }, 8: { arr: 650 } },
+  airport: { 0: { arr: 0, dep: 0 }, 1: { arr: 85 }, 2: { arr: 155 }, 3: { arr: 195 }, 4: { arr: 220 }, 5: { arr: 270 }, 6: { arr: 325, dep: 350 }, 7: { arr: 455, dep: 480 }, 8: { arr: 625 } },
+  limited: { 0: { arr: 0, dep: 0 }, 1: { arr: 85 }, 2: { arr: 150 }, 3: { arr: 190 }, 4: { arr: 215 }, 5: { arr: 260 }, 6: { arr: 315, dep: 340 }, 7: { arr: 445, dep: 470 }, 8: { arr: 620 } },
+  southern: { 0: { arr: 0, dep: 0 }, 1: { arr: 95 }, 2: { arr: 165 }, 3: { arr: 205 }, 4: { arr: 230 }, 5: { arr: 275 }, 6: { arr: 330, dep: 355 }, 7: { arr: 470, dep: 495 }, 8: { arr: 645 } },
 };

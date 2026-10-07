@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import type { Track } from '../route/track';
-import { islandOffset, islandZones, loopShape, loopZones, trackLines, type LoopZone } from '../route/service';
+import { islandOffset, islandZones, loopShape, loopZones, profileTransitions, trackLines, type LoopZone } from '../route/service';
 import { cullByDistance } from './cull';
 
 const GAUGE = 0.535; // 軌間の半分 [m]
@@ -70,12 +70,26 @@ export function buildTrackMesh(ctx: GameContext): void {
   const isl = islandZones(route);
   for (const c of route.tracks) {
     let a = TS0;
-    // 横位置が変わる線（複々線・頭端駅の番線への振れ）は全区間を s ごとの断面で
-    if (route.trackProfiles?.[String(c)]) {
+    // 横位置が変わる線（複々線・頭端駅の番線への振れ）: S字の区間は細かい断面、それ以外は従来の刻み
+    const prof = route.trackProfiles?.[String(c)];
+    if (prof) {
       const l = (s: number) => c + islandOffset(route, c, s);
-      scene.add(extrudeFn(track, s => { const m = l(s); return [[m - 2.3, 0.0], [m - 1.4, 0.22], [m + 1.4, 0.22], [m + 2.3, 0.0]]; }, TS0, TS1, 2, matBallast));
-      for (const g of [-GAUGE, GAUGE])
-        scene.add(extrudeFn(track, s => { const r = l(s) + g; return [[r - .035, .24], [r - .035, .38], [r + .035, .38], [r + .035, .24]]; }, TS0, TS1, 1, matRail));
+      const fine = [...profileTransitions(prof).map(t => [t.from, t.to]), ...isl.map(z => [z.inFrom, z.outTo])].sort((p, q) => p[0] - q[0]);
+      const cuts: [number, number, boolean][] = [];
+      let q0 = TS0;
+      for (const [f0, f1] of fine) {
+        const a = Math.max(q0, f0), b = Math.min(TS1, f1);
+        if (b <= a) continue;
+        if (a > q0) cuts.push([q0, a, false]);
+        cuts.push([a, b, true]); q0 = b;
+      }
+      if (q0 < TS1) cuts.push([q0, TS1, false]);
+      for (const [s0, s1, f] of cuts) {
+        if (s1 - s0 < .5) continue;
+        scene.add(extrudeFn(track, s => { const m = l(s); return [[m - 2.3, 0.0], [m - 1.4, 0.22], [m + 1.4, 0.22], [m + 2.3, 0.0]]; }, s0, s1, f ? 2 : 4, matBallast));
+        for (const g of [-GAUGE, GAUGE])
+          scene.add(extrudeFn(track, s => { const r = l(s) + g; return [[r - .035, .24], [r - .035, .38], [r + .035, .38], [r + .035, .24]]; }, s0, s1, f ? 1 : 3, matRail));
+      }
       continue;
     }
     const piece = (s0: number, s1: number, island: boolean) => {

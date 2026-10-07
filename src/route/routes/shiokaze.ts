@@ -6,6 +6,7 @@ import type { Route, Sign, Station, StationLoop } from '../types';
 import { reverseRoute } from '../reverse';
 import { airportService, islandZone, loopZone, setDestinations } from '../service';
 import { stopScenes, type StopScene } from '../oncoming-stops';
+import { SAKAI_LAT, sakaiLayout } from '../sakai-layout';
 import { TT, TT_UP } from './shiokaze-timetable';
 
 const LOOP: StationLoop = { lat: -9.2, turnoutLength: 90, turnoutLimitKmh: 45 };
@@ -20,16 +21,19 @@ const names = [
 /** 諏訪ノ森は上下のホームが踏切を挟んで前後にずれる（対向線側が堺方面へ OPP_SHIFT）。自線側ホームは本来の位置から半分手前へ寄せる */
 const OPP_SHIFT = 260;
 const SUWA = 6;
+/** 堺（上りの終着）: 外側の4番線が本線（優等、直進）、内側の3番線が分岐側（普通、45km/h）。route/sakai-layout.ts */
+const SAKAI = sakaiLayout(180 + DISTANCES[9] - 180);
 const stations: Station[] = names.map(([name, kana], i) => {
   const stopS = 180 + DISTANCES[i] - (i === SUWA ? OPP_SHIFT / 2 : 0);
   return {
     name, kana, stopS, platform: { from: stopS - 180, to: stopS + 40, side: 'L' },
     scheduledArrival: i * 100, dwell: i && i < 9 ? 25 : undefined, stopMarkerCars: 6,
     elevated: ![2, 5, 6].includes(i),
-    layout: [0, 3, 9].includes(i) ? 'loop' : i === 4 ? 'hagoromo' : i === 5 ? 'hamadera' : 'relative',
-    ...([0, 3, 9].includes(i) ? { loop: { ...LOOP } } : {}),
+    layout: [0, 3].includes(i) ? 'loop' : i === 9 ? 'custom' : i === 4 ? 'hagoromo' : i === 5 ? 'hamadera' : 'relative',
+    ...([0, 3].includes(i) ? { loop: { ...LOOP } } : {}),
+    ...(i === 9 ? { customPlatforms: SAKAI.platforms } : {}),
     // 堺（上り）は下り側の1・2番線と同じ並び: 普通は本線側の3番線、急行・特急は外側の4番線（左右対称の2面4線ではない）
-    ...(i === 0 ? { loopTrack: '1番線' } : i === 9 ? { loopTrack: '4番線', mainTrack: '3番線', loopPriority: true } : {}),
+    ...(i === 0 ? { loopTrack: '1番線' } : {}),
     ...(i === 5 ? { loop: { ...PARK_LOOP } } : {}),
     // 湊は島式1面2線（高架）。線路は駅の前後でホームの両側へ開く。
     ...(i === 8 ? { island: { spread: 3.2, length: 100 } } : {}),
@@ -115,15 +119,21 @@ export const shiokaze: Route = {
       kindOptions: ['commuter-new', 'commuter-old'], formationOptions: [[4], [4, 2]],
       lineLimit: 90, useLoop: true, stops: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], timetable: TT.local,
       waits: [{ station: 3, passedBy: 'limited' }, { station: 5, passedBy: 'express' }, { station: 5, passedBy: 'airport' }],
+      // 堺は内側の3番線へ（分岐器制限 45km/h）
+      lane: [[-1000, 0], ...SAKAI.up3], laneLimits: [SAKAI.localLimit(SAKAI.up3[0][0] - 10, SAKAI.pt)],
+      platformSides: { 9: 'L' }, trackNames: { 9: '3番線' },
     },
     {
       id: 'express', name: '急行', cars: 6, units: [4, 2], kind: 'commuter-old',
       kindOptions: ['commuter-old', 'commuter-new'], formationOptions: [[4, 2], [4, 4], [4, 2, 2]],
-      lineLimit: 100, stops: [0, 4, 9], timetable: TT.express,
+      lineLimit: 100, stops: [0, 4, 9], timetable: TT.express, platformSides: { 9: 'R' }, trackNames: { 9: '4番線' },
     },
-    airportService([0, 4, 9], TT.airport),
-    { id: 'limited', name: '特急ラピート', cars: 6, units: [6], kind: 'limited', lineLimit: 110, stops: [0, 9], timetable: TT.limited },
+    { ...airportService([0, 4, 9], TT.airport), platformSides: { 9: 'R' }, trackNames: { 9: '4番線' } },
+    { id: 'limited', name: '特急ラピート', cars: 6, units: [6], kind: 'limited', lineLimit: 110, stops: [0, 9], timetable: TT.limited, platformSides: { 9: 'R' }, trackNames: { 9: '4番線' } },
   ],
+  // 堺: 下り本線が外へずれて上りの3番線の場所を空ける。3番線・1番線は追加の線路
+  trackProfiles: { 4: [[-1000, 4], ...SAKAI.down] },
+  extraTracks: SAKAI.extraTracks,
   prevName: '忠岡', nextName: '七道',
   signs: stations.slice(1).flatMap(st => approachSigns(st.stopS)),
   extent: { from: -400, to: 11200 }, tracks: [0, 4],
@@ -180,7 +190,18 @@ export const shiokazeUp: Route = reverseRoute(shiokaze, {
 });
 
 // 堺（下りの始発）は通常の並び（普通 = 外側の1番線、優等 = 本線の2番線）
-{ const sakai = shiokazeUp.stations[0]; delete sakai.loopPriority; sakai.loopTrack = '1番線'; sakai.mainTrack = undefined; }
+// 堺（下りの始発）: 普通は外側の1番線（分岐器制限 45km/h）、優等は内側の2番線（本線）。横位置は上りの鏡像（2番線 = −9.4、1番線 = −18.8）
+{
+  const L = 11200, m = (q: number) => L - q, d1 = 4 - SAKAI_LAT.down1, d2 = 4 - SAKAI_LAT.down2;
+  for (const v of shiokazeUp.services!) {
+    if (v.id === 'local') {
+      // 下りはホームの泉大津側（s の増える向き）の分岐器で本線へ
+      v.lane = [[-1000, d1], [m(SAKAI.pf - 20), d1], [m(SAKAI.pf - 130), d2], [m(SAKAI.pf - 150), d2], [m(SAKAI.pf - 260), 0]];
+      v.laneLimits = [SAKAI.localLimit(-400, m(SAKAI.pf - 130))];
+      v.platformSides = { 0: 'R' }; v.trackNames = { 0: '1番線' };
+    } else { v.platformSides = { 0: 'L' }; v.trackNames = { 0: '2番線' }; }
+  }
+}
 
 // 諏訪ノ森: reverseRoute が写した下りの自線側ホームは、上りでは対向線側のホーム。自線側（泉大津方面）ホームは対向線側より OPP_SHIFT だけ手前にある。
 {

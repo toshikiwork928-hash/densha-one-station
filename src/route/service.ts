@@ -79,10 +79,15 @@ export function profileTransitions(p: LatProfile): { from: number; to: number; a
 /** 島式ホーム駅での線路の横ずれ [m]。base = 線路の横位置（tracks の中央より左の線は左へ、右の線は右へ開く）。
  *  単線（tracks が1本）は既定で左（自列車の線）。side = 1 で右の線（交換駅で対向列車が通る線） */
 export function islandOffset(route: Route, base: number, s: number, side?: -1 | 1): number {
+  const prof = route.trackProfiles?.[String(base)];
+  return (prof ? profileLat(prof, s) - base : 0) + stationIslandOffset(route, base, s, side);
+}
+
+/** 島式1面2線駅の S字だけの横ずれ（route.trackProfiles を含まない） */
+export function stationIslandOffset(route: Route, base: number, s: number, side?: -1 | 1): number {
   const tr = route.tracks, mid = (Math.min(...tr) + Math.max(...tr)) / 2;
   const dir = side ?? (base <= mid ? -1 : 1);
-  const prof = route.trackProfiles?.[String(base)];
-  let lat = prof ? profileLat(prof, s) - base : 0;
+  let lat = 0;
   for (const sta of route.stations) {
     const z = islandZone(sta);
     if (z && s > z.inFrom && s < z.outTo) lat += dir * z.spread * islandShape(z, s);
@@ -187,7 +192,8 @@ export function playerPathLat(route: Route, s: number): number {
     const z = loopZone(sta)!;
     if (s > z.inFrom && s < z.outTo) lat += z.lat * loopShape(z, s);
   }
-  return lat + (route.activeLane ? profileLat(route.activeLane, s) - (route.tracks[0] ?? 0) : islandOffset(route, route.tracks[0] ?? 0, s));
+  const base = route.tracks[0] ?? 0;
+  return lat + (route.activeLane ? profileLat(route.activeLane, s) - base + stationIslandOffset(route, base, s) : islandOffset(route, base, s));
 }
 
 /** 線路側の横ずれ（種別に関係なく待避線に沿う）。s が待避線区間外なら 0 */

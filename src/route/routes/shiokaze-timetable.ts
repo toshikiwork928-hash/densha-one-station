@@ -3,10 +3,10 @@ import type { ServiceSpec } from '../types';
 
 /** 下り（桜ヶ丘 → 岬口） */
 export const TT: Record<'local' | 'express' | 'airport' | 'limited', ServiceSpec['timetable']> = {
-  local: { 0: { arr: 0, dep: 0 }, 1: { arr: 85, dep: 110 }, 2: { arr: 190, dep: 215 }, 3: { arr: 310, dep: 375 }, 4: { arr: 495, dep: 520 }, 5: { arr: 595, dep: 660 }, 6: { arr: 745, dep: 770 }, 7: { arr: 860, dep: 885 }, 8: { arr: 985, dep: 1010 }, 9: { arr: 1110 } },
-  express: { 0: { arr: 0, dep: 0 }, 1: { arr: 65 }, 2: { arr: 110 }, 3: { arr: 160 }, 4: { arr: 255, dep: 280 }, 5: { arr: 335 }, 6: { arr: 370 }, 7: { arr: 430 }, 8: { arr: 490 }, 9: { arr: 575 } },
-  airport: { 0: { arr: 0, dep: 0 }, 1: { arr: 60 }, 2: { arr: 105 }, 3: { arr: 155 }, 4: { arr: 250, dep: 275 }, 5: { arr: 330 }, 6: { arr: 365 }, 7: { arr: 420 }, 8: { arr: 480 }, 9: { arr: 565 } },
-  limited: { 0: { arr: 0, dep: 0 }, 1: { arr: 60 }, 2: { arr: 100 }, 3: { arr: 145 }, 4: { arr: 215 }, 5: { arr: 255 }, 6: { arr: 290 }, 7: { arr: 345 }, 8: { arr: 400 }, 9: { arr: 480 } },
+  local: { 0: { arr: 0, dep: 0 }, 1: { arr: 85, dep: 110 }, 2: { arr: 190, dep: 215 }, 3: { arr: 310, dep: 375 }, 4: { arr: 495, dep: 520 }, 5: { arr: 595, dep: 660 }, 6: { arr: 745, dep: 770 }, 7: { arr: 860, dep: 885 }, 8: { arr: 985, dep: 1010 }, 9: { arr: 1115 } },
+  express: { 0: { arr: 0, dep: 0 }, 1: { arr: 65 }, 2: { arr: 110 }, 3: { arr: 160 }, 4: { arr: 255, dep: 280 }, 5: { arr: 335 }, 6: { arr: 370 }, 7: { arr: 430 }, 8: { arr: 490 }, 9: { arr: 570 } },
+  airport: { 0: { arr: 0, dep: 0 }, 1: { arr: 60 }, 2: { arr: 105 }, 3: { arr: 155 }, 4: { arr: 250, dep: 275 }, 5: { arr: 330 }, 6: { arr: 365 }, 7: { arr: 420 }, 8: { arr: 480 }, 9: { arr: 555 } },
+  limited: { 0: { arr: 0, dep: 0 }, 1: { arr: 60 }, 2: { arr: 100 }, 3: { arr: 145 }, 4: { arr: 215 }, 5: { arr: 255 }, 6: { arr: 290 }, 7: { arr: 345 }, 8: { arr: 400 }, 9: { arr: 475 } },
 };
 
 /** 上り（岬口 → 桜ヶ丘） */

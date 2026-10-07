@@ -64,9 +64,8 @@ export function connectPhrase(route: Route, svc: ServiceSpec | undefined, index:
   return local?.waits?.some(w => w.station === index && w.passedBy === svc.id) ? '当駅で普通車にお乗り換えになれます。' : '';
 }
 
-/** 到着後の放送（駅名のあとに待避・乗り換え案内） */
+/** 到着後の放送（駅名のあとに待避・乗り換え案内）。番線は到着前の放送で案内済みなので言わない */
 export function arriveText(route: Route, svc: ServiceSpec | undefined, index: number): string {
   const sta = route.stations[index];
-  const tr = sta.enterLoop ? sta.loopTrack : sta.mainTrack, track = tr ? `${tr}、` : '';
-  return `${spoken(sta)}、${track}${spoken(sta)}です。${waitPhrase(route, svc, index)}${connectPhrase(route, svc, index)}`;
+  return `${spoken(sta)}、${spoken(sta)}です。${waitPhrase(route, svc, index)}${connectPhrase(route, svc, index)}`;
 }

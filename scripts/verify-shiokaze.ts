@@ -65,12 +65,22 @@ for (const route of [shiokaze, shiokazeUp]) {
   for (const distance of [1000, 600, 300, 120, 50, 0]) assert.equal(terminalSpeedLimit(route, target, stop - distance), Infinity);
   const sakai = route.id === 'shiokaze';
   for (const service of ['local', 'express', 'airport', 'limited'] as ServiceId[]) {
-    const ctx = context(route, service), sta = ctx.route.stations[target], loop = sakai ? service !== 'local' : service === 'local';
-    assert.equal(!!sta.enterLoop, loop, `${route.id}/${service}終着の待避線入線`);
-    assert.equal(sta.enterLoop ? sta.loopTrack : sta.mainTrack ?? '', sakai ? (service === 'local' ? '3番線' : '4番線') : (loop ? '1番線' : ''), `${route.id}/${service}終着の番線名`);
-    const z = loopZone(sta)!;
-    assert.equal(ctx.track.limitAt(z.inFrom + 10), loop ? 45 : ctx.route.lineLimit, `${route.id}/${service}終着入線の制限`);
-    assert.equal(ctx.track.limitAt(stop - 40) <= (loop ? 45 : 999), true);
+    const ctx = context(route, service), sta = ctx.route.stations[target];
+    if (sakai) {
+      // 堺（上りの終着）: 普通は内側の3番線（分岐器制限45km/h）、優等は外側の4番線（直進・制限なし）
+      assert.ok(!sta.loop && !sta.enterLoop, `${route.id}/${service}堺は待避線の仕組みを使わない`);
+      assert.equal(sta.mainTrack, service === 'local' ? '3番線' : '4番線', `${route.id}/${service}終着の番線名`);
+      assert.equal(ctx.track.limitAt(sta.platform.from - 30), service === 'local' ? 45 : ctx.route.lineLimit, `${route.id}/${service}終着入線の制限`);
+      assert.ok(Math.abs(ctx.track.pathLat(sta.stopS) - (service === 'local' ? 9.4 : 0)) < 1e-6, `${route.id}/${service}堺の走行線`);
+      assert.equal(sta.platform.side, service === 'local' ? 'L' : 'R');
+    } else {
+      const loop = service === 'local';
+      assert.equal(!!sta.enterLoop, loop, `${route.id}/${service}終着の待避線入線`);
+      assert.equal(sta.enterLoop ? sta.loopTrack : sta.mainTrack ?? '', loop ? '1番線' : '', `${route.id}/${service}終着の番線名`);
+      const z = loopZone(sta)!;
+      assert.equal(ctx.track.limitAt(z.inFrom + 10), loop ? 45 : ctx.route.lineLimit, `${route.id}/${service}終着入線の制限`);
+      assert.equal(ctx.track.limitAt(stop - 40) <= (loop ? 45 : 999), true);
+    }
     ctx.state.target = target;
     let eb = 0; const ats = createSignalSystem(ctx, () => eb++);
     ctx.state.train.s = stop - 40; ctx.state.train.v = 25 / 3.6; ctx.state.nextSignal = -1; ats.update(1 / 60, true);
@@ -122,7 +132,9 @@ for (const source of [shiokaze, shiokazeUp, mountain, mountainUp]) {
     const ctx = context(source, service), game = createGame(ctx);
     const observedWaits = new Set<number>(), observedSidings = new Set<number>();
     let heldStation = -1, zoneMax = 0;
-    const finalSta = ctx.route.stations.at(-1)!, finalZone = loopZone(finalSta)!;
+    const finalSta = ctx.route.stations.at(-1)!;
+    // 堺（custom）は3番線の分岐器の区間（ホームの 140m 手前〜）
+    const finalZone = loopZone(finalSta) ?? { inFrom: finalSta.platform.from - 160, outTo: finalSta.platform.to + 130 };
     attachAutodrive(ctx, (sec, dt = 1 / 30, hook) => {
       for (let t = 0; t < sec; t += dt) {
         if (hook?.()) break; game.update(dt);
@@ -152,7 +164,7 @@ for (const source of [shiokaze, shiokazeUp, mountain, mountainUp]) {
     assert.ok(Math.abs(ctx.state.train.s - ctx.route.stations.at(-1)!.stopS) < 15, `${source.id}/${service}終着停止`);
     if (source.theme === 'coast') {
       console.log(`  終着入線 ${service}: 入線区間の最高速 ${zoneMax.toFixed(1)}km/h 番線案内=${result.log.some((l: string) => l.includes('入線'))}`);
-      const intoLoop = finalSta.loopPriority ? service !== 'local' : service === 'local', track = intoLoop ? finalSta.loopTrack : finalSta.mainTrack;
+      const intoLoop = service === 'local', track = finalSta.enterLoop ? finalSta.loopTrack : finalSta.mainTrack;
       if (intoLoop) assert.ok(zoneMax <= 45 + 1, `${source.id}/${service}終着の待避線入線で45km/h制限を保持`);
       if (track) assert.ok(result.log.some((l: string) => l.includes(`${track}へ入線`)), `${source.id}/${service}終着の番線予告バナー`);
       else assert.ok(!result.log.some((l: string) => l.includes('入線')), `${source.id}/${service}は入線案内なし`);
@@ -296,7 +308,7 @@ for (const [route, parts] of [[throughUp, [shiokazeUp, kishiwada]], [through, [k
 for (const source of [kishiwada, kishiwadaUp, throughUp, through]) {
   for (const service of ['local', 'express', 'airport', 'limited', 'southern'] as const) {
     const ctx = context(source, service), game = createGame(ctx);
-    const finalSta = ctx.route.stations.at(-1)!, finalZone = loopZone(finalSta)!;
+    const finalSta = ctx.route.stations.at(-1)!, finalZone = loopZone(finalSta) ?? { inFrom: finalSta.platform.from - 160, outTo: finalSta.platform.to + 130 };
     let zoneMax = 0;
     const observedWaits = new Set<number>(), stopT: Record<number, number> = {}, arriveT: Record<number, number> = {};
     attachAutodrive(ctx, (sec, dt = 1 / 30, hook) => {
@@ -322,7 +334,7 @@ for (const source of [kishiwada, kishiwadaUp, throughUp, through]) {
     assert.equal(result.overspeed, 0, `${source.id}/${service}速度超過なし`);
     assert.ok(Math.abs(ctx.state.train.s - finalSta.stopS) < 15, `${source.id}/${service}終着停止`);
     assert.equal(ctx.state.stops.length, ctx.route.services!.find(s => s.id === service)!.stops.length - 1, `${source.id}/${service}停車駅数`);
-    if (finalSta.loopPriority ? service !== 'local' : service === 'local') assert.ok(zoneMax <= 46, `${source.id}/${service}終着の待避線へ45km/hで入線`);
+    if (service === 'local') assert.ok(zoneMax <= 46, `${source.id}/${service}終着の待避線へ45km/hで入線`);
     const waits = [...new Set(ctx.route.services!.find(v => v.id === 'local')!.waits?.map(w => w.station) ?? [])];
     assert.deepEqual([...observedWaits], service === 'local' ? waits : [], `${source.id}/${service}普通の待避`);
     for (const k of Object.keys(stopT)) {
@@ -340,9 +352,9 @@ console.log('泉大津〜岸和田・堺〜岸和田（5種別×上下）・サ�
   assert.equal(route.stations.length, 9);
   assert.equal(route.stations[8].stopS - route.stations[0].stopS, 9800, '堺〜難波 9.8km');
   assert.ok(route.stations[8].headEnd, '難波は頭端式');
-  // 堺の形は堺〜泉大津（上りの終着）と同じ
+  // 堺の形は堺〜泉大津（上りの終着）と同じ（route/sakai-layout.ts）
   const sakai = route.stations[0], sakaiS = shiokaze.stations[9];
-  assert.deepEqual(sakai.loop, sakaiS.loop); assert.equal(sakai.loopPriority, true);
+  assert.deepEqual(sakai.customPlatforms, sakaiS.customPlatforms);
   assert.equal(sakai.platform.to - sakai.platform.from, sakaiS.platform.to - sakaiS.platform.from);
   for (const st of route.stations) {
     const { from, to } = st.platform, phi = t.trackAt(from).phi, y = t.trackAt(from).y;
@@ -355,8 +367,10 @@ console.log('泉大津〜岸和田・堺〜岸和田（5種別×上下）・サ�
   for (const v of route.services!) {
     const r = structuredClone(route), sv = applyService(r, v.id)!, tr = buildTrack(r), stop = r.stations[8].stopS;
     assert.ok(Math.abs(tr.pathLat(stop) - want[v.id]) < 1e-6, `namba/${v.id}の番線（横位置 ${tr.pathLat(stop)}）`);
-    // 普通は緩行線（住吉大社で -5.4）、優等は急行線（4）
-    assert.ok(Math.abs(tr.pathLat(r.stations[3].stopS) - (v.id === 'local' ? -5.4 : 4)) < 1e-6, `namba/${v.id}の複々線の走行線`);
+    // 普通は内側の緩行線（住吉大社で 9.4、堺は3番線 9.4）、優等は外側の急行線（0、堺は4番線）
+    assert.ok(Math.abs(tr.pathLat(r.stations[3].stopS) - (v.id === 'local' ? 9.4 : 0)) < 1e-6, `namba/${v.id}の複々線の走行線`);
+    assert.ok(Math.abs(tr.pathLat(r.stations[0].stopS) - (v.id === 'local' ? 9.4 : 0)) < 1e-6, `namba/${v.id}の堺の番線`);
+    assert.equal(tr.limitAt(r.stations[0].stopS + 100), v.id === 'local' ? 45 : r.lineLimit, `namba/${v.id}の堺の分岐器制限`);
     assert.equal(sv.destination, 'なんば');
     const ap = approachText(r, 8, sv);
     assert.ok(ap.includes('終点、ナンバ、') && ap.includes(`${({ local: 7, express: 6, airport: 6, southern: 5, limited: 9 } as Record<ServiceId, number>)[v.id]}番線`), ap);

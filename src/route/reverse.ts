@@ -2,7 +2,7 @@
 // 自列車は下りの対向線（横位置 4）を走るが、進行方向から見ると左側の線路なので横位置はそのまま [0, 4] で表せる（駅・待避線は左右対称）
 import { islandZone, loopZone } from './service';
 import { stopScenes, type StopScene } from './oncoming-stops';
-import type { Route, ServiceSpec, Sign, SpeedLimit, Station } from './types';
+import type { LatProfile, Route, ServiceSpec, Sign, SpeedLimit, Station } from './types';
 
 /** 下りの全長（線形要素の合計） */
 const totalLength = (r: Route) => r.segments.reduce((a, g) => a + (g.type === 'straight' ? g.length : g.radius * g.angle), 0);
@@ -44,6 +44,9 @@ export function reverseRoute(down: Route, opt: {
   /** 駅の距離標・停止位置目標（既定は 6両基準の南海本線の形） */ signs?: (stopS: number) => Sign[];
 }): Route {
   const L = totalLength(down), m = (s: number) => L - s;
+  // 横位置の鏡像: 逆向きの自線（横位置 0）は元の対向線の位置。lat' = C − lat（C = 線路の左右の和）
+  const C = Math.min(...down.tracks) + Math.max(...down.tracks);
+  const mirror = (p: LatProfile): LatProfile => [...p].reverse().map(([s, l]) => [m(s), C - l] as [number, number]);
   const n = down.stations.length, ri = (i: number) => n - 1 - i;
   // 標高: 下りの終点側の標高から始める
   let endY = down.elevation0 ?? 0;
@@ -53,8 +56,13 @@ export function reverseRoute(down: Route, opt: {
     // 単線: ホーム・副線は物理的に片側にあるので、逆向きでは左右が入れ替わる
     const single = !!down.singleTrack;
     const island = st.island && { ...st.island, ...(st.island.bay ? { bay: { ...st.island.bay, lat: -st.island.bay.lat, bumper: st.island.bay.bumper === 'behind' ? 'ahead' as const : 'behind' as const } } : {}) };
+    const customPlatforms = st.customPlatforms?.map(p => ({
+      ...p, lat: C - p.lat,
+      ...(p.from != null || p.to != null ? { from: p.to != null ? m(p.to) : undefined, to: p.from != null ? m(p.from) : undefined } : {}),
+      ...(p.kind === 'side' ? { side: p.side === 'L' ? 'R' as const : 'L' as const } : {}),
+    })) as Station['customPlatforms'];
     return {
-      ...st, platform: { ...st.platform, from, to, side: single && !st.island ? (st.platform.side === 'L' ? 'R' as const : 'L' as const) : st.platform.side },
+      ...st, ...(customPlatforms ? { customPlatforms } : {}), platform: { ...st.platform, from, to, side: single && !st.island ? (st.platform.side === 'L' ? 'R' as const : 'L' as const) : st.platform.side },
       stopS: to - ahead, scheduledArrival: 0, dwell: undefined, pass: undefined, ...(island ? { island } : {}),
     };
   });
@@ -63,7 +71,8 @@ export function reverseRoute(down: Route, opt: {
     const a = m(Lm.to - len), b = m(Lm.from); // 曲線区間そのもの
     return { ...Lm, from: a, to: b + len };
   }).sort((p, q) => p.from - q.from);
-  const services: ServiceSpec[] = (down.services ?? []).map(v => ({
+  // 走行線・番線・ドアの側は向きごとに違うので写さない（逆向きの路線データで指定する）
+  const services: ServiceSpec[] = (down.services ?? []).map(({ lane: _l, laneLimits: _ll, platformSides: _ps, trackNames: _tn, ...v }) => ({
     ...v,
     stops: v.stops.map(ri).sort((a, b) => a - b),
     waits: v.waits?.map(w => ({ ...w, station: ri(w.station) })),
@@ -125,6 +134,12 @@ export function reverseRoute(down: Route, opt: {
     crossings,
     structures,
     ...(down.seaSide ? { seaSide: -down.seaSide as 1 | -1 } : {}),
+    ...(down.trackProfiles ? { trackProfiles: Object.fromEntries(down.tracks.map(c => [String(C - c), mirror(down.trackProfiles![String(c)] ?? [[0, c]])])) } : {}),
+    ...(down.extraTracks ? { extraTracks: down.extraTracks.map(x => ({ ...x, lat: mirror(x.lat), from: m(x.to), to: m(x.from), ...(x.bumpers ? { bumpers: x.bumpers.map(m) } : {}),
+      ...(x.deckSpan ? { deckSpan: [-x.deckSpan[1], -x.deckSpan[0]] as [number, number] } : {}), ...(x.poleOffset != null ? { poleOffset: -x.poleOffset } : {}) })) } : {}),
+    ...(down.reserved ? { reserved: down.reserved.map(z => ({ ...z, from: m(z.to), to: m(z.from), lat0: C - z.lat1, lat1: C - z.lat0 })) } : {}),
+    ...(down.deckJoin ? { deckJoin: down.deckJoin.map(z => ({ from: m(z.to), to: m(z.from) })) } : {}),
+    activeLane: undefined,
     coastalLandmarks: down.coastalLandmarks?.map(l => ({ ...l, reversed: !(l.reversed ?? down.id.endsWith('-up')), s: m(l.s), side: -(l.side ?? -1) as 1 | -1, direction: -(l.direction ?? -1) as 1 | -1 })),
   };
 }

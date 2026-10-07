@@ -2,7 +2,7 @@
 // a の終着駅のホーム泉大津側の端と b の始発駅のホームの端をそろえ、b の位置を offset だけずらす。
 // 線形は a を境目の駅の手前（ホームの端、直線）で切り、そこから b の線形を続ける（どちらも境目の駅は直線なので方位はつながる）。
 import { seaSideOf } from './service';
-import type { Route, ServiceSpec, Sign, Station } from './types';
+import type { LatProfile, Route, ServiceSpec, Sign, Station } from './types';
 
 const segLen = (r: Route) => r.segments.reduce((a, g) => a + (g.type === 'straight' ? g.length : g.radius * g.angle), 0);
 
@@ -48,9 +48,30 @@ export function concatRoutes(a: Route, b: Route, opt: ConcatOptions): Route {
   // 境目の駅は a のもの（途中駅として停車・通過。停車時間は種別適用で決まる）
   const stations: Station[] = [
     ...a.stations.map(s => ({ ...s, platform: { ...s.platform } })),
-    ...b.stations.slice(1).map(s => ({ ...s, stopS: sh(s.stopS), platform: { ...s.platform, from: sh(s.platform.from), to: sh(s.platform.to) } })),
+    ...b.stations.slice(1).map(s => ({
+      ...s, stopS: sh(s.stopS), platform: { ...s.platform, from: sh(s.platform.from), to: sh(s.platform.to) },
+      ...(s.customPlatforms ? { customPlatforms: s.customPlatforms.map(p => ({ ...p, ...(p.from != null ? { from: sh(p.from) } : {}), ...(p.to != null ? { to: sh(p.to) } : {}) })) } : {}),
+    })),
   ];
   const joinS = joinA.platform.from; // ここで a の線形を切って b へ
+  // 横位置の折れ線: 境目より前は a、後は b（境目の駅はどちらも基準の横位置）
+  const joinProfile = (pa: LatProfile | undefined, pb: LatProfile | undefined, base: number): LatProfile | undefined => {
+    if (!pa && !pb) return undefined;
+    return [...(pa ?? [[-1e6, base]]).filter(([q]) => q < joinS - 1), [joinS, base], ...(pb ?? [[1e6, base]]).map(([q, l]) => [sh(q), l] as [number, number]).filter(([q]) => q > joinS + 1)];
+  };
+  const profiles: Record<string, LatProfile> = {};
+  for (const c of a.tracks) { const pr = joinProfile(a.trackProfiles?.[String(c)], b.trackProfiles?.[String(c)], c); if (pr) profiles[String(c)] = pr; }
+  // 種別ごとの走行線・制限・番線・ドアの側（区間データの同じ種別から）。駅 index は b を通しの index へ
+  const ib0 = (i: number) => i + na - 1;
+  const services = opt.services.map(v => {
+    const av = a.services?.find(x => x.id === v.id), bv = b.services?.find(x => x.id === v.id);
+    const lane = v.lane ?? joinProfile(av?.lane, bv?.lane, a.tracks[0]);
+    const laneLimits = v.laneLimits ?? [...(av?.laneLimits ?? []), ...(bv?.laneLimits ?? []).map(L => ({ ...L, from: sh(L.from), to: sh(L.to) }))];
+    const remap = <T,>(ra?: Record<number, T>, rb?: Record<number, T>) => ra || rb ? { ...ra, ...Object.fromEntries(Object.entries(rb ?? {}).filter(([k]) => +k > 0).map(([k, x]) => [ib0(+k), x])) } : undefined;
+    const platformSides = v.platformSides ?? remap(av?.platformSides, bv?.platformSides);
+    const trackNames = v.trackNames ?? remap(av?.trackNames, bv?.trackNames);
+    return { ...v, ...(lane ? { lane } : {}), ...(laneLimits.length ? { laneLimits } : {}), ...(platformSides ? { platformSides } : {}), ...(trackNames ? { trackNames } : {}) };
+  });
   const total = joinS + segLen(b);
   const clipZones = (z: { from: number; to: number }[], lo: number, hi: number) =>
     z.map(q => ({ from: Math.max(q.from, lo), to: Math.min(q.to, hi) })).filter(q => q.from < q.to);
@@ -68,7 +89,14 @@ export function concatRoutes(a: Route, b: Route, opt: ConcatOptions): Route {
       ...b.limits.map(L => ({ ...L, from: sh(L.from), to: sh(L.to) })),
     ],
     stations,
-    services: opt.services,
+    services,
+    ...(Object.keys(profiles).length ? { trackProfiles: profiles } : {}),
+    ...(a.extraTracks || b.extraTracks ? { extraTracks: [
+      ...(a.extraTracks ?? []).filter(x => x.from < joinS),
+      ...(b.extraTracks ?? []).map(x => ({ ...x, lat: x.lat.map(([q, l]) => [sh(q), l] as [number, number]), from: sh(x.from), to: sh(x.to), ...(x.bumpers ? { bumpers: x.bumpers.map(sh) } : {}) })),
+    ] } : {}),
+    ...(a.reserved || b.reserved ? { reserved: [...(a.reserved ?? []), ...(b.reserved ?? []).map(z => ({ ...z, from: sh(z.from), to: sh(z.to) }))] } : {}),
+    ...(a.deckJoin || b.deckJoin ? { deckJoin: [...(a.deckJoin ?? []), ...(b.deckJoin ?? []).map(z => ({ from: sh(z.from), to: sh(z.to) }))] } : {}),
     prevName: a.prevName, nextName: b.nextName,
     signs: stations.slice(1).flatMap(st => opt.signs(st.stopS)),
     extent: { from: a.extent.from, to: Math.min(sh(b.extent.to), total + 400) },
