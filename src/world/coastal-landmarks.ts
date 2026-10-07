@@ -5,6 +5,7 @@ import type { GameContext } from '../core/context';
 import { GeoBatch, M, P } from './batch';
 import { cullByDistance } from './cull';
 import { getTerrain } from './terrain';
+import { islandOffset } from '../route/service';
 import { buildTower } from './coastal-tower';
 import { buildTwinTower } from './izumiotsu-towers';
 import { buildHankaiTram } from './hankai-tram';
@@ -83,10 +84,22 @@ function crossing(ctx: GameContext, b: GeoBatch, st: Landmark): void {
 }
 
 /** 既存 buildStructures の川面・橋脚・床版に、上部鋼トラスだけを追加。 */
-function truss(ctx: GameContext, b: GeoBatch, st: Landmark): void {
+function truss(ctx: GameContext, b: GeoBatch, st: Landmark, edges?: [number, number]): void {
   const steel = ctx.route.bridgeStyle?.color ?? COLOR.steel;
+  if (edges) { trussSpan(ctx, b, st, edges[0], edges[1], steel); return; }
+  // 線路の横位置（route.trackProfiles）。上下線が 7m 以上離れる所は単線のトラスを線路ごとに
+  const lats = ctx.route.tracks.map(c => c + islandOffset(ctx.route, c, st.s)).sort((a, z) => a - z);
+  if (lats[lats.length - 1] - lats[0] > 7) {
+    for (const l of lats) truss(ctx, b, { ...st, kind: 'steel-bridge' }, [l - 2.7, l + 2.7]);
+    return;
+  }
+  const left = lats[0] - 3.4, right = lats[lats.length - 1] + 3.4;
+  trussSpan(ctx, b, st, left, right, steel);
+}
+
+/** 鋼トラス1連（left / right = 両側の主構の横位置） */
+function trussSpan(ctx: GameContext, b: GeoBatch, st: Landmark, left: number, right: number, steel: number): void {
   const length = st.length ?? 170, from = st.s - length / 2, to = st.s + length / 2;
-  const left = Math.min(...ctx.route.tracks) - 3.4, right = Math.max(...ctx.route.tracks) + 3.4;
   const point = (s: number, lat: number, y: number) => ctx.track.at(s, lat, y);
   const count = Math.max(2, Math.ceil(length / 18));
   for (let i = 0; i < count; i++) {

@@ -4,7 +4,7 @@ import type { GameContext } from '../core/context';
 import { GeoBatch, M, P } from './batch';
 import { extrudeAlong, extrudeFn, loopTracks } from './track-mesh';
 import { coastalThirdTracks } from './coastal-stations';
-import { customPlatformEdges, islandShape, islandZones, profileLat, trackSpan } from '../route/service';
+import { customPlatformEdges, islandOffset, islandShape, islandZones, profileLat, trackSpan } from '../route/service';
 import { TUNNEL_CENTER, TUNNEL_HALF, TUNNEL_WALL_H, getTerrain, gridAlong } from './terrain';
 import { BAND_CULL, isMountain } from './mountain-terrain';
 import { cullByDistance } from './cull';
@@ -108,6 +108,11 @@ export function buildStructures(ctx: GameContext): void {
       buildMountainSpan(ctx, MT, st, batch);
     } else {
       const bridge = st.kind === 'bridge';
+      // 上下線が別々の単線橋（split）: 線路ごとに床版・主桁・高欄・橋脚。それ以外は1枚の床版
+      const decks: ((s: number) => [number, number])[] = st.split
+        ? route.tracks.map(c => (s: number): [number, number] => { const l = c + islandOffset(route, c, s); return [l - 2.6, l + 2.6]; })
+        : [bounds];
+      for (const bounds of decks) {
       // 床版・地覆・高欄
       const [L0, L1] = bounds((st.from + st.to) / 2);
       scene.add(extrudeFn(track, s => { const [a, b] = bounds(s); return [[a, .02], [a, -1.1], [b, -1.1], [b, .02]]; }, st.from, st.to, 2, concrete));
@@ -160,7 +165,11 @@ export function buildStructures(ctx: GameContext): void {
           }
           sb.build({ bstiff: steel }, scene);
         }
-        for (const c of route.tracks) scene.add(extrudeAlong(track, [[c - 1.1, -1.1], [c - 1.1, -2.9], [c + 1.1, -2.9], [c + 1.1, -1.1]], st.from + 2, st.to - 2, 5, steel));
+        for (const c of route.tracks) {
+          const lc = (q: number) => c + islandOffset(route, c, q), [b0, b1] = bounds((st.from + st.to) / 2);
+          if (lc((st.from + st.to) / 2) < b0 || lc((st.from + st.to) / 2) > b1) continue;
+          scene.add(extrudeFn(track, q => { const l = lc(q); return [[l - 1.1, -1.1], [l - 1.1, -2.9], [l + 1.1, -2.9], [l + 1.1, -1.1]]; }, st.from + 2, st.to - 2, 5, steel));
+        }
         for (const l of [L0 + .1, L1 - .1]) scene.add(extrudeAlong(track, [[l - .05, 1.05], [l - .05, 1.15], [l + .05, 1.15], [l + .05, 1.05]], st.from, st.to, 5, steel));
         for (let s = st.from; s <= st.to; s += 2.5) for (const l of [L0 + .1, L1 - .1]) {
           const t = track.trackAt(s), p = track.at(s, l, .55);
@@ -168,6 +177,9 @@ export function buildStructures(ctx: GameContext): void {
         }
         // 橋脚（川の中は小判形）
         for (let s = st.from + 40; s < st.to - 20; s += 45) pier(batch, ctx, s, 2.9, true, bounds(s));
+      }
+      }
+      if (bridge) {
         // 川面
         const c = (st.from + st.to) / 2, w = (st.to - st.from) * .7;
         const water = new THREE.MeshPhongMaterial({ color: 0x3c6577, shininess: 90, specular: 0x8899aa });
@@ -240,7 +252,7 @@ function pier(b: GeoBatch, ctx: GameContext, s: number, beamDepth: number, river
   const [left, right] = edges, c = (left + right) / 2;
   if (river) {
     const p = ctx.track.at(s, c, 0);
-    b.add('concrete', P.cyl, M(p.x, g + h / 2, p.z, -t.phi, 9, h, 2.4), 0xffffff);
+    b.add('concrete', P.cyl, M(p.x, g + h / 2, p.z, -t.phi, Math.min(9, right - left + 1), h, 2.4), 0xffffff);
     return;
   }
   const columns = [left + 1.7, right - 1.7];

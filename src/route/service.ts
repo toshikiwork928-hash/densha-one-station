@@ -177,6 +177,16 @@ export function customPlatformEdges(route: Route, s: number, margin = 0): [numbe
   return lo <= hi ? [lo, hi] : null;
 }
 
+/** custom 駅で横位置 own の線路に面するホームの側（無ければ null）。島式は線路中心からホーム端 1.7m */
+export function customPlatformSide(sta: Station, own: number): 'L' | 'R' | null {
+  for (const p of sta.customPlatforms ?? []) {
+    if (p.kind === 'side') { if (Math.abs(p.lat - own) < .3) return p.side; continue; }
+    if (Math.abs(p.lat - p.width / 2 - 1.7 - own) < .3) return 'R';
+    if (Math.abs(p.lat + p.width / 2 + 1.7 - own) < .3) return 'L';
+  }
+  return null;
+}
+
 /** 路線の待避線区間一覧（station index 付き） */
 export function loopZones(route: Route): (LoopZone & { index: number })[] {
   const out: (LoopZone & { index: number })[] = [];

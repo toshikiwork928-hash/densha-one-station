@@ -9,7 +9,7 @@ import { shiokaze, shiokazeUp } from '../src/route/routes/shiokaze';
 import { mountain, mountainUp } from '../src/route/routes/mountain';
 import { kishiwada, kishiwadaUp } from '../src/route/routes/kishiwada';
 import { through, throughUp } from '../src/route/routes/through';
-import { namba } from '../src/route/routes/namba';
+import { namba, nambaUp } from '../src/route/routes/namba';
 import { buildTrack } from '../src/route/track';
 import { applyService } from '../src/route/service';
 import type { Route, ServiceId } from '../src/route/types';
@@ -69,11 +69,12 @@ async function build(ctx: GameContext): Promise<void> {
   buildCrossings(ctx, fakeOncoming);
   // 堺〜難波の専用景観（電車を除く）
   // 車両モデルのモジュールは読込時に canvas を使うので、DOM スタブの後に動的に読む
-  if (ctx.route.id === 'namba') {
-    (await import('../src/world/namba-terminal')).buildNambaTerminal(ctx);
-    (await import('../src/world/suminoe-depot')).buildSuminoeDepot(ctx);
-    (await import('../src/world/namba-landmarks')).buildNambaLandmarks(ctx);
-    (await import('../src/world/koya-traffic')).buildKoyaPlatforms(ctx);
+  const nctx = (await import('../src/world/namba-frame')).nambaFrame(ctx);
+  if (nctx) {
+    (await import('../src/world/namba-terminal')).buildNambaTerminal(nctx);
+    (await import('../src/world/suminoe-depot')).buildSuminoeDepot(nctx);
+    (await import('../src/world/namba-landmarks')).buildNambaLandmarks(nctx);
+    (await import('../src/world/koya-traffic')).buildKoyaPlatforms(nctx);
   }
   placeScenery(ctx, prepareSceneryModels({} as any), town.trees);
 }
@@ -84,7 +85,7 @@ const routeFilter = option('route'), serviceFilter = option('service');
 const cases: [Route, ServiceId[]][] = [[shiokaze, ['local', 'express', 'airport', 'limited']], [shiokazeUp, ['local', 'express', 'airport', 'limited']], [mountain, ['local']], [mountainUp, ['local']],
   [kishiwada, ['local', 'express', 'airport', 'southern']], [kishiwadaUp, ['local', 'express', 'airport', 'southern']],
   [throughUp, ['local', 'airport', 'southern']], [through, ['local', 'airport', 'southern']],
-  [namba, ['local', 'express', 'southern', 'limited']]];
+  [namba, ['local', 'express', 'southern', 'limited']], [nambaUp, ['local', 'express', 'southern', 'limited']]];
 let total = 0;
 let checked = 0;
 for (const [src, services] of cases) {

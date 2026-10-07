@@ -5,7 +5,13 @@ import { stopScenes, type StopScene } from './oncoming-stops';
 import type { LatProfile, Route, ServiceSpec, Sign, SpeedLimit, Station } from './types';
 
 /** 下りの全長（線形要素の合計） */
-const totalLength = (r: Route) => r.segments.reduce((a, g) => a + (g.type === 'straight' ? g.length : g.radius * g.angle), 0);
+export const totalLength = (r: Route) => r.segments.reduce((a, g) => a + (g.type === 'straight' ? g.length : g.radius * g.angle), 0);
+
+/** 元の向きの横位置の折れ線を、reverseRoute で作った逆向きの座標へ写す（s' = 全長 − s、lat' = 線路の左右の和 − lat） */
+export function mirrorProfile(down: Route, p: LatProfile): LatProfile {
+  const L = totalLength(down), C = Math.min(...down.tracks) + Math.max(...down.tracks);
+  return [...p].reverse().map(([s, l]) => [L - s, C - l] as [number, number]);
+}
 
 /** 距離標（6両停止位置基準）と 4両・6両の停止位置目標 */
 const approachSigns = (stopS: number): Sign[] => [

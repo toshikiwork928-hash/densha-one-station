@@ -5,7 +5,7 @@ import { shiokaze, shiokazeUp } from '../src/route/routes/shiokaze';
 import { mountain, mountainUp } from '../src/route/routes/mountain';
 import { kishiwada, kishiwadaUp } from '../src/route/routes/kishiwada';
 import { through, throughUp } from '../src/route/routes/through';
-import { namba, NAMBA_TRACKS } from '../src/route/routes/namba';
+import { namba, nambaUp, NAMBA_TRACKS } from '../src/route/routes/namba';
 import { approachText, departText } from '../src/audio/announce-text';
 import { applyService, destOf } from '../src/route/service';
 import { buildTrack } from '../src/route/track';
@@ -390,4 +390,30 @@ console.log('泉大津〜岸和田・堺〜岸和田（5種別×上下）・サ�
     assert.equal(ctx.state.stops.length, ctx.route.services!.find(s => s.id === service)!.stops.length - 1, `namba/${service}停車駅数`);
   }
   console.log('堺〜難波（5種別）チェック成功');
+}
+// なんば → 堺（下り）: 発車番線・堺の入線番線（普通 1番線 45km/h、優等 2番線）、5種別の完走
+{
+  const route = nambaUp, n = route.stations.length;
+  assert.equal(n, 9); assert.ok(route.stations[0].headEnd, '始発のなんばは頭端式');
+  const dep: Record<ServiceId, number> = { local: 7, express: 6, airport: 6, southern: 5, limited: 9 };
+  for (const v of route.services!) {
+    const r = structuredClone(route), sv = applyService(r, v.id)!, tr = buildTrack(r);
+    assert.ok(Math.abs(tr.pathLat(r.stations[0].stopS) - (4 - NAMBA_TRACKS[dep[v.id] as 9 | 7 | 6 | 5])) < 1e-6, `namba-up/${v.id}の発車番線`);
+    assert.ok(Math.abs(tr.pathLat(r.stations[n - 1].stopS) - (v.id === 'local' ? 4 - 22.8 : 4 - 13.4)) < 1e-6, `namba-up/${v.id}の堺の番線`);
+    assert.equal(r.stations[n - 1].mainTrack, v.id === 'local' ? '1番線' : '2番線');
+    assert.equal(tr.limitAt(r.stations[n - 1].platform.from - 30), v.id === 'local' ? 45 : r.lineLimit, `namba-up/${v.id}の堺の分岐器制限`);
+    assert.ok(!sv.waits?.length, '普通の待避なし');
+  }
+  for (const service of ['local', 'express', 'airport', 'limited', 'southern'] as const) {
+    const ctx = context(route, service), game = createGame(ctx);
+    attachAutodrive(ctx, (sec, dt = 1 / 30, hook) => { for (let q = 0; q < sec; q += dt) { if (hook?.()) break; game.update(dt); } });
+    const result = (globalThis as any).window.__qa.run(service, 'all', 3600);
+    if (ctx.state.penalties.atsBrake) console.log((result.log ?? []).filter((l: string) => /ATS|非常/.test(l)).slice(0, 6).join(' | '));
+    console.log(JSON.stringify({ route: route.id, service, state: ctx.state.state, time: result.t, ats: ctx.state.penalties.atsBrake, overspeed: ctx.state.overspeed, stops: ctx.state.stops.length }));
+    assert.equal(ctx.state.state, 'result', `namba-up/${service}完走`);
+    assert.equal(ctx.state.penalties.atsBrake, 0, `namba-up/${service}ATS非常制動なし`);
+    assert.equal(result.overspeed, 0, `namba-up/${service}速度超過なし`);
+    assert.ok(Math.abs(ctx.state.train.s - ctx.route.stations[n - 1].stopS) < 15, `namba-up/${service}終着停止`);
+  }
+  console.log('なんば〜堺（下り・5種別）チェック成功');
 }

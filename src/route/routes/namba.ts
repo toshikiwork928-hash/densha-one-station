@@ -6,7 +6,7 @@
 //
 // 横位置（左が負。route.tracks の 0 = 上り本線、4 = 下り本線）。配線略図.net の図と OSM、ユーザーの指摘（2026-10-07）による:
 //   堺: 上りは外側の4番線が本線（直進、優等）、内側の3番線が分岐側（普通、45km/h）。route/sakai-layout.ts
-//   七道: 島式1面2線（線路がホームの両側へ開く）
+//   七道: 島式1面2線。ホームの幅（線間 9.4m）のまま大和川を上下別々の単線橋で渡り、住ノ江の手前で複々線になる
 //   住ノ江〜岸里玉出: 複々線。上りは 急行線 0（外側・左端、堺から直進）・緩行線 9.4、下りは 緩行線 13.4・急行線 22.8（外側）。
 //     普通は内側の緩行線（住ノ江・住吉大社・粉浜は3番線）、優等は外側の急行線。島式ホームは急行線と緩行線の間。住ノ江の西（左）に住ノ江検車区
 //   岸里玉出: 島式ホームは上りの緩行線と下りの線の間（優等は外側の急行線を通過）。上りは駅を過ぎてから緩行線が急行線へ合流（なんば側まで複々線）、
@@ -15,10 +15,11 @@
 //     萩ノ茶屋・今宮戎は高野線だけの島式ホーム（本線は通過、ホームなし）。新今宮は JR の上を越えるため高い
 //   なんば: 頭端式 9面8線。左から 9番線（8番線併用。特急ラピート）・7番線（普通）・6番線（急行・空港急行）・5番線（特急サザン）・4〜1番線（高野線）
 import type { ExtraTrack, LatProfile, Route, ServiceSpec, Sign, Station } from '../types';
-import { airportService, setDestinations } from '../service';
+import { airportService, customPlatformSide, profileLat, setDestinations } from '../service';
+import { mirrorProfile, reverseRoute, totalLength } from '../reverse';
 import { stopScenes, type StopScene } from '../oncoming-stops';
 import { sakaiLayout } from '../sakai-layout';
-import { NB } from './namba-timetable';
+import { NB, NB_UP } from './namba-timetable';
 
 /** 停止位置（6両基準。ホームは stopS − 180 〜 + 40） */
 const STOPS = [180, 1780, 3280, 4280, 4880, 6080, 6980, 8580, 9980];
@@ -42,12 +43,12 @@ const bow = (i: number, base: number, off: number, len = 100): LatProfile => {
 /** 複々線の横位置: 上り緩行線・下り緩行線・下り急行線（上り急行線は 0） */
 export const QUAD = { upLocal: 9.4, downLocal: 13.4, downExpress: 22.8 } as const;
 const SAKAI = sakaiLayout(plat(0).from);
-/** 七道の島式ホーム: 上下線がホームの両側へ開く */
-const SHICHIDO_UP = bow(1, 0, -2.7), SHICHIDO_DOWN = bow(1, 4, 2.7);
-/** 上り本線（複々線では上り急行線。堺から直進） */
-const UP: LatProfile = [[-1000, 0], ...SHICHIDO_UP, [9600, 0], [9760, -6], [11000, -6]]; // 難波 7番線
+/** 七道〜住ノ江: 七道の島式ホームの手前で下り線が外へ開き（線間 9.4m）、そのまま大和川を別々の単線橋で渡って、住ノ江の手前で複々線へ */
+const SHICHIDO_DOWN: LatProfile = [[plat(1).from - 100, 4], [plat(1).from, QUAD.upLocal]];
+/** 上り本線（複々線では上り急行線。堺からなんばの手前まで直進） */
+const UP: LatProfile = [[-1000, 0], [9600, 0], [9760, -6], [11000, -6]]; // 難波 7番線
 /** 下り本線（複々線では下り緩行線） */
-const DOWN_HEAD: LatProfile = [[-1000, 4], ...SAKAI.down, ...SHICHIDO_DOWN, [2780, 4], [2900, QUAD.downLocal]];
+const DOWN_HEAD: LatProfile = [[-1000, 4], ...SAKAI.down, ...SHICHIDO_DOWN, [2780, QUAD.upLocal], [2900, QUAD.downLocal]];
 const DOWN_TAIL: LatProfile = [
   // 岸里玉出: 島式ホームの分だけ外へ（下り急行線はここへ合流）、駅の先で戻る（右に高野線が来る）
   [5780, QUAD.downLocal], [5880, 19.4], [6200, 19.4], [6340, 4],
@@ -95,20 +96,22 @@ const extraTracks: ExtraTrack[] = [
   xt('namba-9', [[9520, 0], [9700, NAMBA_TRACKS[9]]], 9520, NAMBA_END, { bumpers: [NAMBA_END] }),
   xt('namba-5', [[9560, 0], [9740, NAMBA_TRACKS[5]]], 9560, NAMBA_END, { bumpers: [NAMBA_END] }),
   xt('x-namba-6', [[9600, 0], [9720, NAMBA_TRACKS[6]]], 9600, 9720),
+  // 構内の手前の渡り線（上り本線 → 下り本線。なんばの 9・7・5番線から発車する下り列車が使う）
+  xt('x-namba-main', [[9380, 4], [9460, 0]], 9380, 9460),
   xt('shiomibashi', SHIOMI, 5965, 6420, { bumpers: [5965] }),
   // 住ノ江検車区への入出庫線（車庫の線路は world/suminoe-depot.ts）
   xt('depot-lead', [[3440, -16], [3560, 0]], 3440, 3560),
 ];
 
 /** 優等列車の走行線: 堺の4番線から外側の急行線を直進し、なんばは種別の番線へ */
-const lane = (tail: LatProfile): LatProfile => [[-1000, 0], ...SHICHIDO_UP, ...tail];
+const lane = (tail: LatProfile): LatProfile => [[-1000, 0], ...tail];
 const LANE = {
   express: lane([[9600, 0], [9720, NAMBA_TRACKS[6]]]),
   southern: lane([[9560, 0], [9740, NAMBA_TRACKS[5]]]),
   limited: lane([[9520, 0], [9700, NAMBA_TRACKS[9]]]),
   /** 普通: 堺の3番線から出て、住ノ江〜岸里玉出は内側の緩行線、なんばは7番線 */
   local: [
-    [-1000, SAKAI.up3[1][1]], ...SAKAI.up3.slice(1), ...SHICHIDO_UP,
+    [-1000, SAKAI.up3[1][1]], ...SAKAI.up3.slice(1),
     [2940, 0], [3060, QUAD.upLocal], [6140, QUAD.upLocal], [6260, 0], [9600, 0], [9760, NAMBA_TRACKS[7]],
   ] as LatProfile,
 };
@@ -147,7 +150,7 @@ const stations: Station[] = names.map(([name, kana], i): Station => {
   };
   // ホームの側（platform.side）は普通のもの。優等列車は ServiceSpec.platformSides
   if (i === 0) return { ...base, layout: 'custom', customPlatforms: SAKAI.platforms };
-  if (i === 1) return { ...base, layout: 'custom', platform: { ...base.platform, side: 'R' }, customPlatforms: [{ kind: 'island', lat: 2, width: 6 }] };
+  if (i === 1) return { ...base, layout: 'custom', platform: { ...base.platform, side: 'R' }, customPlatforms: [{ kind: 'island', lat: QUAD.upLocal / 2, width: 6 }] };
   if (QUAD_STATIONS.includes(i)) return { ...base, layout: 'custom', customPlatforms: quadPlatforms() };
   if (i === 5) return {
     ...base, layout: 'custom', platform: { ...base.platform, side: 'R' },
@@ -278,7 +281,7 @@ export const namba: Route = {
   structures: [
     { kind: 'viaduct', from: -400, to: 1830 },
     { kind: 'viaduct', from: 1830, to: 2155, open: true },  // 七道を出て大和川まで: 壁のない高架
-    { kind: 'bridge', from: 2155, to: 2375 },               // 大和川橋梁（桁・トラス・桁）
+    { kind: 'bridge', from: 2155, to: 2375, split: true },  // 大和川橋梁（上下線が別々の単線橋。桁・トラス・桁）
     { kind: 'viaduct', from: 2375, to: 2675, open: true },  // 渡り切って約300mも壁のない高架
     { kind: 'viaduct', from: 2675, to: NAMBA_END + 10 },
   ],
@@ -293,3 +296,66 @@ export const namba: Route = {
 };
 
 setDestinations(namba.services!, 'namba');
+
+// ---- なんば → 堺（下り）。上りのデータを reverseRoute で反転し、種別ごとの進路を下り向きに写す ----
+// 下りの進路（上りの座標で表した物理的な横位置）: なんばの番線 → 構内手前の渡り線で下り本線へ → 複々線は 普通 = 内側の緩行線・優等 = 外側の急行線
+// → 堺は 普通 = 外側の1番線（45km/h）・優等 = 内側の2番線（本線）。普通の待避は無し
+const DEP: Record<9 | 7 | 5, LatProfile> = {
+  9: [[9380, 4], [9460, 0], [9520, 0], [9700, NAMBA_TRACKS[9]], [11000, NAMBA_TRACKS[9]]],
+  7: [[9380, 4], [9460, 0], [9600, 0], [9760, NAMBA_TRACKS[7]], [11000, NAMBA_TRACKS[7]]],
+  5: [[9380, 4], [9460, 0], [9560, 0], [9740, NAMBA_TRACKS[5]], [11000, NAMBA_TRACKS[5]]],
+};
+const before = (p: LatProfile, s0: number) => p.filter(([q]) => q < s0);
+const PHYS_DOWN = {
+  local: [
+    [-1000, 22.8], [SAKAI.pt + 20, 22.8], [SAKAI.pt + 130, QUAD.downLocal], [SAKAI.pt + 150, QUAD.downLocal], [SAKAI.pt + 260, 4],
+    ...DOWN.filter(([q]) => q > SAKAI.pt + 260 && q < 9380), ...DEP[7],
+  ] as LatProfile,
+  express: DOWN_EXPRESS_PATH,
+  southern: [...before(DOWN_EXPRESS_PATH, 9380), ...DEP[5]],
+  limited: [...before(DOWN_EXPRESS_PATH, 9380), ...DEP[9]],
+};
+const L_NAMBA = totalLength(namba), mS = (q: number) => L_NAMBA - q;
+/** 下りの優等列車の分岐器（岸里玉出の堺側で急行線へ、住ノ江の堺側で緩行線へ）の制限 */
+const UP_FAST_LIMITS = [
+  { from: mS(5880), to: mS(5760), kmh: 60, label: '分岐器制限' },
+  { from: mS(3080), to: mS(2980), kmh: 60, label: '分岐器制限' },
+];
+/** 下りの停車シーン（上りの駅 index）: 七道（普通）・天下茶屋（急行）・新今宮（空港急行）。上りの対向列車は上り本線（外側の急行線）に停まる */
+const STOP_SCENES_UP: StopScene[] = [
+  { station: 1, kind: 'commuter-new', cars: 4, kmh: 74 },
+  { station: 6, kind: 'commuter-old', cars: 6, kmh: 70, label: '急行' },
+  { station: 7, kind: 'commuter-new', cars: 8, kmh: 60, label: '空港急行' },
+];
+
+export const nambaUp: Route = reverseRoute(namba, {
+  id: 'namba-up', name: '南海本線 難波 → 堺', timetable: NB_UP,
+  oncomingStops: STOP_SCENES_UP, signs: approachSigns,
+});
+{
+  const r = nambaUp, n = r.stations.length;
+  r.terminalApproach = false; // 堺は途中駅（終着の低速進入 ATS は無効）
+  delete r.precedingHeadway; // 普通の待避なし。先行の普通は従来の時隔
+  r.precedingHeadway = { express: 560, airport: 560, limited: 600, southern: 600 };
+  // 上りの '30'（下り急行線）を通る対向列車は写さない。複々線の上り急行線（外側）を走り抜ける特急を足す
+  r.oncoming = r.oncoming.filter(o => o.lat === 4);
+  r.oncoming.push({ spawnAt: mS(6200), startS: mS(2500), cars: 6, carLen: 20, gap: .8, kmh: 95, lat: 4, kind: 'limited', label: '特急', dest: 'なんば' });
+  for (const v of r.services!) {
+    const phys = v.id === 'local' ? PHYS_DOWN.local : v.id === 'southern' ? PHYS_DOWN.southern : v.id === 'limited' ? PHYS_DOWN.limited : PHYS_DOWN.express;
+    v.lane = mirrorProfile(namba, phys);
+    v.laneLimits = v.id === 'local' ? [{ from: mS(SAKAI.pt + 140), to: mS(-400), kmh: 45, label: '分岐器制限' }] : UP_FAST_LIMITS;
+    // ドアの側は進路の横位置で駅のホームから決める
+    const sides: Record<number, 'L' | 'R'> = {};
+    r.stations.forEach((sta, i) => { const side = customPlatformSide(sta, profileLat(v.lane!, sta.stopS)); if (side) sides[i] = side; });
+    v.platformSides = sides;
+    v.trackNames = {
+      0: v.id === 'local' ? '7番線' : v.id === 'southern' ? '5番線' : v.id === 'limited' ? '9番線' : '6番線',
+      [n - 1]: v.id === 'local' ? '1番線' : '2番線',
+    };
+    if (v.id === 'southern') { v.kind = 'southern-10000'; v.unitKinds = ['southern-10000', 'commuter-old']; }
+  }
+  // 駅の既定のドアの側は普通のもの
+  const local = r.services!.find(v => v.id === 'local')!;
+  r.stations.forEach((sta, i) => { if (local.platformSides![i]) sta.platform.side = local.platformSides![i]; });
+  setDestinations(r.services!, 'wakayama');
+}

@@ -5,7 +5,7 @@ import { writeFileSync } from 'node:fs';
 import { shiokaze, shiokazeUp } from '../src/route/routes/shiokaze';
 import { kishiwada, kishiwadaUp } from '../src/route/routes/kishiwada';
 import { through, throughUp } from '../src/route/routes/through';
-import { namba } from '../src/route/routes/namba';
+import { namba, nambaUp } from '../src/route/routes/namba';
 import { mountain, mountainUp } from '../src/route/routes/mountain';
 import { meetDwell } from '../src/game/meet';
 import { waitDwell } from '../src/game/overtake';
@@ -95,7 +95,7 @@ function table(route: Route): Record<string, string> {
 // --namba-only は堺〜難波だけ更新
 const nambaOnly = process.argv.includes('--namba-only');
 {
-  const nb = table(namba);
+  const nb = table(namba), nbUp = table(nambaUp);
   writeFileSync('src/route/routes/namba-timetable.ts', `// 南海本線 堺〜難波の時刻表（scripts/timetable.ts が生成。手で直さない）
 import type { ServiceSpec } from '../types';
 
@@ -107,6 +107,15 @@ export const NB: Record<Id, ServiceSpec['timetable']> = {
   airport: ${nb.airport},
   limited: ${nb.limited},
   southern: ${nb.southern},
+};
+
+/** 下り（難波 → 堺） */
+export const NB_UP: Record<Id, ServiceSpec['timetable']> = {
+  local: ${nbUp.local},
+  express: ${nbUp.express},
+  airport: ${nbUp.airport},
+  limited: ${nbUp.limited},
+  southern: ${nbUp.southern},
 };
 `);
 }

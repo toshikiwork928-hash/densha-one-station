@@ -5,10 +5,10 @@ import { shiokaze, shiokazeUp } from './routes/shiokaze';
 import { mountain, mountainUp } from './routes/mountain';
 import { kishiwada, kishiwadaUp } from './routes/kishiwada';
 import { through, throughUp } from './routes/through';
-import { namba } from './routes/namba';
+import { namba, nambaUp } from './routes/namba';
 
 export const ROUTES: Record<string, Route> = { [sakuragaoka.id]: sakuragaoka, [shiokaze.id]: shiokaze, [shiokazeUp.id]: shiokazeUp, [mountain.id]: mountain, [mountainUp.id]: mountainUp,
-  [kishiwada.id]: kishiwada, [kishiwadaUp.id]: kishiwadaUp, [through.id]: through, [throughUp.id]: throughUp, [namba.id]: namba };
+  [kishiwada.id]: kishiwada, [kishiwadaUp.id]: kishiwadaUp, [through.id]: through, [throughUp.id]: throughUp, [namba.id]: namba, [nambaUp.id]: nambaUp };
 /** 方向の切替（下り ↔ 上り）。タイトルの方向ボタン用 */
 export const ROUTE_DIRS: { id: string; label: string; desc: string }[] = [
   { id: shiokaze.id, label: '上り', desc: '泉大津 → 堺' },
@@ -40,7 +40,7 @@ const NANKAI_SECTIONS: SectionEntry[] = [
   // 既定（dirs[0]）を変えないよう末尾に置く
   {
     id: 'sakai-namba', name: '堺〜難波', desc: '9駅・9.8km。大和川橋梁、住ノ江からの複々線と車庫、高野線と並ぶ4線、終点は頭端式の難波（種別ごとに番線が違う）',
-    dirs: [{ id: namba.id, label: '上り', desc: '堺 → 難波' }],
+    dirs: [{ id: namba.id, label: '上り', desc: '堺 → なんば' }, { id: nambaUp.id, label: '下り', desc: 'なんば → 堺' }],
   },
 ];
 export const LINES: LineEntry[] = [

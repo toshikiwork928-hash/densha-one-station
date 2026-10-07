@@ -21,6 +21,7 @@ import { buildNambaTerminal } from './namba-terminal';
 import { buildSuminoeDepot, buildSuminoeDepotTrains } from './suminoe-depot';
 import { buildKoyaPlatforms, buildKoyaTraffic } from './koya-traffic';
 import { buildNambaLandmarks } from './namba-landmarks';
+import { nambaFrame } from './namba-frame';
 
 export interface World {
   oncoming: OncomingSystem;
@@ -45,13 +46,16 @@ export function buildWorld(ctx: GameContext): World {
   buildSignals(ctx); // [A] 閉そく信号機（rng 不使用）
   const oncoming = createOncoming(ctx);
   buildCrossings(ctx, oncoming);
-  // 堺〜難波（route.id = 'namba'）専用。ctx.rng を消費しない（他の路線の生成順に影響しない）
-  buildNambaTerminal(ctx);
-  buildSuminoeDepot(ctx);
-  buildSuminoeDepotTrains(ctx); // 留置の電車（描画のみ）
-  buildNambaLandmarks(ctx);
-  buildKoyaPlatforms(ctx);
-  buildKoyaTraffic(ctx); // 高野線・汐見橋線の電車（描画のみ）
+  // 堺〜なんば専用（上り 'namba' と下り 'namba-up'。座標は上りのもの、world/namba-frame.ts）。ctx.rng を消費しない（他の路線の生成順に影響しない）
+  const nctx = nambaFrame(ctx);
+  if (nctx) {
+    buildNambaTerminal(nctx);
+    buildSuminoeDepot(nctx);
+    buildSuminoeDepotTrains(nctx); // 留置の電車（描画のみ）
+    buildNambaLandmarks(nctx);
+    buildKoyaPlatforms(nctx);
+    buildKoyaTraffic(nctx); // 高野線・汐見橋線の電車（描画のみ）
+  }
   const player = createPlayerTrain(ctx);
   createOvertaking(ctx); // [G] 待避の通過列車・待避線の先行普通
   createCab(ctx);

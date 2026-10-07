@@ -246,7 +246,8 @@ export interface Route {
   /** [C] 踏切（中心位置 s） */
   crossings?: { id: string; s: number; roadWidth?: number }[];
   /** [C] トンネル・高架などの構造物区間 */
-  structures?: { kind: 'tunnel' | 'viaduct' | 'bridge'; from: number; to: number; /** 高架の壁（高欄）を低くする（壁のない高架） */ open?: boolean }[];
+  structures?: { kind: 'tunnel' | 'viaduct' | 'bridge'; from: number; to: number; /** 高架の壁（高欄）を低くする（壁のない高架） */ open?: boolean;
+    /** 橋梁: 上下線が別々の単線橋（線路ごとの床版・主桁・橋脚） */ split?: boolean }[];
   /** route.tracks の線の横位置の変化（キー = tracks の値の文字列。値は絶対の横位置）。複々線で対向線が外へずれる・駅で線路が開く */
   trackProfiles?: Record<string, LatProfile>;
   /** この範囲では追加の線路をすべて本線と一続きの床版・架線柱の範囲に含める（頭端駅の扇状の構内） */
