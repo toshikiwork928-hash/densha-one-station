@@ -84,6 +84,7 @@ function crossing(ctx: GameContext, b: GeoBatch, st: Landmark): void {
 
 /** 既存 buildStructures の川面・橋脚・床版に、上部鋼トラスだけを追加。 */
 function truss(ctx: GameContext, b: GeoBatch, st: Landmark): void {
+  const steel = ctx.route.bridgeStyle?.color ?? COLOR.steel;
   const length = st.length ?? 170, from = st.s - length / 2, to = st.s + length / 2;
   const left = Math.min(...ctx.route.tracks) - 3.4, right = Math.max(...ctx.route.tracks) + 3.4;
   const point = (s: number, lat: number, y: number) => ctx.track.at(s, lat, y);
@@ -91,16 +92,16 @@ function truss(ctx: GameContext, b: GeoBatch, st: Landmark): void {
   for (let i = 0; i < count; i++) {
     const a = from + length * i / count, z = from + length * (i + 1) / count;
     for (const side of [left, right]) {
-      beam(b, point(a, side, .8), point(z, side, .8), .32, COLOR.steel, .46);
-      beam(b, point(a, side, 9.2), point(z, side, 9.2), .29, COLOR.steel, .38);
-      beam(b, point(a, side, .8), point(a, side, 9.2), .28, COLOR.steel);
-      beam(b, point(a, side, i % 2 ? 9.2 : .8), point(z, side, i % 2 ? .8 : 9.2), .25, COLOR.steel);
+      beam(b, point(a, side, .8), point(z, side, .8), .32, steel, .46);
+      beam(b, point(a, side, 9.2), point(z, side, 9.2), .29, steel, .38);
+      beam(b, point(a, side, .8), point(a, side, 9.2), .28, steel);
+      beam(b, point(a, side, i % 2 ? 9.2 : .8), point(z, side, i % 2 ? .8 : 9.2), .25, steel);
     }
-    beam(b, point(a, left, 9.2), point(a, right, 9.2), .28, COLOR.steel);
-    beam(b, point(a, left, 9.2), point(z, right, 9.2), .14, COLOR.steel);
+    beam(b, point(a, left, 9.2), point(a, right, 9.2), .28, steel);
+    beam(b, point(a, left, 9.2), point(z, right, 9.2), .14, steel);
   }
-  for (const side of [left, right]) beam(b, point(to, side, .8), point(to, side, 9.2), .28, COLOR.steel);
-  beam(b, point(to, left, 9.2), point(to, right, 9.2), .28, COLOR.steel);
+  for (const side of [left, right]) beam(b, point(to, side, .8), point(to, side, 9.2), .28, steel);
+  beam(b, point(to, left, 9.2), point(to, right, 9.2), .28, steel);
 }
 
 /** 羽衣の3番線（高師浜線）。ホームの車止めから本線と3線並行のまま高架を泉大津側へ進み、のちに海側（西）へ曲がって離れ、行き止まりで終わる（走行不可の描画専用）。

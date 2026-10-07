@@ -5,6 +5,7 @@ import { shiokaze, shiokazeUp } from '../src/route/routes/shiokaze';
 import { mountain, mountainUp } from '../src/route/routes/mountain';
 import { kishiwada, kishiwadaUp } from '../src/route/routes/kishiwada';
 import { through, throughUp } from '../src/route/routes/through';
+import { namba, NAMBA_TRACKS } from '../src/route/routes/namba';
 import { approachText, departText } from '../src/audio/announce-text';
 import { applyService, destOf } from '../src/route/service';
 import { buildTrack } from '../src/route/track';
@@ -332,3 +333,47 @@ for (const source of [kishiwada, kishiwadaUp, throughUp, through]) {
   }
 }
 console.log('泉大津〜岸和田・堺〜岸和田（5種別×上下）・サザンの放送チェック成功');
+
+// 南海本線 堺〜難波（上りのみ・頭端式の難波）: 駅・線形・番線、5種別の完走
+{
+  const route = namba, t = buildTrack(route);
+  assert.equal(route.stations.length, 9);
+  assert.equal(route.stations[8].stopS - route.stations[0].stopS, 9800, '堺〜難波 9.8km');
+  assert.ok(route.stations[8].headEnd, '難波は頭端式');
+  // 堺の形は堺〜泉大津（上りの終着）と同じ
+  const sakai = route.stations[0], sakaiS = shiokaze.stations[9];
+  assert.deepEqual(sakai.loop, sakaiS.loop); assert.equal(sakai.loopPriority, true);
+  assert.equal(sakai.platform.to - sakai.platform.from, sakaiS.platform.to - sakaiS.platform.from);
+  for (const st of route.stations) {
+    const { from, to } = st.platform, phi = t.trackAt(from).phi, y = t.trackAt(from).y;
+    for (let q = from; q <= to; q += 5) {
+      assert.ok(Math.abs(t.trackAt(q).phi - phi) < 1e-9, `namba/${st.name}ホーム全体が直線`);
+      assert.ok(Math.abs(t.trackAt(q).y - y) < 1e-6, `namba/${st.name}ホームが水平`);
+    }
+  }
+  const want: Record<ServiceId, number> = { local: NAMBA_TRACKS[7], express: NAMBA_TRACKS[6], airport: NAMBA_TRACKS[6], southern: NAMBA_TRACKS[5], limited: NAMBA_TRACKS[9] };
+  for (const v of route.services!) {
+    const r = structuredClone(route), sv = applyService(r, v.id)!, tr = buildTrack(r), stop = r.stations[8].stopS;
+    assert.ok(Math.abs(tr.pathLat(stop) - want[v.id]) < 1e-6, `namba/${v.id}の番線（横位置 ${tr.pathLat(stop)}）`);
+    // 普通は緩行線（住吉大社で -5.4）、優等は急行線（4）
+    assert.ok(Math.abs(tr.pathLat(r.stations[3].stopS) - (v.id === 'local' ? -5.4 : 4)) < 1e-6, `namba/${v.id}の複々線の走行線`);
+    assert.equal(sv.destination, 'なんば');
+    const ap = approachText(r, 8, sv);
+    assert.ok(ap.includes('終点、ナンバ、') && ap.includes(`${({ local: 7, express: 6, airport: 6, southern: 5, limited: 9 } as Record<ServiceId, number>)[v.id]}番線`), ap);
+  }
+  const ids = route.signals!.map(g => g.id);
+  assert.equal(new Set(ids).size, ids.length, '信号 id の重複なし');
+  for (const service of ['local', 'express', 'airport', 'limited', 'southern'] as const) {
+    const ctx = context(route, service), game = createGame(ctx);
+    attachAutodrive(ctx, (sec, dt = 1 / 30, hook) => { for (let q = 0; q < sec; q += dt) { if (hook?.()) break; game.update(dt); } });
+    const result = (globalThis as any).window.__qa.run(service, 'all', 3600);
+    if (ctx.state.penalties.atsBrake) console.log(Object.keys(result), (result.log ?? []).slice(0, 40).join(' | '));
+    console.log(JSON.stringify({ route: route.id, service, state: ctx.state.state, time: result.t, ats: ctx.state.penalties.atsBrake, overspeed: ctx.state.overspeed, stops: ctx.state.stops.length }));
+    assert.equal(ctx.state.state, 'result', `namba/${service}完走`);
+    assert.equal(ctx.state.penalties.atsBrake, 0, `namba/${service}ATS非常制動なし`);
+    assert.equal(result.overspeed, 0, `namba/${service}速度超過なし`);
+    assert.ok(Math.abs(ctx.state.train.s - ctx.route.stations[8].stopS) < 15, `namba/${service}終着停止`);
+    assert.equal(ctx.state.stops.length, ctx.route.services!.find(s => s.id === service)!.stops.length - 1, `namba/${service}停車駅数`);
+  }
+  console.log('堺〜難波（5種別）チェック成功');
+}

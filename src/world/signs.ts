@@ -95,7 +95,7 @@ export function buildSigns(ctx: GameContext): void {
   // 停止位置と制限の標識は同じ並びで重なりを判定するため、まとめて作り直す
   let built = '';
   const rebuild = () => {
-    const key = route.stations.map(x => `${x.enterLoop ? 1 : 0}`).join('') + ':' + (ctx.service?.cars ?? 0) + ':' + route.lineLimit + ':' + route.limits.map(L => `${L.from}-${L.to}-${L.kmh}`).join();
+    const key = route.stations.map(x => `${x.enterLoop ? 1 : 0}`).join('') + ':' + (ctx.service?.cars ?? 0) + ':' + route.lineLimit + ':' + route.limits.map(L => `${L.from}-${L.to}-${L.kmh}`).join() + ':' + JSON.stringify(route.activeLane ?? 0);
     if (key === built) return;
     built = key;
     clear(stopGroup); clear(group);
@@ -103,8 +103,8 @@ export function buildSigns(ctx: GameContext): void {
     // 距離標・停止位置目標: 自列車の走行線の左（2面4線駅は種別により待避線または本線）。待避線・島式1面2線駅ではホームが右なので、
     // 線路がホーム側へ寄り始めたら（走行線が -1m より左）右に立てる
     for (const sg of route.signs) {
-      const lat = track.pathLat(sg.s), rightSta = route.stations.find(x => (x.enterLoop || x.island) && Math.abs(x.stopS - sg.s) < 520);
-      defs.push(define(rightSta && lat < -1 ? { ...sg, lat: 2.0 } : sg, lat, stopGroup));
+      const lat = track.pathLat(sg.s), rightSta = route.stations.find(x => (x.enterLoop || x.island || (x.layout === 'custom' && x.platform.side === 'R')) && Math.abs(x.stopS - sg.s) < 520);
+      defs.push(define(rightSta && (lat < -1 || rightSta.layout === 'custom') ? { ...sg, lat: 2.0 } : sg, lat, stopGroup));
     }
     // 速度制限・解除: 自列車の走行線の左。解除標は、より厳しい制限の中・終着駅より先なら立てない
     const last = route.stations[route.stations.length - 1].stopS;

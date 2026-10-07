@@ -99,6 +99,7 @@ export function buildBackdrop(ctx: GameContext): void {
 
 /** 沿岸市街地の概形。港・海岸線の位置は測量値ではなく、線路から遠いシルエット。 */
 function buildCoastalBackdrop(ctx: GameContext, from: number, to: number, at: (s: number, lat: number, y: number) => THREE.Vector3): void {
+  if (ctx.route.urban) { buildUrbanBackdrop(ctx, from, to, at); return; }
   const seaSide = seaSideOf(ctx.route);
   const positions: number[] = [], indices: number[] = [];
   // 海は線路から900m以遠。近景の道路・住宅・支線を水面で覆わない。
@@ -154,6 +155,40 @@ function buildCoastalBackdrop(ctx: GameContext, from: number, to: number, at: (s
   }
   for (const group of industrial.build({ body: new THREE.MeshLambertMaterial({ vertexColors: true }) }, ctx.scene)) {
     group.name = 'coastal-industry'; cullByDistance(ctx, group, 1750);
+  }
+}
+
+/** 大都市の遠景（route.urban）: 線路から 250〜1500m に中高層ビルの箱を並べる（窓は描かず、遠いほど霞んだ色）。海・工業地帯は置かない */
+function buildUrbanBackdrop(ctx: GameContext, from: number, to: number, at: (s: number, lat: number, y: number) => THREE.Vector3): void {
+  const city = new ChunkedBatch(900);
+  let h = 7;
+  const rnd = () => { h = (h * 16807) % 2147483647; return h / 2147483647; }; // 独自乱数（ctx.rng を消費しない）
+  const near = new THREE.Color(0xb3b5b4), far = new THREE.Color(0xc4ccd3), c = new THREE.Color();
+  const T = getTerrain(ctx), route = ctx.route;
+  for (let s = from; s < to; s += 22) for (const side of [-1, 1]) {
+    for (let k = 0; k < 3; k++) {
+      const d = 250 + rnd() * 1250, p = at(s + rnd() * 20, side * d, 0), t = ctx.track.trackAt(s);
+      const hh = 18 + rnd() * rnd() * (d < 700 ? 90 : 140), w = 18 + rnd() * 30, dep = 18 + rnd() * 30;
+      c.copy(near).lerp(far, Math.min(1, (d - 250) / 1250)).multiplyScalar(.9 + rnd() * .15);
+      city.at(s).add('body', P.boxB, M(p.x, 0, p.z, -t.phi + (rnd() - .5) * .3, w, hh, dep), c.getHex());
+    }
+  }
+  // 町並みの奥（線路から 68〜250m）: 中低層の街区を箱で埋める（手前2列の住宅・商店は town-jp.ts）
+  const blockCols = [0xc9c2b4, 0xb9b4aa, 0xd2cfc7, 0xa9aaa6, 0xc4b9a5, 0xb3b9bd];
+  for (let s = route.extent.from; s < route.extent.to; s += 16) for (const side of [-1, 1]) {
+    for (let d = 68; d < 250; d += 15 + rnd() * 6) {
+      if (!T.isCity(s) || rnd() < .12) continue;
+      const w = 10 + rnd() * 12, dep = 9 + rnd() * 6, lat = side < 0 ? Math.min(...route.tracks) - d : Math.max(...route.tracks) + d;
+      if (tramBlocks(route, s - w / 2, s + w / 2, lat - dep / 2, lat + dep / 2)) continue;
+      const t = ctx.track.trackAt(s), p = ctx.track.at(s + (rnd() - .5) * 4, lat, 0), hh = 7 + rnd() * rnd() * 30;
+      const col = blockCols[Math.floor(rnd() * blockCols.length)];
+      const b = city.at(s);
+      b.add('body', P.boxB, M(p.x, T.groundY(s), p.z, -t.phi, dep, hh, w), col);
+      b.add('body', P.boxB, M(p.x, T.groundY(s) + hh, p.z, -t.phi, dep * .4, 1.6, w * .3), 0x8d9093); // 屋上の塔屋
+    }
+  }
+  for (const group of city.build({ body: new THREE.MeshLambertMaterial({ vertexColors: true }) }, ctx.scene)) {
+    group.name = 'urban-backdrop'; cullByDistance(ctx, group, 2600);
   }
 }
 

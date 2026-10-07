@@ -4,7 +4,7 @@ import type { GameContext } from '../core/context';
 import { GeoBatch, M, P } from './batch';
 import { extrudeAlong, extrudeFn, loopTracks } from './track-mesh';
 import { coastalThirdTracks } from './coastal-stations';
-import { islandShape, islandZones } from '../route/service';
+import { customPlatformEdges, islandShape, islandZones, profileLat, trackSpan } from '../route/service';
 import { TUNNEL_CENTER, TUNNEL_HALF, TUNNEL_WALL_H, getTerrain, gridAlong } from './terrain';
 import { BAND_CULL, isMountain } from './mountain-terrain';
 import { cullByDistance } from './cull';
@@ -20,6 +20,13 @@ export function coastalDeckBounds(ctx: GameContext): (s: number) => [number, num
   const lo = Math.min(...route.tracks), hi = Math.max(...route.tracks);
   return s => {
     let left = lo - 3.3, right = hi + 3.3;
+    // route.tracks の横位置の変化（複々線で対向線が外へずれる・駅で開く）と、続いて並ぶ追加の線路（離れていく支線は buildExtraDecks）
+    if (route.trackProfiles || route.extraTracks) {
+      const [a, b] = trackSpan(route, s);
+      left = Math.min(left, a - 3.3); right = Math.max(right, b + 3.3);
+      const pe = customPlatformEdges(route, s, 2);
+      if (pe) { left = Math.min(left, pe[0] - .4); right = Math.max(right, pe[1] + .4); }
+    }
     for (const t of loops) { left = Math.min(left, t.lat(s) - 3.3); right = Math.max(right, t.lat(s) + 3.3); }
     for (const t of thirds) { left = Math.min(left, t.lat(s) - 3.3); right = Math.max(right, t.lat(s) + 3.3); }
     // 島式1面2線の高架駅: 線路が駅の前後でホームの両側へ開く（S字）分だけ床版を広げる
@@ -29,7 +36,7 @@ export function coastalDeckBounds(ctx: GameContext): (s: number) => [number, num
     }
     const hg = hagoromoDeckEdge(route, s);
     if (hg) { if (hg.side < 0) left = Math.min(left, hg.lat); else right = Math.max(right, hg.lat); }
-    for (const st of route.stations) if (st.elevated && !st.loop && !st.island) {
+    for (const st of route.stations) if (st.elevated && !st.loop && !st.island && st.layout !== 'custom') {
       const u = Math.max(0, Math.min(1, (s - st.platform.from + 25) / 25, (st.platform.to + 25 - s) / 25));
       const edge = 3.3 + 3.9 * u * u * (3 - 2 * u);
       left = Math.min(left, lo - edge); right = Math.max(right, hi + edge);
@@ -105,12 +112,21 @@ export function buildStructures(ctx: GameContext): void {
       const [L0, L1] = bounds((st.from + st.to) / 2);
       scene.add(extrudeFn(track, s => { const [a, b] = bounds(s); return [[a, .02], [a, -1.1], [b, -1.1], [b, .02]]; }, st.from, st.to, 2, concrete));
       scene.add(extrudeFn(track, s => { const [a, b] = bounds(s); return [[a + .25, .02], [b - .25, .02]]; }, st.from, st.to, 2, concrete));
-      const wallH = bridge ? .55 : 1.15;
+      const wallH = bridge || st.open ? .55 : 1.15;
       const gap = hagoromoParapetGap(route);
       for (const side of [-1, 1]) {
         // 羽衣の支線が離れる所は、支線側の高欄を切る（床版の縁が3番線を横切って戻る区間）
-        const spans = gap && gap.side === side && gap.from < st.to && gap.to > st.from
+        let spans = gap && gap.side === side && gap.from < st.to && gap.to > st.from
           ? [[st.from, gap.from], [gap.to, st.to]].filter(([a, b]) => b - a > 1) : [[st.from, st.to]];
+        // 追加の線路が本線の床版に加わる・離れる所（床版の縁が段になる）は高欄を切る（縁が線路を横切らないように）
+        if (route.extraTracks?.length) {
+          const cuts: [number, number][] = [];
+          for (let q = st.from; q < st.to - 2; q += 2) {
+            const e0 = bounds(q)[side < 0 ? 0 : 1], e1 = bounds(q + 2)[side < 0 ? 0 : 1];
+            if (Math.abs(e1 - e0) > 1.2) cuts.push([q - 4, q + 6]);
+          }
+          for (const [c0, c1] of cuts) spans = spans.flatMap(([a, b]) => b <= c0 || a >= c1 ? [[a, b]] : [[a, c0], [c1, b]].filter(([x, y]) => y - x > 1));
+        }
         for (const [s0, s1] of spans) scene.add(extrudeFn(track, s => {
           const [left, right] = bounds(s), a = side < 0 ? left : right - .25, b = a + .25;
           const h = wallH;
@@ -121,11 +137,29 @@ export function buildStructures(ctx: GameContext): void {
       for (const s of [st.from, st.to]) {
         const [L0, L1] = bounds(s);
         const t = track.trackAt(s), g = T.groundY(s), y = T.trackY(s), p = track.at(s, (L0 + L1) / 2, 0);
-        if (y - g > .5) batch.add('concrete', P.boxB, M(p.x, g - .5, p.z, -t.phi, L1 - L0 + 1, y - g + .3, 3), 0xffffff);
+        // 別の構造物（壁のない高架・橋梁）に続く端は橋台を作らない
+        if (y - g > .5 && !list.some(o => o !== st && (Math.abs(o.to - s) < 1 || Math.abs(o.from - s) < 1))) batch.add('concrete', P.boxB, M(p.x, g - .5, p.z, -t.phi, L1 - L0 + 1, y - g + .3, 3), 0xffffff);
       }
       if (bridge) {
         // 鋼桁（主桁）と手すり
-        const steel = new THREE.MeshLambertMaterial({ color: 0x5f7488, side: THREE.DoubleSide });
+        const steel = new THREE.MeshLambertMaterial({ color: route.bridgeStyle?.color ?? 0x5f7488, side: THREE.DoubleSide });
+        if (route.bridgeStyle?.throughGirder) {
+          // 下路プレートガーダー: 床版の両縁に高さ 2m の主桁（トラス区間は除く）。上端にフランジ、外面に補剛材
+          const trusses = (route.coastalLandmarks ?? []).filter(l => l.kind === 'steel-bridge').map(l => [l.s - (l.length ?? 170) / 2, l.s + (l.length ?? 170) / 2]);
+          const spans: [number, number][] = [], sb = new GeoBatch();
+          let a = st.from;
+          for (const [t0, t1] of trusses.sort((p, q) => p[0] - q[0])) if (t1 > st.from && t0 < st.to) { if (t0 - a > 2) spans.push([a, t0]); a = t1; }
+          if (st.to - a > 2) spans.push([a, st.to]);
+          for (const [s0, s1] of spans) for (const side of [-1, 1]) {
+            scene.add(extrudeFn(track, s => { const [l0, l1] = bounds(s), x = side < 0 ? l0 + .35 : l1 - .35; return [[x - .12, -1.1], [x - .12, 2.0], [x + .12, 2.0], [x + .12, -1.1]]; }, s0, s1, 4, steel));
+            scene.add(extrudeFn(track, s => { const [l0, l1] = bounds(s), x = side < 0 ? l0 + .35 : l1 - .35; return [[x - .3, 1.92], [x - .3, 2.08], [x + .3, 2.08], [x + .3, 1.92]]; }, s0, s1, 4, steel));
+            for (let q = s0 + 1.5; q < s1 - 1; q += 3) {
+              const t = track.trackAt(q), [l0, l1] = bounds(q), p = track.at(q, side < 0 ? l0 + .1 : l1 - .1, .45);
+              sb.add('bstiff', P.box, M(p.x, p.y, p.z, -t.phi, .18, 3.1, .12), 0xffffff);
+            }
+          }
+          sb.build({ bstiff: steel }, scene);
+        }
         for (const c of route.tracks) scene.add(extrudeAlong(track, [[c - 1.1, -1.1], [c - 1.1, -2.9], [c + 1.1, -2.9], [c + 1.1, -1.1]], st.from + 2, st.to - 2, 5, steel));
         for (const l of [L0 + .1, L1 - .1]) scene.add(extrudeAlong(track, [[l - .05, 1.05], [l - .05, 1.15], [l + .05, 1.15], [l + .05, 1.05]], st.from, st.to, 5, steel));
         for (let s = st.from; s <= st.to; s += 2.5) for (const l of [L0 + .1, L1 - .1]) {
@@ -141,7 +175,7 @@ export function buildStructures(ctx: GameContext): void {
         const wm = gridAlong(track, c - w / 2, c + w / 2, 10, () => [[-1400, rv], [1404, rv]], water);
         wm.name = 'river'; scene.add(wm);
       } else {
-        for (let s = st.from + 12; s < st.to - 4; s += 20) pier(batch, ctx, s, 1.1, false, bounds(s));
+        for (let s = st.from + 12; s < st.to - 4; s += 20) if (!route.reserved?.some(z => z.noPiers && s > z.from && s < z.to)) pier(batch, ctx, s, 1.1, false, bounds(s));
       }
     }
   }
@@ -152,6 +186,7 @@ export function buildStructures(ctx: GameContext): void {
   }
 
   if (MT) buildRockSheds(ctx, MT);
+  if (!MT) buildExtraDecks(ctx, bounds);
   // トンネル出入り判定（カメラ位置基準）
   const tunnels = list.filter(s => s.kind === 'tunnel');
   if (!tunnels.length) return;
@@ -167,6 +202,34 @@ export function buildStructures(ctx: GameContext): void {
     const now = tunnels.some(t => s > t.from + .5 && s < t.to - .5) && Math.abs(lat - TUNNEL_CENTER) < TUNNEL_HALF && y < TUNNEL_WALL_H + TUNNEL_HALF;
     if (now !== inside) { inside = now; ctx.events.emit('tunnel', { inside }); }
   });
+}
+
+/** 追加の線路のうち本線の床版の外に出る区間（離れていく支線・入出庫線）の細い床版と橋脚。高架区間（structures）の中だけ */
+function buildExtraDecks(ctx: GameContext, bounds: (s: number) => [number, number]): void {
+  const { route, track, scene } = ctx, T = getTerrain(ctx);
+  const batch = new GeoBatch();
+  for (const x of route.extraTracks ?? []) {
+    if (x.ownDeck === false) continue;
+    // 床版の外に出る区間を集める
+    const runs: [number, number][] = [];
+    let a: number | null = null;
+    for (let s = x.from; s <= x.to + .01; s += 2) {
+      const [L, R] = bounds(s), l = profileLat(x.lat, s), out = (l - 2.6 > R - .5 || l + 2.6 < L + .5) && !!T.structureAt(s, 0) && T.trackY(s) - T.groundY(s) > 1.5;
+      if (out && a == null) a = s;
+      if (!out && a != null) { runs.push([a, s]); a = null; }
+    }
+    if (a != null) runs.push([a, x.to]);
+    for (const [s0, s1] of runs) {
+      const lo = (s: number) => profileLat(x.lat, s), [d0, d1] = x.deckSpan ?? [-2.7, 2.7];
+      scene.add(extrudeFn(track, s => { const l = lo(s); return [[l + d0, .02], [l + d0, -1.0], [l + d1, -1.0], [l + d1, .02]]; }, s0, s1, 2, concrete));
+      for (const e of [d0 + .15, d1 - .15]) scene.add(extrudeFn(track, s => { const l = lo(s) + e; return [[l - .12, .02], [l - .12, .7], [l + .12, .7], [l + .12, .02]]; }, s0, s1, 2, concrete));
+      for (let s = s0 + 8; s < s1 - 2; s += 16) {
+        const t = track.trackAt(s), p = track.at(s, lo(s) + (d0 + d1) / 2, 0), g = T.groundY(s) - .5, top = T.trackY(s) - 1.0;
+        if (top - g > .3) batch.add('concrete', P.boxB, M(p.x, g, p.z, -t.phi, 1.4, top - g, 1.4), 0xffffff);
+      }
+    }
+  }
+  batch.build({ concrete }, scene);
 }
 
 /** 橋脚（高架はラーメン、橋梁は小判形） */

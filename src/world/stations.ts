@@ -10,6 +10,7 @@ import { getTerrain } from './terrain';
 import { buildMountainStations } from './mountain-stations';
 import { T3_GAP, hagoromoSpec } from './hagoromo-branch';
 import { buildIndoorStations } from './indoor-station';
+import { buildCustomStation } from './custom-stations';
 import { buildElevatedConcourse, buildHeritageFacade, buildCoastalSpecialStations, coastalThirdTracks } from './coastal-stations';
 
 const platMat = new THREE.MeshLambertMaterial({ color: 0xc9c5bc });
@@ -280,6 +281,7 @@ export function buildStations(ctx: GameContext): void {
   st.forEach((sta, i) => {
     const prev = st[i - 1]?.name ?? ctx.route.prevName ?? '';
     const next = st[i + 1]?.name ?? ctx.route.nextName ?? '';
+    if (sta.layout === 'custom') { buildCustomStation(ctx, sta, prev, next); return; }
     if (sta.layout === 'hamadera') buildHeritageFacade(ctx, sta);
     buildCoastalSpecialStations(ctx, sta);
     if (sta.layout === 'hamadera') {

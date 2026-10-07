@@ -70,6 +70,14 @@ export function buildTrackMesh(ctx: GameContext): void {
   const isl = islandZones(route);
   for (const c of route.tracks) {
     let a = TS0;
+    // 横位置が変わる線（複々線・頭端駅の番線への振れ）は全区間を s ごとの断面で
+    if (route.trackProfiles?.[String(c)]) {
+      const l = (s: number) => c + islandOffset(route, c, s);
+      scene.add(extrudeFn(track, s => { const m = l(s); return [[m - 2.3, 0.0], [m - 1.4, 0.22], [m + 1.4, 0.22], [m + 2.3, 0.0]]; }, TS0, TS1, 2, matBallast));
+      for (const g of [-GAUGE, GAUGE])
+        scene.add(extrudeFn(track, s => { const r = l(s) + g; return [[r - .035, .24], [r - .035, .38], [r + .035, .38], [r + .035, .24]]; }, TS0, TS1, 1, matRail));
+      continue;
+    }
     const piece = (s0: number, s1: number, island: boolean) => {
       if (s1 - s0 < 1) return;
       const l = (s: number) => c + (island ? islandOffset(route, c, s) : 0);
@@ -112,6 +120,7 @@ export function buildTrackMesh(ctx: GameContext): void {
   }
   buildLoopTracks(ctx, matBallast, matRail);
   if (route.singleTrack) buildSingleTrackExtras(ctx, matBallast, matRail, matSleeper);
+  else if (route.extraTracks?.length) buildExtraTracks(ctx, matBallast, matRail, matSleeper);
   // 地面は terrain.ts
   // 架線柱・架線は catenary.ts
 }
@@ -160,6 +169,62 @@ function buildLoopTracks(ctx: GameContext, matBallast: THREE.Material, matRail: 
       put(new THREE.BoxGeometry(.06, .1, 4.5), steel, fs, base - dir * (GAUGE - .12), .33);
       put(new THREE.BoxGeometry(.06, .1, 4.5), steel, fs, o.lat(fs) - dir * (GAUGE - .12), .33);
     }
+    scene.add(grp); cullByDistance(ctx, grp, 700);
+  }
+}
+
+/** 複線の路線の追加の線路（route.extraTracks: 複々線の線・頭端駅の番線・支線・渡り線）: バラスト・レール・枕木・車止め。
+ *  他の線と重なる分岐部は枕木を省き、近い所は両線にまたがる長枕木にする。頭端駅の route.tracks の終端の車止めもここで作る */
+function buildExtraTracks(ctx: GameContext, matBallast: THREE.Material, matRail: THREE.Material, matSleeper: THREE.Material): void {
+  const { scene, track, route } = ctx;
+  const lines = trackLines(route), extras = lines.filter(l => l.kind === 'extra');
+  const sleeperGeo = new THREE.BoxGeometry(2.0, 0.14, 0.22);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3();
+  const red = new THREE.MeshLambertMaterial({ color: 0xc8322a }), white = new THREE.MeshLambertMaterial({ color: 0xeeeeee });
+  const steel = new THREE.MeshLambertMaterial({ color: 0x4a4d52 });
+  for (const l of extras) {
+    if (l.to - l.from < 1) continue;
+    const others = lines.filter(o => o !== l);
+    /** s で最も近い他の線の横位置 */
+    const near = (s: number) => {
+      let best = Infinity, lat = l.lat(s);
+      for (const o of others) if (s >= o.from && s <= o.to) { const d = o.lat(s) - lat; if (Math.abs(d) < Math.abs(best)) best = d; }
+      return best;
+    };
+    const CH = 200;
+    for (let s0 = l.from; s0 < l.to; s0 += CH) {
+      const s1 = Math.min(l.to, s0 + CH);
+      const grp = new THREE.Group();
+      grp.add(extrudeFn(track, s => { const m = l.lat(s); return [[m - 2.3, 0.0], [m - 1.4, 0.215], [m + 1.4, 0.215], [m + 2.3, 0.0]]; }, s0, s1, 2, matBallast));
+      for (const g of [-GAUGE, GAUGE])
+        grp.add(extrudeFn(track, s => { const r = l.lat(s) + g; return [[r - .035, .243], [r - .035, .383], [r + .035, .383], [r + .035, .243]]; }, s0, s1, 1, matRail));
+      const n = Math.ceil((s1 - s0) / .65), inst = new THREE.InstancedMesh(sleeperGeo, matSleeper, n + 1);
+      let i = 0;
+      for (let s = s0; s < s1 && i <= n; s += .65) {
+        const t = track.trackAt(s), a = l.lat(s), d = near(s);
+        // 線路の向き（横位置の変化）に合わせて枕木を回す
+        const slope = (l.lat(s + .5) - l.lat(s - .5));
+        q.setFromEuler(e.set(0, -t.phi - Math.atan(slope), 0));
+        if (Math.abs(d) < .3) continue;
+        if (Math.abs(d) < LONG_SLEEPER_MAX_GAP) inst.setMatrixAt(i++, m4.compose(track.at(s, a + d / 2, .265), q, sc.set((Math.abs(d) + 2) / 2, 1, 1)));
+        else inst.setMatrixAt(i++, m4.compose(track.at(s, a, .27), q, sc.set(1, 1, 1)));
+      }
+      inst.count = i; inst.computeBoundingSphere(); grp.add(inst);
+      scene.add(grp); cullByDistance(ctx, grp, 900);
+    }
+  }
+  // 車止め（追加の線・頭端駅の route.tracks の終端）
+  for (const l of lines) for (const b of l.bumpers) {
+    const inward = Math.abs(b - l.from) < Math.abs(b - l.to) ? 1 : -1, s = b + inward * 1.2, lat = l.lat(s);
+    const t = track.trackAt(s), grp = new THREE.Group();
+    grp.name = 'track-bumper'; grp.userData.clearanceExempt = 'rail-stop';
+    grp.position.copy(track.at(s, lat, 0)); grp.rotation.y = -t.phi;
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(2.4, .5, .35), red); beam.position.set(0, 1.0, 0); grp.add(beam);
+    for (const x of [-.6, .6]) {
+      const st = new THREE.Mesh(new THREE.BoxGeometry(.4, .52, .37), white); st.position.set(x, 1.0, 0); grp.add(st);
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(.12, 1.3, .12), steel); leg.position.set(x * 1.4, .6, inward * -.5); leg.rotation.x = inward * .5; grp.add(leg);
+    }
+    const lamp = new THREE.Mesh(new THREE.BoxGeometry(.25, .25, .1), new THREE.MeshBasicMaterial({ color: 0xff3020 })); lamp.position.set(0, 1.5, -inward * .2); grp.add(lamp);
     scene.add(grp); cullByDistance(ctx, grp, 700);
   }
 }

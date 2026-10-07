@@ -3,6 +3,7 @@
 // 浜寺公園側（s が小さい側）は海側（西）、堺側は内陸側（東）。海側の地上区間の西に国道（4車線）を添える。
 // 物理配置は下りの向き（s 増加 = 北東）の局所座標 (u: 進行方向, v: 右) で定義し、上りの区間データ（reversed）は座標を 180° 回して同じ位置へ置く。
 import * as THREE from 'three';
+import { profileLat } from '../route/service';
 import type { GameContext } from '../core/context';
 import type { Route } from '../route/types';
 import { GeoBatch, M, P } from './batch';
@@ -69,6 +70,17 @@ function discs(route: Route): Disc[] | null {
     out ??= [];
     for (let d = DIVERGE_D - 40; d <= h.length + 20; d += 6) out.push({ s: h.sOf(d), lat: h.lat(d), r: 11, span: d < DIVERGE_D + 60 });
   }
+  // 追加の線路（複々線・番線・支線・入出庫線）の高架の通り道（中心 ±8m）
+  for (const x of route.extraTracks ?? []) {
+    out ??= [];
+    for (let q = x.from; q <= x.to; q += 6) out.push({ s: q, lat: profileLat(x.lat, q), r: 8, span: false });
+  }
+  for (const c of route.tracks) {
+    const p = route.trackProfiles?.[String(c)];
+    if (!p) continue;
+    out ??= [];
+    for (let q = route.extent.from; q <= route.extent.to; q += 6) out.push({ s: q, lat: profileLat(p, q), r: 6, span: false });
+  }
   corridors.set(route, out);
   return out;
 }
@@ -76,9 +88,11 @@ function discs(route: Route): Disc[] | null {
 /** 長方形 [s0,s1] × [lat0,lat1] が阪堺線の跨線橋（地上・斜路・高架・国道）に掛かるか。
  *  underSpan = true なら南海の真上の径間（床版が水平な区間）の下は通す（道路・柵向け。電柱・建物・木は false） */
 export function tramBlocks(route: Route, s0: number, s1: number, lat0: number, lat1: number, underSpan = false): boolean {
+  const a = Math.min(s0, s1), b = Math.max(s0, s1), c = Math.min(lat0, lat1), d = Math.max(lat0, lat1);
+  // 景観を置かない敷地（車庫・大型施設）
+  for (const z of route.reserved ?? []) if (a < z.to && b > z.from && c < z.lat1 && d > z.lat0) return true;
   const ds = discs(route);
   if (!ds) return false;
-  const a = Math.min(s0, s1), b = Math.max(s0, s1), c = Math.min(lat0, lat1), d = Math.max(lat0, lat1);
   for (const q of ds) {
     if (underSpan && q.span) continue;
     if (q.s + q.r < a || q.s - q.r > b || q.lat + q.r < c || q.lat - q.r > d) continue;

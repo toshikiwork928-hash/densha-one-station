@@ -5,7 +5,7 @@
 // 300m チャンクごとに「構造物 1 メッシュ＋電線 1 LineSegments」へ結合し、距離カリングする
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
-import { bayZone, islandOffset, islandShape, islandZones, loopShape, trackLines } from '../route/service';
+import { bayZone, customPlatformEdges, islandOffset, islandShape, islandZones, loopShape, profileLat, trackLines, trackSpan, type TrackLine } from '../route/service';
 import { basePart, ChunkedBatch, P, type BasePart, type GeoBatch } from './batch';
 import { cullByDistance } from './cull';
 import { getTerrain, hash, TUNNEL_CENTER, TUNNEL_HALF, TUNNEL_WALL_H } from './terrain';
@@ -219,6 +219,8 @@ export function buildCatenary(ctx: GameContext): void {
     ];
     return [Math.min(L0, ...centers), Math.max(L1, ...centers)];
   };
+  /** 複々線・追加の線路のある複線（route.trackProfiles / extraTracks） */
+  const multi = !route.singleTrack && !!(route.trackProfiles || route.extraTracks?.length);
   const bays = route.stations.flatMap(st => { const b = bayZone(st); return b ? [{ from: b.from, to: b.to, platFrom: st.platform.from, platTo: st.platform.to, width: st.island!.bay!.platformWidth }] : []; });
 
   // ---------- 支持点の位置（踏切・信号・標識・駅舎・構造物の端を避ける） ----------
@@ -309,6 +311,14 @@ export function buildCatenary(ctx: GameContext): void {
       const [left, right] = railEdges(s);
       pl = Math.min(pl, left - 3.3); pr = Math.max(pr, right + 3.3);
     }
+    if (multi && kind !== 'tunnel') {
+      // 複々線・頭端駅の番線: 並ぶ線路全体の外。custom 駅は片面ホームの外縁（島式ホームだけの側は線路の外 2.9m）
+      const [a, c] = trackSpan(route, s), pe = customPlatformEdges(route, s, 10);
+      if (pe || kind === 'station') {
+        pl = Math.min(a - 2.9, pe && pe[0] < a ? pe[0] - .25 : Infinity);
+        pr = Math.max(c + 2.9, pe && pe[1] > c ? pe[1] + .25 : -Infinity);
+      } else { pl = Math.min(pl, a - 2.9); pr = Math.max(pr, c + 2.9); }
+    }
     return { s, i, kind, stg, mw: CW + (kind === 'tunnel' ? SYS_T : SYS), pl, pr };
   });
   const supIdx = (s: number) => sups.findIndex(p => p.s >= s);
@@ -372,6 +382,40 @@ export function buildCatenary(ctx: GameContext): void {
       off: (s) => ({ dl: 0, dy: .22 * near(s) }),
       s0: sups[a].s, s1: sups[b].s, anchors: [{ at: 's0', side: dir }, { at: 's1', side: dir }],
     });
+  }
+
+  // 追加の線路（複々線・番線・渡り線）: 並ぶ線路の範囲内（trackSpan）の区間だけ本線の柱から吊る。離れていく区間は buildBranchWires
+  const branchParts: { l: TrackLine; s0: number; s1: number; pole?: number }[] = [];
+  if (multi) for (const x of route.extraTracks ?? []) {
+    if (x.noWire) continue;
+    const l: TrackLine = { kind: 'extra', from: x.from, to: x.to, lat: s => profileLat(x.lat, s), bumpers: x.bumpers ?? [] };
+    const same = (o: TrackLine) => o.kind === 'extra' && o.from === x.from && o.to === x.to && [x.from, (x.from + x.to) / 2, x.to].every(q => Math.abs(o.lat(q) - l.lat(q)) < 1e-6);
+    const inside = (s: number) => { const [a, c] = trackSpan(route, s), v = l.lat(s); return v >= a - .01 && v <= c + .01; };
+    let a0: number | null = null;
+    const parts: [number, number, boolean][] = [];
+    for (let s = l.from; s <= l.to + .01; s += 2) {
+      const q = Math.min(s, l.to), inn = inside(q);
+      if (a0 == null) { a0 = q; parts.push([q, q, inn]); continue; }
+      const last = parts[parts.length - 1];
+      if (last[2] === inn) last[1] = q; else parts.push([q, q, inn]);
+    }
+    const others = allLines.filter(o => !same(o));
+    const nearOther = (s: number) => { let d = Infinity; for (const o of others) if (s >= o.from && s <= o.to) d = Math.min(d, Math.abs(o.lat(s) - l.lat(s))); return d; };
+    for (const [p0, p1, inn] of parts) {
+      if (p1 - p0 < 8) continue;
+      if (!inn) { branchParts.push({ l, s0: p0, s1: p1, pole: x.poleOffset }); continue; }
+      const i0 = supIdx(p0), i1 = supIdx(p1);
+      const a = i0 < 0 ? -1 : i0, b = i1 < 0 ? sups.length - 1 : Math.max(a, i1 - 1);
+      if (a < 0 || b <= a) continue;
+      const mid = l.lat((p0 + p1) / 2), [sa, sc] = trackSpan(route, (p0 + p1) / 2), dir = mid - sa < sc - mid ? -1 : 1;
+      const near = (s: number) => Math.max(0, 1 - nearOther(s) / 3);
+      runs.push({
+        lat: (s) => l.lat(s) + dir * .45 * near(s),
+        off: (s) => ({ dl: 0, dy: .22 * near(s) }),
+        s0: sups[a].s, s1: sups[b].s,
+        anchors: [...(nearOther(sups[a].s) < 6 ? [] : [{ at: 's0' as const, side: dir }]), ...(nearOther(sups[b].s) < 6 ? [] : [{ at: 's1' as const, side: dir }])],
+      });
+    }
   }
 
   // 支持点での電線の位置
@@ -548,6 +592,24 @@ export function buildCatenary(ctx: GameContext): void {
     // 支線（柱頂 → 地面）
     seg(arr, world(F, x, top - .1), world(F, x - d * .4, y0 + .1, -away * 7));
     box(b, x - d * .4, y0 + .1, -away * 7, .5, .3, .5, COL.found);
+  }
+
+  // 離れていく追加の線路（高野線の合流・汐見橋線・入出庫線）: 線路の外側に鋼管柱と腕金、電線
+  for (const bp of branchParts) {
+    const { l } = bp, side = l.lat((bp.s0 + bp.s1) / 2) < 0 ? -1 : 1, po = bp.pole ?? side * 2.7;
+    let pc: THREE.Vector3 | null = null, pm: THREE.Vector3 | null = null;
+    for (let s = bp.s0 + 6; s < bp.s1 - 2; s += 40) {
+      const lat = l.lat(s), x = lat + po, F = frame(s), b = chunks.at(s); b.parent = F;
+      const under = T.structureAt(s, 0), deck = under?.kind === 'viaduct' || under?.kind === 'bridge';
+      const y0 = deck ? 0 : T.groundY(s) - T.trackY(s), top = CW + SYS + .9;
+      pole(b, 'pipe', x, y0, top, deck);
+      const g: WirePt[] = [{ lat, cy: CW, my: CW + SYS, c: lat }];
+      bracket(b, x, g, COL.fit);
+      const c = track.at(s, lat, CW), m = track.at(s, lat, CW + SYS);
+      const arr = L(s);
+      if (pc && pm) { seg(arr, pc, c); seg(arr, pm, m); const mid = pc.clone().lerp(c, .5); seg(arr, mid, pm.clone().lerp(m, .5).setY(pm.y / 2 + m.y / 2 - .15)); }
+      pc = c; pm = m;
+    }
   }
 
   // ---------- メッシュ化・カリング ----------

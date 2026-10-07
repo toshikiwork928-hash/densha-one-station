@@ -35,6 +35,9 @@ export function attachSceneInspector(ctx: GameContext): () => void {
   panel.append('景観確認 ', select, position, jump, cab, view, wide); document.body.append(panel);
   ctx.cameraMode = 'outside'; move();
   return () => {
+    // コンソールから任意の視点: __inspectCam = { s, lat, y, ls, llat, ly }（線路基準の位置と注視点）
+    const cam = (window as any).__inspectCam;
+    if (cam) { ctx.camera.position.copy(ctx.track.at(cam.s, cam.lat, cam.y)); ctx.camera.lookAt(ctx.track.at(cam.ls, cam.llat, cam.ly)); return; }
     if (!overview) return;
     const s = ctx.state.train.s, side = ctx.route.id.endsWith('-up') ? 1 : -1;
     ctx.camera.position.copy(ctx.track.at(s - 110, side * 85, 65));

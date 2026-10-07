@@ -1,6 +1,6 @@
 # 計画: 堺〜難波（次回以降に持ち越し）
 
-作成日: 2026-10-06。**計画だけ**で、まだ作らない。先に [spec-izumiotsu-kishiwada.md](./spec-izumiotsu-kishiwada.md)（泉大津〜岸和田）を作る。
+作成日: 2026-10-06。**2026-10-07 に実装済み**（堺 → なんば の1方向・独立コース）。実装の仕様と調査結果は [spec-sakai-namba.md](./spec-sakai-namba.md)。以下は計画時のメモ。先に [spec-izumiotsu-kishiwada.md](./spec-izumiotsu-kishiwada.md)（泉大津〜岸和田）を作る。
 
 ## 方針
 

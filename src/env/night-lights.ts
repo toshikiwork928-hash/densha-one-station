@@ -62,7 +62,12 @@ export function createNightLights(ctx: GameContext): NightLights {
     // [蛍光灯の横位置, 照らす床の横位置[]]。島式ホームは中央に蛍光灯、床は両側
     const L0 = Math.min(...route.tracks), mid = (L0 + L1) / 2;
     const hg = sta.layout === 'hagoromo' ? hagoromoSpec(route) : null;
-    const sides: [number, number[], number?][] = hg
+    const sides: [number, number[], number?][] = sta.layout === 'custom'
+      // 独自配置のホーム: 島式は中央、片面は線路から 4.2m
+      ? (sta.customPlatforms ?? []).map((p): [number, number[], number?] => p.kind === 'island'
+        ? [p.lat, [p.lat - 1.5, p.lat + 1.5], ((p.from ?? s0) + (p.to ?? s1)) / 2 - (s0 + s1) / 2]
+        : [p.lat + (p.side === 'L' ? -4.2 : 4.2), [p.lat + (p.side === 'L' ? -3.6 : 3.6)], ((p.from ?? s0) + (p.to ?? s1)) / 2 - (s0 + s1) / 2])
+      : hg
       // 羽衣: 本線と3番線の間の島式ホームと、もう一方の本線の外の片面ホーム
       ? [[hg.island, [hg.island - 1.5, hg.island + 1.5]], [hg.mainOuter - hg.side * 4.1, [hg.mainOuter - hg.side * 3.6]]]
       : sta.layout === 'hamadera'

@@ -151,7 +151,8 @@ export function buildTerrain(ctx: GameContext): Terrain {
       return [ll, j === 0 || j === LAT.length - 1 ? Math.min(y, 0) - 9 : y - .02];
     });
   };
-  const gc = new THREE.Color(0x7fa05a), dirt = new THREE.Color(0x9a9270);
+  // 大都市（route.urban）は舗装・空き地の灰色がちの地面
+  const gc = new THREE.Color(route.urban ? 0x9a9a8e : 0x7fa05a), dirt = new THREE.Color(0x9a9270);
   for (let s = S0; s < S1; s += 1000) {
     const g = gridAlong(track, s, Math.min(S1, s + 1000), 10, cols, groundMat, (q, j, out) => {
       const h = hash(Math.floor(q / 30), j);
@@ -161,7 +162,7 @@ export function buildTerrain(ctx: GameContext): Terrain {
     g.name = 'ground'; scene.add(g);
   }
   // 遠方の地面
-  const base = new THREE.Mesh(new THREE.PlaneGeometry(40000, 40000), new THREE.MeshLambertMaterial({ color: 0x7a9a58 }));
+  const base = new THREE.Mesh(new THREE.PlaneGeometry(40000, 40000), new THREE.MeshLambertMaterial({ color: route.urban ? 0x8f9286 : 0x7a9a58 }));
   const mid = track.at((S0 + S1) / 2, 0, 0);
   base.rotation.x = -Math.PI / 2; base.position.set(mid.x, -9, mid.z); base.name = 'ground-far'; scene.add(base);
 

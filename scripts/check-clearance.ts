@@ -9,6 +9,7 @@ import { shiokaze, shiokazeUp } from '../src/route/routes/shiokaze';
 import { mountain, mountainUp } from '../src/route/routes/mountain';
 import { kishiwada, kishiwadaUp } from '../src/route/routes/kishiwada';
 import { through, throughUp } from '../src/route/routes/through';
+import { namba } from '../src/route/routes/namba';
 import { buildTrack } from '../src/route/track';
 import { applyService } from '../src/route/service';
 import type { Route, ServiceId } from '../src/route/types';
@@ -31,6 +32,7 @@ import { buildCrossings } from '../src/world/crossings';
 import type { OncomingSystem } from '../src/world/oncoming';
 import { checkClearance } from '../src/debug/clearance';
 
+
 // --- DOM の最小スタブ（canvas は描画命令を捨てる） ---
 const sink: any = new Proxy(function () { /* noop */ }, {
   get: (_t, k) => k === Symbol.toPrimitive ? () => 0 : k === 'width' || k === 'height' ? 0 : k === 'data' ? new Uint8ClampedArray(4) : sink,
@@ -52,7 +54,7 @@ function context(source: Route): GameContext {
 }
 
 const fakeOncoming = { activeSpans: () => [] } as unknown as OncomingSystem;
-function build(ctx: GameContext): void {
+async function build(ctx: GameContext): Promise<void> {
   buildTerrain(ctx);
   buildTrackMesh(ctx);
   buildStructures(ctx);
@@ -65,6 +67,14 @@ function build(ctx: GameContext): void {
   const town = buildTown(ctx);
   buildSignals(ctx);
   buildCrossings(ctx, fakeOncoming);
+  // 堺〜難波の専用景観（電車を除く）
+  // 車両モデルのモジュールは読込時に canvas を使うので、DOM スタブの後に動的に読む
+  if (ctx.route.id === 'namba') {
+    (await import('../src/world/namba-terminal')).buildNambaTerminal(ctx);
+    (await import('../src/world/suminoe-depot')).buildSuminoeDepot(ctx);
+    (await import('../src/world/namba-landmarks')).buildNambaLandmarks(ctx);
+    (await import('../src/world/koya-traffic')).buildKoyaPlatforms(ctx);
+  }
   placeScenery(ctx, prepareSceneryModels({} as any), town.trees);
 }
 
@@ -73,7 +83,8 @@ const option = (name: string) => process.argv.find(a => a.startsWith(`--${name}=
 const routeFilter = option('route'), serviceFilter = option('service');
 const cases: [Route, ServiceId[]][] = [[shiokaze, ['local', 'express', 'airport', 'limited']], [shiokazeUp, ['local', 'express', 'airport', 'limited']], [mountain, ['local']], [mountainUp, ['local']],
   [kishiwada, ['local', 'express', 'airport', 'southern']], [kishiwadaUp, ['local', 'express', 'airport', 'southern']],
-  [throughUp, ['local', 'airport', 'southern']], [through, ['local', 'airport', 'southern']]];
+  [throughUp, ['local', 'airport', 'southern']], [through, ['local', 'airport', 'southern']],
+  [namba, ['local', 'express', 'southern', 'limited']]];
 let total = 0;
 let checked = 0;
 for (const [src, services] of cases) {
@@ -83,7 +94,7 @@ for (const [src, services] of cases) {
     console.log(`検査開始 ${src.id} ${svc}`);
     const ctx = context(src);
     ctx.service = applyService(ctx.route, svc);
-    let tb = Date.now(); build(ctx); if (process.env.CLR_DEBUG) console.error('build', Date.now() - tb, 'ms');
+    let tb = Date.now(); await build(ctx); if (process.env.CLR_DEBUG) console.error('build', Date.now() - tb, 'ms');
     const r = await checkClearance(ctx, { log: process.env.CLR_DEBUG ? m => console.error(m) : undefined });
     const hits = r.hits;
     total += hits.length;

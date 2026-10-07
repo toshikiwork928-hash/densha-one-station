@@ -13,7 +13,10 @@ export interface SpeedLimit { from: number; to: number; kmh: number; /** バナ�
 
 export interface Station {
   /** 沿岸線の駅固有意匠。線路運行は loop / island に従う。 */
-  layout?: 'relative' | 'island' | 'loop' | 'hagoromo' | 'hamadera';
+  layout?: 'relative' | 'island' | 'loop' | 'hagoromo' | 'hamadera' | 'custom';
+  /** layout 'custom' の駅のホーム（world/custom-stations.ts が描く）。island = 中心 lat・幅 width の島式、side = 線路 lat の side 側の片面ホーム。
+   *  from/to 未指定は platform と同じ範囲。sign = 駅名標・人・上屋を作る（既定 true） */
+  customPlatforms?: CustomPlatform[];
   name: string;
   kana?: string;
   /** 停止位置目標 [m]（先頭位置） */
@@ -50,6 +53,31 @@ export interface Station {
   indoor?: boolean;
   /** 相対式2面2線で上下のホームを前後にずらす駅（踏切を挟んだ対面ホーム）。対向線側のホームは platform から s 方向へこの距離だけずれる（上下とも同じ符号） */
   platformOpp?: number;
+}
+
+export type CustomPlatform =
+  | { kind: 'island'; lat: number; width: number; from?: number; to?: number; roof?: number; /** 専用モジュールが描く（難波など） */ external?: boolean }
+  | { kind: 'side'; lat: number; side: 'L' | 'R'; from?: number; to?: number; width?: number; external?: boolean };
+
+/** 線路の横位置の折れ線 [s, lat][]（s は昇順）。隣り合う点の lat が違う区間は余弦の S字でつなぎ、範囲外は端の値 */
+export type LatProfile = [number, number][];
+
+/** 描画・景観用の線路（複々線の追加の線・頭端駅の番線・支線・入出庫線）。自列車の走行線は ServiceSpec.lane が指す */
+export interface ExtraTrack {
+  id: string;
+  /** 横位置（route.tracks と同じ基準。左が負） */
+  lat: LatProfile;
+  from: number; to: number;
+  /** 車止めの位置（s） */
+  bumpers?: number[];
+  /** 架線を張らない */
+  noWire?: boolean;
+  /** 本線の床版から離れる区間は自前の細い床版（高架）を作る（既定 true） */
+  ownDeck?: boolean;
+  /** 自前の床版の横の範囲（線路中心からの相対、既定 [-2.7, 2.7]）。並ぶ2線を1枚で受けるとき広げる */
+  deckSpan?: [number, number];
+  /** 離れていく区間の架線柱の横位置（線路中心からの相対、既定は外側へ 2.7） */
+  poleOffset?: number;
 }
 
 /** 2面4線の待避線。lat は自線待避線の横位置（左が負、例 -9.2）。対向側は route.tracks の対向線から鏡像に +lat 側へ */
@@ -106,6 +134,14 @@ export interface ServiceSpec {
   kindOptions?: TrainKind[];
   /** 選べる編成（units の候補。未指定なら units 固定。先頭が既定） */
   formationOptions?: number[][];
+  /** 自列車の走行線の横位置（絶対値）。未指定なら route.tracks[0]（とその trackProfiles）。複々線の急行線・頭端駅の番線への進路 */
+  lane?: LatProfile;
+  /** 駅ごとのドアを開ける側（custom 駅で種別により番線が違う所。駅 index → 側） */
+  platformSides?: Record<number, 'L' | 'R'>;
+  /** 駅ごとの到着番線（custom 駅で種別により番線が違う所。駅 index → 番線名。Station.mainTrack を上書き） */
+  trackNames?: Record<number, string>;
+  /** lane の分岐器などの制限（先頭基準の区間。to には編成長が加算される） */
+  laneLimits?: SpeedLimit[];
   /** 待避（この駅で後続の通過列車を待つ）: 駅 index と、通過していく列車の種別 */
   waits?: { station: number; passedBy: ServiceId }[];
 }
@@ -210,5 +246,19 @@ export interface Route {
   /** [C] 踏切（中心位置 s） */
   crossings?: { id: string; s: number; roadWidth?: number }[];
   /** [C] トンネル・高架などの構造物区間 */
-  structures?: { kind: 'tunnel' | 'viaduct' | 'bridge'; from: number; to: number }[];
+  structures?: { kind: 'tunnel' | 'viaduct' | 'bridge'; from: number; to: number; /** 高架の壁（高欄）を低くする（壁のない高架） */ open?: boolean }[];
+  /** route.tracks の線の横位置の変化（キー = tracks の値の文字列。値は絶対の横位置）。複々線で対向線が外へずれる・駅で線路が開く */
+  trackProfiles?: Record<string, LatProfile>;
+  /** この範囲では追加の線路をすべて本線と一続きの床版・架線柱の範囲に含める（頭端駅の扇状の構内） */
+  deckJoin?: { from: number; to: number }[];
+  /** 描画・景観用の追加の線路 */
+  extraTracks?: ExtraTrack[];
+  /** 景観（住宅・ビル・道路）を置かない範囲（s・横位置の矩形）。車庫・大型施設の敷地 */
+  reserved?: { from: number; to: number; lat0: number; lat1: number; /** この範囲には高架の橋脚を立てない（下を他の線路が通る） */ noPiers?: boolean }[];
+  /** 種別適用後: 自列車の走行線（ServiceSpec.lane。route/service.ts が設定） */
+  activeLane?: LatProfile;
+  /** 鋼橋の塗色と形（throughGirder = 下路プレートガーダー: 線路の両脇に桁の側板が立つ。トラス区間 steel-bridge は除く） */
+  bridgeStyle?: { color: number; throughGirder?: boolean };
+  /** 市街地（海・工業地帯の遠景を置かない） */
+  urban?: boolean;
 }
