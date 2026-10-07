@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import type { OncomingSpec, Station, TrainKind } from '../route/types';
-import { islandOffset, loopShape, loopZone, type LoopZone } from '../route/service';
+import { islandOffset, loopShape, loopZone, serviceOf, type LoopZone } from '../route/service';
 import { planOncoming, rushStopScenes } from '../route/oncoming-stops';
 import { onLight } from './batch';
 import { placeCar } from './emu';
@@ -294,9 +294,14 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
   let planned = false;
   function applyPlan() {
     planned = true;
-    const rushHour = RUSH_TIMES.has(ctx.envState.timeOfDay);
+    // 時間帯と向きで対向列車の多さを変える（平日）: 朝はなんば方面が多く和歌山方面は少し少なめ、夕・夜は和歌山方面が多い、昼（デイタイム）は少ない
+    const tod = ctx.envState.timeOfDay;
+    const towardNamba = serviceOf(route, 'local')?.destination === 'なんば'; // 対向列車は逆向き
+    const level = route.lineId !== 'shiokaze' ? (RUSH_TIMES.has(tod) ? 2 : 0)
+      : towardNamba ? ({ morning: 1, noon: 0, evening: 2, night: 2 } as const)[tod] : ({ morning: 2, noon: 0, evening: 1, night: 1 } as const)[tod];
+    const rushHour = level > 0;
     const modes = planOncoming(trains.map(o => ({ spec: o.spec0, kind: o.kind, rush: o.rush })), {
-      seedKey: `${route.id}|${ctx.service?.id ?? ''}|${ctx.envState.timeOfDay}`, rushHour,
+      seedKey: `${route.id}|${ctx.service?.id ?? ''}|${tod}`, rushHour, level,
       passStations: new Set(route.stations.flatMap((s, i) => (s.pass ? [i] : []))),
     });
     trains.forEach((o, i) => {

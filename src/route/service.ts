@@ -1,6 +1,6 @@
 // 運行種別（普通・急行・特急）の適用と、2面4線駅の待避線の形状
 // route は各モジュールが参照を保持しているので、種別の切替は route の中身を書き換えて反映する（元データは初回に退避）
-import type { LatProfile, Route, ServiceId, ServiceSpec, SpeedLimit, Station, TrainKind } from './types';
+import type { LatProfile, Route, ServiceId, ServiceSpec, SpeedLimit, Station, TimeOfDay, TrainKind } from './types';
 
 /** 1両の長さ [m]（既定。2300系は 18m） */
 export const CAR_LEN = 20;
@@ -267,8 +267,25 @@ export function applyVehicles(route: Route, sel: Partial<Record<ServiceId, { kin
   }
 }
 
+/** 種別の格（特急 = ラピート・サザン、急行 = 急行・空港急行、普通）。待避の相手は格で照合する（特急の待避は自分がサザンでもラピートでも同じ） */
+export const classOf = (id: ServiceId): 'tokkyu' | 'kyuko' | 'local' => id === 'limited' || id === 'southern' ? 'tokkyu' : id === 'express' || id === 'airport' ? 'kyuko' : 'local';
+export const sameClass = (a: ServiceId, b: ServiceId): boolean => classOf(a) === classOf(b);
+
+const baseTimetables = new WeakMap<ServiceSpec, { timetable: ServiceSpec['timetable']; waits?: ServiceSpec['waits'] }>();
+/** 時間帯のダイヤ（待避・走行中の追い越し・時刻表）を全種別へ反映 */
+export function applyTimeOfDay(route: Route, tod: TimeOfDay = route.timeOfDay ?? 'noon'): void {
+  for (const v of route.services ?? []) {
+    let b = baseTimetables.get(v);
+    if (!b) { b = { timetable: v.timetable, waits: v.waits }; baseTimetables.set(v, b); }
+    v.waits = v.waitsByTime ? [...(v.waitsByTime[tod] ?? [])] : b.waits;
+    v.runPasses = v.runPassesByTime?.[tod] ?? [];
+    v.timetable = v.timetableByTime?.[tod] ?? b.timetable;
+  }
+}
+
 /** 種別を route へ反映（停車駅・時刻・停止位置・編成長・制限）。何度呼んでもよい */
 export function applyService(route: Route, id: ServiceId | undefined): ServiceSpec | undefined {
+  applyTimeOfDay(route);
   const svc = serviceOf(route, id);
   if (!svc) return undefined;
   let b = bases.get(route);

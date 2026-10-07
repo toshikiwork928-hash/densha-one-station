@@ -8,6 +8,7 @@ import type { ServiceSpec, Sign } from '../types';
 import { shiokaze, shiokazeUp } from './shiokaze';
 import { kishiwada, kishiwadaUp } from './kishiwada';
 import { NT, NT_UP } from './through-timetable';
+import { NAMBA_WAITS, WAKAYAMA_WAITS, setLocalPatterns, within } from '../day-patterns';
 
 const approachSigns = (stopS: number): Sign[] => [
   ...[500, 300, 200, 100, 50].map((d): Sign => ({ kind: 'distance', s: stopS - d, meters: d })),
@@ -72,3 +73,7 @@ setDestinations(upServices, 'namba');
 export const through = concatRoutes(kishiwadaUp, shiokaze, {
   id: 'nankai-through', name: '南海本線 岸和田 → 堺', services: upServices, signs: approachSigns,
 });
+
+// 時間帯ごとの普通の待避（route/day-patterns.ts）
+setLocalPatterns(throughUp, { waits: within(throughUp, WAKAYAMA_WAITS) });
+setLocalPatterns(through, { waits: within(through, NAMBA_WAITS) });

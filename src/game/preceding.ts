@@ -1,6 +1,7 @@
 // 先行列車（見えない仮想列車）と閉そく信号の現示計算。純関数のみ（テスト・調整用に DOM 非依存）
 import type { SignalAspect } from '../core/events';
-import type { Route, ServiceId } from '../route/types';
+import type { Route, ServiceId, ServiceSpec } from '../route/types';
+import { profileLat, sameClass } from '../route/service';
 
 /** 先行列車の自列車に対する時隔 [s]（種別あり路線は HEADWAY_BY が優先） */
 const HEADWAY = 240;
@@ -31,7 +32,10 @@ export function buildPrecedingKeys(route: Route, service?: ServiceId): Preceding
   const keys: Key[] = [], depT: Record<number, number> = {}, arrT: Record<number, number> = {};
   const local = route.services?.find(x => x.id === 'local');
   if (local) {
-    const { h: h0, extra: ex } = HEADWAY_BY[service ?? 'express'], h = route.precedingHeadway?.[service ?? 'express'] ?? h0;
+    const { h: h0, extra: ex } = HEADWAY_BY[service ?? 'express'];
+    // 普通どうし: 待避で長く停まる駅があると、先行の普通が出てすぐ後続が着くので、長い停車の分だけ時隔を広げる
+    const longDwell = service === 'local' ? Math.max(0, ...Object.values(local.timetable).map(x => (x.dep ?? x.arr) - x.arr - 25)) : 0;
+    const h = (route.precedingHeadway?.[service ?? 'express'] ?? h0) + longDwell;
     let extra = 0;
     route.stations.forEach((sta, i) => {
       if (!local.stops.includes(i)) return;
@@ -58,11 +62,14 @@ export function buildPrecedingKeys(route: Route, service?: ServiceId): Preceding
   // 自列車に抜かれる普通は、対象駅の通過予定時刻より60秒前までに到着させる。
   // 反対種別の待避で普通の時刻が伸びても、目の前の本線上で競合させない。
   const player = route.services?.find(x => x.id === service);
-  const waits = local?.waits?.filter(w => w.passedBy === service) ?? [];
+  const waits = local?.waits?.filter(w => !!service && sameClass(w.passedBy, service) && w.station > 0 && w.station < route.stations.length - 1) ?? [];
   // 待避駅より手前で自列車も停車する駅（普通と同じ本線に停車）では、普通の発車を自列車の到着より80秒以上前にして、目の前で詰まらせない。
-  const lastWait = Math.max(-1, ...waits.map(w => w.station));
-  const clearAdvance = Math.max(0, ...(player?.stops ?? []).filter(i => i > 0 && i < lastWait && local?.stops.includes(i) && depT[i] != null && player?.timetable[i])
-    .map(i => depT[i] - (player!.timetable[i].arr - 80)));
+  // 待避駅が無い（終着まで先着する）ときは全線で、自列車が着く・通過する80秒前までに普通を発車させておく（途中で追いつかない）
+  const lastWait = waits.length ? Math.max(...waits.map(w => w.station)) : route.stations.length;
+  const nLast = route.stations.length - 1;
+  const clearAdvance = Math.max(0, ...Object.keys(player?.timetable ?? {}).map(Number).filter(i => i > 0 && i < lastWait && local?.stops.includes(i) && (depT[i] ?? arrT[i]) != null && player?.timetable[i])
+    // 終着駅は着いた時刻（そこで本線から外れる）、途中駅は発車時刻
+    .map(i => (i === nLast ? arrT[i] + 30 : depT[i]) - (player!.timetable[i].arr - 80)));
   const advance = Math.max(clearAdvance, ...waits.map(w => (arrT[w.station] ?? 0) - (player?.timetable[w.station]?.arr ?? 0) + 60), 0);
   if (advance > 0) {
     for (const key of keys) if (key.t > -1e5) key.t -= advance;
@@ -72,7 +79,11 @@ export function buildPrecedingKeys(route: Route, service?: ServiceId): Preceding
   // 終着後は先へ抜けて消える。終着駅の待避線に入る普通（南海本線）はそのまま待避線に留まる（本線の閉そくを占有しない）
   const last = keys[keys.length - 1];
   const lastSta = route.stations[route.stations.length - 1];
+  // 終着駅で自列車と別の番線（普通の進路 lane が分かれる）に入る普通は、着いたら本線の閉そくから外す
+  const ownLane = (v?: ServiceSpec) => v?.lane ? profileLat(v.lane, lastSta.stopS) : 0;
+  const apart = !!lastSta && !!local && !!player && Math.abs(ownLane(local) - ownLane(player)) > 1;
   if (local?.useLoop && lastSta?.loop && !lastSta.loopPriority) keys.push({ t: 1e6, s: last.s });
+  else if (apart) keys.push({ t: last.t + 1, s: last.s + 1e5 }, { t: 1e6, s: last.s + 1e5 });
   else keys.push({ t: last.t + 140, s: last.s + 2500 }, { t: 1e6, s: last.s + 2500 });
   return { keys, depT, arrT };
 }

@@ -2,7 +2,7 @@
 // 急行・特急で通過する2面4線駅の待避線に止まっている先行の普通（st.precedingS が待避線にいる間）
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
-import { destOf, islandOffset, loopShape, loopZones, serviceOf } from '../route/service';
+import { destOf, islandOffset, loopShape, loopZones, sameClass, serviceOf } from '../route/service';
 import type { TrainKind } from '../route/types';
 import { placeCar } from './emu';
 import { bogieOffset, createTrainSet, type TrainCar } from './train-models';
@@ -74,7 +74,7 @@ export function createOvertaking(ctx: GameContext): void {
     if (!local || st.sel.service === 'local') return;
     const h = st.precedingS, prevH = lastH;
     lastH = h;
-    const z = zones.find(q => !route.stations[q.index].enterLoop && local.waits?.some(w => w.station === q.index && w.passedBy === st.sel.service) && h > q.inFrom && h < q.outTo + 400);
+    const z = zones.find(q => !route.stations[q.index].enterLoop && local.waits?.some(w => w.station === q.index && sameClass(w.passedBy, st.sel.service)) && h > q.inFrom && h < q.outTo + 400);
     if (!z || Math.abs(h - ps) > 1500) return;
     const v = view(local.kind, local.units, local.name, local.unitKinds, destOf(route, local));
     v.group.visible = true;

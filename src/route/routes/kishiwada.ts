@@ -9,6 +9,7 @@ import { reverseRoute } from '../reverse';
 import { airportService, loopZone, setDestinations } from '../service';
 import { stopScenes, type StopScene } from '../oncoming-stops';
 import { KT, KT_UP } from './kishiwada-timetable';
+import { NAMBA_WAITS, setLocalPatterns, within } from '../day-patterns';
 
 /** 泉大津の待避線は堺〜泉大津（shiokaze.ts）と同じ形 */
 const LOOP: StationLoop = { lat: -9.2, turnoutLength: 90, turnoutLimitKmh: 45 };
@@ -174,3 +175,6 @@ for (const v of kishiwadaUp.services!) {
   if (v.id === 'southern') { v.kind = 'commuter-old'; v.unitKinds = ['commuter-old', 'southern-10000']; }
 }
 setDestinations(kishiwadaUp.services!, 'namba');
+
+// 時間帯ごとの普通の待避（route/day-patterns.ts）。岸和田 → 泉大津は泉大津が終着（到着前の放送で案内）
+setLocalPatterns(kishiwadaUp, { waits: within(kishiwadaUp, NAMBA_WAITS) });

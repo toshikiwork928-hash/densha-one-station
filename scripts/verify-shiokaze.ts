@@ -7,7 +7,7 @@ import { kishiwada, kishiwadaUp } from '../src/route/routes/kishiwada';
 import { through, throughUp } from '../src/route/routes/through';
 import { namba, nambaUp, NAMBA_TRACKS } from '../src/route/routes/namba';
 import { approachText, departText } from '../src/audio/announce-text';
-import { applyService, destOf } from '../src/route/service';
+import { applyService, destOf, sameClass } from '../src/route/service';
 import { buildTrack } from '../src/route/track';
 import { loopZone, loopShape } from '../src/route/service';
 import { coastalThirdTracks } from '../src/world/coastal-stations';
@@ -90,18 +90,29 @@ for (const route of [shiokaze, shiokazeUp]) {
 const downTrack = buildTrack(shiokaze), upTrack = buildTrack(shiokazeUp);
 for (let s = 0; s <= downTrack.length; s += 50) assert.ok(Math.abs(downTrack.trackAt(s).y - upTrack.trackAt(upTrack.length - s).y) < 1e-6, '復路の標高一致');
 
+// 時間帯ごとの普通の待避（route/day-patterns.ts）。昼: 泉大津 → 堺は泉大津（始発、待たない）で空港急行・高石で特急、堺 → 泉大津は高石で特急・泉大津（終着、案内のみ）で空港急行
 const expectedWaits = new Map([
-  ['shiokaze', [['高石', 'limited'], ['浜寺公園', 'express'], ['浜寺公園', 'airport']]],
-  ['shiokaze-up', [['浜寺公園', 'express'], ['浜寺公園', 'airport'], ['高石', 'limited']]],
+  ['shiokaze', [['泉大津', 'airport'], ['高石', 'limited']]],
+  ['shiokaze-up', [['高石', 'limited'], ['泉大津', 'airport']]],
 ]);
 for (const route of [shiokaze, shiokazeUp]) {
-  const waits = route.services!.find(s => s.id === 'local')!.waits!;
-  assert.deepEqual(waits.map(w => [route.stations[w.station].name, w.passedBy]), expectedWaits.get(route.id));
-  for (const w of waits) {
-    assert.ok(w.station > 0 && w.station < 9, '起終点では通過待ちしない');
-    assert.ok(loopZone(route.stations[w.station]), '待避線へ進入可能');
-    assert.ok(!route.services!.find(s => s.id === w.passedBy)!.stops.includes(w.station), '優等列車は待避駅を通過');
+  const r = structuredClone(route); applyService(r, 'local');
+  const waits = r.services!.find(s => s.id === 'local')!.waits!;
+  assert.deepEqual(waits.map(w => [r.stations[w.station].name, w.passedBy]), expectedWaits.get(route.id));
+  for (const tod of ['morning', 'noon', 'evening', 'night'] as const) {
+    const q = structuredClone(route); q.timeOfDay = tod; applyService(q, 'local');
+    for (const w of q.services!.find(s => s.id === 'local')!.waits!) {
+      if (w.station === 0 || w.station === 9) continue; // 起終点では待たない（終着は放送のみ）
+      assert.ok(loopZone(q.stations[w.station]), '待避線へ進入可能');
+    }
   }
+}
+// 夜の堺 → 泉大津: 浜寺公園で特急・急行の通過待ち、終着の泉大津の到着前に「特急ラピートの通過待ちと急行の待ち合わせ」ではなく待ち合わせとして案内
+{
+  const q = structuredClone(shiokazeUp); q.timeOfDay = 'night'; const sv = applyService(q, 'local')!;
+  const park = q.stations.findIndex(s => s.name === '浜寺公園');
+  assert.ok(approachText(q, park, sv).includes('ハマデラコウエンで特急ラピートと急行の通過待ちをします。'), approachText(q, park, sv));
+  assert.ok(approachText(q, 9, sv).includes('イズミオオツで特急ラピートと急行の待ち合わせをします。'), approachText(q, 9, sv));
 }
 const parkDown = shiokaze.stations.find(s => s.layout === 'hamadera')!;
 const parkUp = shiokazeUp.stations.find(s => s.layout === 'hamadera')!;
@@ -146,7 +157,7 @@ for (const source of [shiokaze, shiokazeUp, mountain, mountainUp]) {
           heldStation = o.station;
         }
         if (service !== 'local') for (const w of ctx.route.services?.find(s => s.id === 'local')?.waits ?? []) {
-          if (w.passedBy !== service) continue;
+          if (!sameClass(w.passedBy, service) || w.station === 0 || w.station === ctx.route.stations.length - 1) continue;
           const sta = ctx.route.stations[w.station], z = loopZone(sta)!;
           if (Math.abs(st.train.s - sta.stopS) < 20) {
             assert.ok(st.precedingS >= z.inTo + 80 && st.precedingS <= z.outFrom, '優等列車が通過時、普通全車が待避線内');
@@ -170,9 +181,9 @@ for (const source of [shiokaze, shiokazeUp, mountain, mountainUp]) {
       else assert.ok(!result.log.some((l: string) => l.includes('入線')), `${source.id}/${service}は入線案内なし`);
     }
     if (source.theme === 'coast') {
-      const waits = ctx.route.services!.find(s => s.id === 'local')!.waits!;
+      const n = ctx.route.stations.length, waits = ctx.route.services!.find(s => s.id === 'local')!.waits!.filter(w => w.station > 0 && w.station < n - 1);
       assert.deepEqual([...observedWaits], service === 'local' ? [...new Set(waits.map(w => w.station))] : [], '普通の通過待ちを指定順で実施');
-      assert.deepEqual([...observedSidings], service === 'local' ? [] : waits.filter(w => w.passedBy === service).map(w => w.station), '指定駅で先行普通の待避を確認');
+      assert.deepEqual([...observedSidings], service === 'local' ? [] : [...new Set(waits.filter(w => sameClass(w.passedBy, service)).map(w => w.station))], '指定駅で先行普通の待避を確認');
     }
   }
 }
@@ -302,7 +313,7 @@ for (const [route, parts] of [[throughUp, [shiokazeUp, kishiwada]], [through, [k
 {
   const r = structuredClone(shiokaze), sv = applyService(r, 'local')!;
   assert.ok(approachText(r, 3, sv).endsWith('タカイシで特急ラピートの通過待ちをします。'), approachText(r, 3, sv));
-  assert.ok(approachText(r, 5, sv).endsWith('ハマデラコウエンで急行の通過待ちをします。'), approachText(r, 5, sv));
+  assert.ok(!approachText(r, 5, sv).includes('待'), '昼の浜寺公園は待避なし');
   assert.ok(!approachText(r, 1, sv).includes('待'), '待避しない駅は案内なし');
 }
 for (const source of [kishiwada, kishiwadaUp, throughUp, through]) {
@@ -335,7 +346,7 @@ for (const source of [kishiwada, kishiwadaUp, throughUp, through]) {
     assert.ok(Math.abs(ctx.state.train.s - finalSta.stopS) < 15, `${source.id}/${service}終着停止`);
     assert.equal(ctx.state.stops.length, ctx.route.services!.find(s => s.id === service)!.stops.length - 1, `${source.id}/${service}停車駅数`);
     if (service === 'local') assert.ok(zoneMax <= 46, `${source.id}/${service}終着の待避線へ45km/hで入線`);
-    const waits = [...new Set(ctx.route.services!.find(v => v.id === 'local')!.waits?.map(w => w.station) ?? [])];
+    const nst = ctx.route.stations.length, waits = [...new Set(ctx.route.services!.find(v => v.id === 'local')!.waits?.filter(w => w.station > 0 && w.station < nst - 1).map(w => w.station) ?? [])];
     assert.deepEqual([...observedWaits], service === 'local' ? waits : [], `${source.id}/${service}普通の待避`);
     for (const k of Object.keys(stopT)) {
       const gap = arriveT[+k] - stopT[+k];
@@ -416,4 +427,37 @@ console.log('泉大津〜岸和田・堺〜岸和田（5種別×上下）・サ�
     assert.ok(Math.abs(ctx.state.train.s - ctx.route.stations[n - 1].stopS) < 15, `namba-up/${service}終着停止`);
   }
   console.log('なんば〜堺（下り・5種別）チェック成功');
+}
+
+// 時間帯ごとのダイヤ（朝・夕・夜）: 全コース・全種別で完走、ATS非常制動なし、速度超過なし、普通は時間帯の待避駅で待つ
+{
+  let n = 0;
+  for (const route of [shiokaze, shiokazeUp, kishiwada, kishiwadaUp, throughUp, through, namba, nambaUp]) {
+    for (const tod of ['morning', 'evening', 'night'] as const) {
+      for (const service of route.services!.map(v => v.id)) {
+        const ctx = context(route, service); ctx.envState.timeOfDay = tod;
+        const game = createGame(ctx);
+        assert.equal(ctx.route.timeOfDay, tod);
+        const observed = new Set<number>();
+        attachAutodrive(ctx, (sec, dt = 1 / 30, hook) => {
+          for (let q = 0; q < sec; q += dt) {
+            if (hook?.()) break; game.update(dt);
+            const o = ctx.state.overtake;
+            if (o?.localStopped && !o.cleared) observed.add(o.station);
+          }
+        });
+        const result = (globalThis as any).window.__qa.run(service, 'all', 4000);
+        const tag = `${route.id}/${tod}/${service}`;
+        if (ctx.state.penalties.atsBrake || ctx.state.state !== 'result') console.log(tag, (result.log ?? []).filter((l: string) => /ATS警報|非常|待|通過/.test(l)).slice(0, 14).join(' | '));
+        assert.equal(ctx.state.state, 'result', `${tag}完走`);
+        assert.equal(ctx.state.penalties.atsBrake, 0, `${tag}ATS非常制動なし`);
+        assert.equal(result.overspeed, 0, `${tag}速度超過なし`);
+        const last = ctx.route.stations.length - 1;
+        const want = service === 'local' ? [...new Set((ctx.route.services!.find(v => v.id === 'local')!.waits ?? []).filter(w => w.station > 0 && w.station < last).map(w => w.station))] : [];
+        assert.deepEqual([...observed], want, `${tag}普通の待避`);
+        n++;
+      }
+    }
+  }
+  console.log(`時間帯ごとのダイヤ（朝・夕・夜）${n}運行チェック成功`);
 }

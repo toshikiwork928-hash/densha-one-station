@@ -32,6 +32,8 @@ export interface OvertakeState {
   station: number;
   /** 通過列車の種別 */
   passedBy: ServiceId;
+  /** この駅で待つ何本目か（0 から。同じ駅で特急の通過 → 急行の接続など、続けて待つ） */
+  seq: number;
   /** 出発信号（route.signals の index）。通過列車が抜けるまで停止現示 */
   depSignal: number;
   /** run = 走行中, done = 通過済み（見えなくなった） */

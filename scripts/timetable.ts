@@ -8,7 +8,7 @@ import { through, throughUp } from '../src/route/routes/through';
 import { namba, nambaUp } from '../src/route/routes/namba';
 import { mountain, mountainUp } from '../src/route/routes/mountain';
 import { meetDwell } from '../src/game/meet';
-import { waitDwell } from '../src/game/overtake';
+import { waitDwell, waitsAt } from '../src/game/overtake';
 import { terminalSpeedLimit } from '../src/game/terminal-ats';
 import { applyService } from '../src/route/service';
 import { buildTrack } from '../src/route/track';
@@ -25,8 +25,10 @@ function run(route: Route, id: ServiceId) {
   const env = { adhesion: 1, gradePermil: 0, perf };
   const plan0 = perf.bMax * .62; // 計画減速度（B5 相当）
   const tr: TrainState = { s: route.startS, v: 0, acc: 0, notch: 0 };
-  const out: Record<number, { arr: number; dep?: number }> = { 0: { arr: 0, dep: 0 } };
-  let t = 0;
+  // 始発駅で待つ（朝の堺1番線で急行を待ち合わせなど）: 待避の停車時間だけ遅れて発車
+  const w0 = waitsAt(route, svc, 0), dwell0 = w0.length ? waitDwell(route, 0, w0, svc.cars) : 0;
+  const out: Record<number, { arr: number; dep?: number }> = { 0: { arr: 0, dep: dwell0 } };
+  let t = dwell0;
   const stops = svc.stops.slice(1);
   let si = 0;
   for (let i = 1; i < route.stations.length; i++) {
@@ -62,9 +64,9 @@ function run(route: Route, id: ServiceId) {
     if (stop) {
       si++;
       const last = i === route.stations.length - 1;
-      const w = svc.waits?.find(x => x.station === i);
+      const ws = waitsAt(route, svc, i), w = ws.length > 0;
       const meet = route.meets?.some(m => m.station === i);
-      const dwell = meet ? meetDwell() : !w ? DWELL : waitDwell(route, i, route.services!.find(x => x.id === w.passedBy)!, svc.cars);
+      const dwell = meet ? meetDwell() : !w ? DWELL : waitDwell(route, i, ws, svc.cars);
       out[i] = last ? { arr: t } : { arr: t, dep: t + dwell };
       if (!last) t += dwell;
     }
@@ -75,7 +77,12 @@ function run(route: Route, id: ServiceId) {
 const up = (x: number) => Math.ceil(x * MARGIN / 5) * 5;
 function table(route: Route): Record<string, string> {
   const res: Record<string, string> = {};
-  for (const id of (route.services ?? []).map(v => v.id)) {
+  for (const id of (route.services ?? []).map(v => v.id)) res[id] = tableOf(route, id, true);
+  return res;
+}
+/** 1種別の時刻表（ソースの文字列） */
+function tableOf(route: Route, id: ServiceId, log = false): string {
+  {
     const raw = run(route, id);
     // 駅間の走行時間に余裕を足し、停車時間はそのまま
     let prevRaw = 0, prevOut = 0;
@@ -86,12 +93,35 @@ function table(route: Route): Record<string, string> {
       const dep = r.dep != null ? arr + (r.dep - r.arr) : undefined;
       tt.push(`${k}: { arr: ${arr}${dep != null ? `, dep: ${dep}` : ''} }`);
       prevRaw = r.dep ?? r.arr; prevOut = dep ?? arr;
-      console.log(route.id, id, k, route.stations[k].name, r.arr.toFixed(1), '→', arr, dep ?? '');
+      if (log) console.log(route.id, id, k, route.stations[k].name, r.arr.toFixed(1), '→', arr, dep ?? '');
     }
-    res[id] = `{ ${tt.join(', ')} }`;
+    return `{ ${tt.join(', ')} }`;
   }
-  return res;
 }
+// 時間帯ごとの普通の時刻表（待避で停車時間が変わる）。全コースの普通（時間帯のパターンを持つもの）
+{
+  const lines: string[] = [];
+  for (const route of [shiokaze, shiokazeUp, kishiwadaUp, throughUp, through, namba, nambaUp]) {
+    const local = route.services?.find(v => v.id === 'local');
+    if (!local?.waitsByTime) continue;
+    const byTod: string[] = [];
+    for (const tod of ['morning', 'noon', 'evening', 'night'] as const) {
+      route.timeOfDay = tod;
+      local.timetableByTime = undefined; // 生成中は基準の時刻表から
+      byTod.push(`${tod}: ${tableOf(route, 'local')}`);
+    }
+    route.timeOfDay = undefined;
+    lines.push(`  '${route.id}': {\n    ${byTod.join(',\n    ')},\n  },`);
+  }
+  writeFileSync('src/route/routes/local-timetables.ts', `// 時間帯ごとの普通の時刻表（待避で停車時間が変わる。scripts/timetable.ts が生成。手で直さない）
+import type { ServiceSpec, TimeOfDay } from '../types';
+
+export const LOCAL_TT: Record<string, Partial<Record<TimeOfDay, ServiceSpec['timetable']>>> = {
+${lines.join('\n')}
+};
+`);
+}
+
 // --namba-only は堺〜難波だけ更新
 const nambaOnly = process.argv.includes('--namba-only');
 {

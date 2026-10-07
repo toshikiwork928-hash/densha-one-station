@@ -1,7 +1,7 @@
 // 閉そく信号と ATS。先行列車（仮想）の在線から現示を決め、通過時に速度照査する
 import type { GameContext } from '../core/context';
 import type { SignalAspect } from '../core/events';
-import { islandZone, loopZone, type LoopZone } from '../route/service';
+import { islandZone, loopZone, sameClass, type LoopZone } from '../route/service';
 import type { Meet } from './meet';
 import { terminalSpeedLimit } from './terminal-ats';
 import { ASPECT_LABEL, ASPECT_LIMIT, PRECEDING_LENGTH, aspectOf, buildPrecedingKeys, precedingHead, type PrecedingPlan } from './preceding';
@@ -193,7 +193,7 @@ export function createSignalSystem(ctx: GameContext, forceEB: () => void, meet?:
         const precStops = local ? local.stops.includes(k) : true;
         if (precStops) precZones.push(z);
         // 自列車が本線を通る（通過・本線ホームに停車）駅では、先行の普通を待避線に止めて先に行かせない
-        const scheduledWait = local?.waits?.some(w => w.station === k && w.passedBy === st.sel.service);
+        const scheduledWait = local?.waits?.some(w => w.station === k && sameClass(w.passedBy, st.sel.service) && k > 0 && k < route.stations.length - 1);
         if (!sta.enterLoop && precStops && scheduledWait && plan.depT[k] != null) {
           const passT = sta.scheduledArrival + (sta.pass ? 0 : sta.dwell ?? 20);
           holds.push({ zone: z, depT: plan.depT[k], passT });

@@ -21,6 +21,7 @@ import { mirrorProfile, reverseRoute, totalLength } from '../reverse';
 import { stopScenes, type StopScene } from '../oncoming-stops';
 import { SAKAI_LAT, sakaiLayout } from '../sakai-layout';
 import { NB, NB_UP } from './namba-timetable';
+import { setLocalPatterns } from '../day-patterns';
 
 /** 停止位置（6両基準。ホームは stopS − 180 〜 + 40） */
 const STOPS = [180, 1780, 3280, 4280, 4880, 6080, 6980, 8580, 9980];
@@ -366,3 +367,7 @@ export const nambaUp: Route = reverseRoute(namba, {
   r.stations.forEach((sta, i) => { if (local.platformSides![i]) sta.platform.side = local.platformSides![i]; });
   setDestinations(r.services!, 'wakayama');
 }
+
+// 時間帯ごとの普通（route/day-patterns.ts）: 複々線の走行中の追い越し、下りは朝に堺1番線で急行を待ち合わせ（終着。到着前の放送で案内）
+setLocalPatterns(namba, { passes: { morning: [['粉浜', '岸里玉出', 'express']], evening: [['岸里玉出', '岸里玉出', 'express']] } });
+setLocalPatterns(nambaUp, { waits: { morning: [['堺', 'express']] }, passes: { morning: [['岸里玉出', '粉浜', 'express']], evening: [['岸里玉出', '粉浜', 'express']] } });

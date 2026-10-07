@@ -26,6 +26,14 @@ const SPAWN_EARLY = 2;
 const HOLD_LEAD = 6;
 /** 待っていた優等列車が動き出すときの加速度 [m/s²]（巡航速度へ戻るまで） */
 const RESUME_ACCEL = 1.2;
+/** 同じ駅で続けて待つとき、前の列車が見えなくなってから次の列車が着くまで [s] */
+export const NEXT_ARRIVE = 20;
+
+/** 駅 index で普通が待つ後続列車（並べた順）。コースの始発駅・終着駅では待たない（終着駅は到着前の放送で案内するだけ） */
+export function waitsAt(route: Route, svc: ServiceSpec | undefined, index: number): ServiceSpec[] {
+  if (!svc?.waits || index <= 0 || index >= route.stations.length - 1) return [];
+  return svc.waits.filter(w => w.station === index).map(w => serviceOf(route, w.passedBy)).filter((x): x is ServiceSpec => !!x);
+}
 
 export interface Passer {
   v: number; len: number; stopAt: number | null; back: number;
@@ -53,10 +61,16 @@ export function planPasser(route: Route, index: number, passer: ServiceSpec, loc
   return { v, len, stopAt, back, tArrive, tClear: tArrive + PASSER_DWELL + tOut };
 }
 
-/** 待避駅での普通の停車時間 [s]（停車 → 優等列車の到着 → 発車・通過 → 見えなくなる → 発車） */
-export function waitDwell(route: Route, index: number, passer: ServiceSpec, localCars: number): number {
-  const p = planPasser(route, index, passer, localCars);
-  return p ? Math.ceil(ARRIVE_GAP + (p.tClear - p.tArrive) + READY_MARGIN) : 60;
+/** 待避駅での普通の停車時間 [s]（停車 → 優等列車の到着 → 発車・通過 → 見えなくなる →（次の列車 …）→ 発車） */
+export function waitDwell(route: Route, index: number, passers: ServiceSpec | ServiceSpec[], localCars: number): number {
+  const list = Array.isArray(passers) ? passers : [passers];
+  let t = ARRIVE_GAP;
+  list.forEach((ps, k) => {
+    const p = planPasser(route, index, ps, localCars);
+    // 2本目以降は前の列車が見えなくなってから出現し、本線ホームへの進入・停車に余計にかかる分を見込む
+    t += (k ? NEXT_ARRIVE + 25 : 0) + (p ? p.tClear - p.tArrive : 40);
+  });
+  return Math.ceil(t + READY_MARGIN);
 }
 
 export interface Overtake {
@@ -71,11 +85,11 @@ export function createOvertake(ctx: GameContext): Overtake {
   const sigs = route.signals ?? [];
   const banner = (text: string, sec = 3) => events.emit('banner', { text, sec });
 
-  /** 優等列車を出現させる（普通がこの駅へ向かっている間 / 駅から始めるとき）。arriveIn = 到着までの秒数 */
-  function spawn(index: number, arriveIn: number): void {
-    const svc = serviceOf(route, st.sel.service), w = svc?.waits?.find(x => x.station === index);
-    if (!svc || !w || !route.services) return;
-    const sta = route.stations[index], passer = serviceOf(route, w.passedBy)!;
+  /** 優等列車を出現させる（普通がこの駅へ向かっている間 / 駅から始めるとき / 前の列車が抜けた後）。arriveIn = 到着までの秒数、seq = この駅で何本目か */
+  function spawn(index: number, arriveIn: number, seq = 0): void {
+    const svc = serviceOf(route, st.sel.service), passer = waitsAt(route, svc, index)[seq];
+    if (!svc || !passer || !route.services) return;
+    const sta = route.stations[index];
     const p = planPasser(route, index, passer, svc.cars);
     if (!p) return;
     const v = p.v;
@@ -87,18 +101,18 @@ export function createOvertake(ctx: GameContext): Overtake {
       else { stage = 'brake'; pv = DECEL * arriveIn; head = p.stopAt - pv * arriveIn / 2; }
     } else head = sta.stopS - v * Math.min(arriveIn, p.tArrive);
     st.overtake = {
-      station: index, passedBy: w.passedBy, depSignal: sigs.findIndex(g => g.s > sta.stopS),
+      station: index, passedBy: passer.id, seq, depSignal: sigs.findIndex(g => g.s > sta.stopS),
       phase: 'run', stopAt: p.stopAt, dwellLeft: PASSER_DWELL, stage,
-      head, v: pv, len: p.len, cleared: false, localStopped: false,
+      head, v: pv, len: p.len, cleared: false, localStopped: seq > 0,
     };
   }
 
   /** 普通が次の停車駅（待避駅）へ向かう間: 普通が止まる約 ARRIVE_GAP 秒後に優等列車が着くよう、頃合いで出現させる */
   function approach(): void {
     if (st.state !== 'run' || st.target < 0 || st.overtake?.station === st.target) return;
-    const svc = serviceOf(route, st.sel.service), w = svc?.waits?.find(x => x.station === st.target);
-    if (!svc || !w || !route.services) return;
-    const sta = route.stations[st.target], passer = serviceOf(route, w.passedBy)!;
+    const svc = serviceOf(route, st.sel.service), passer = waitsAt(route, svc, st.target)[0];
+    if (!svc || !passer || !route.services) return;
+    const sta = route.stations[st.target];
     const p = planPasser(route, st.target, passer, svc.cars);
     if (!p) return;
     const rem = sta.stopS - st.train.s, v = Math.max(st.train.v, 1);
@@ -110,16 +124,15 @@ export function createOvertake(ctx: GameContext): Overtake {
 
   return {
     onArrive(index, quiet) {
-      const svc = serviceOf(route, st.sel.service);
-      const w = svc?.waits?.find(x => x.station === index);
-      if (!svc || !w || !route.services) return null;
-      const sta = route.stations[index], passer = serviceOf(route, w.passedBy)!;
+      const svc = serviceOf(route, st.sel.service), list = waitsAt(route, svc, index);
+      if (!svc || !list.length || !route.services) return null;
+      const sta = route.stations[index];
       if (!st.overtake || st.overtake.station !== index) spawn(index, ARRIVE_GAP);
       const o = st.overtake;
       if (!o) return null;
       o.localStopped = true;
-      const stops = passer.stops.includes(index);
-      const text = stops ? `${sta.name}で後続の${passer.name}を待ち合わせ。出発信号が進行になるまで待て` : `${sta.name}で後続の${passer.name}の通過を待ちます。出発信号が進行になるまで待て`;
+      const parts = list.map(ps => ps.stops.includes(index) ? `${ps.name}を待ち合わせ` : `${ps.name}の通過を待ち`);
+      const text = `${sta.name}で後続の${parts.join('、')}ます。出発信号が進行になるまで待て`;
       if (!quiet) banner(text, 4);
       return text;
     },
@@ -157,6 +170,13 @@ export function createOvertake(ctx: GameContext): Overtake {
       } else o.v = Math.min(PASS_KMH / 3.6, vHold, vUp);
       o.head += o.v * dt;
       if (!o.cleared && o.head - o.len > z.outTo + CLEAR_DIST) {
+        const next = waitsAt(route, serviceOf(route, st.sel.service), o.station)[o.seq + 1];
+        if (next) {
+          // 続けて次の列車を待つ（出発信号は停止のまま）
+          banner(`${serviceOf(route, o.passedBy)!.name} ${o.stopAt != null ? '発車' : '通過'}。続いて${next.name}を待つ`, 3);
+          spawn(o.station, NEXT_ARRIVE, o.seq + 1);
+          return;
+        }
         o.cleared = true;
         o.phase = 'done';
         banner(`${serviceOf(route, o.passedBy)!.name} ${o.stopAt != null ? '発車' : '通過'}。出発信号を確認`, 3);

@@ -49,6 +49,13 @@ export function attachHud(ctx: GameContext): void {
     lamps: side.querySelector<HTMLElement>('.sigLamps')!, sigTxt: $('sigTxt'), sigDist: $('sigDist'), ats: $('atsLine'),
     door: $('doorLamp'), doorTxt: $('doorTxt'), tt: $<HTMLTableElement>('ttTable'), replay: $('replayTag'), svc: $('svcPanel'),
   };
+  // リプレイ中の操作ボタン（結果画面へ戻る・タイトルへ）。サイドパネルの外（body 直下）に置いて画面の手前に出す
+  const replayBar = document.createElement('div'); replayBar.id = 'replayBar';
+  replayBar.innerHTML = '<button id="replayStopBtn">結果へ戻る（R）</button><button id="replayTitleBtn">タイトルへ（Esc）</button>';
+  document.body.append(replayBar);
+  $('replayStopBtn').onclick = () => ctx.actions.toggleReplay();
+  $('replayTitleBtn').onclick = () => ctx.actions.toTitle();
+  ctx.events.on('cameraMode', ({ mode }) => replayBar.classList.toggle('show', mode === 'replay'));
   /** 種別表示（普通・急行・特急、両数） */
   function renderService() {
     const v = route.services ? serviceOf(route, st.sel.service) : undefined;

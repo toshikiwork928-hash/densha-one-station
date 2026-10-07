@@ -91,7 +91,8 @@ export interface OncomingPlanItem { spec: OncomingSpec; kind: TrainKind; rush: b
  *  - 自列車が通過する駅への停車は最大1回（ラッシュ時 2 回。選ばれにくい）
  *  - 停車に選ばれなかったものは、最大3本（ラッシュ時 4 本）が停車せず走行中にすれ違うだけの編成になる（残りは出さない）
  *  ラッシュ用の編成（rush）は、ラッシュ時以外は出さない */
-export function planOncoming(items: OncomingPlanItem[], opt: { seedKey: string; rushHour: boolean; passStations: Set<number> }): OncomingMode[] {
+export function planOncoming(items: OncomingPlanItem[], opt: { seedKey: string; rushHour: boolean; passStations: Set<number>; /** 本数の多さ 0〜2（時間帯と向き。未指定はラッシュなら 2） */ level?: number }): OncomingMode[] {
+  const level = opt.level ?? (opt.rushHour ? 2 : 0);
   const rng = mulberry32(hashSeed(opt.seedKey));
   const modes: OncomingMode[] = items.map(it => (it.rush && !opt.rushHour ? 'off' : 'stop'));
   const cand: number[] = [];
@@ -101,7 +102,7 @@ export function planOncoming(items: OncomingPlanItem[], opt: { seedKey: string; 
     if (modes[i] === 'off' || !sp) return;
     if (sp.loop) chosen.push({ station: sp.station, kind: it.kind }); else cand.push(i);
   });
-  const want = (opt.rushHour ? [3, 4, 4, 5] : [2, 3, 3, 4])[Math.floor(rng() * 4)];
+  const want = ([[2, 3, 3, 4], [3, 3, 4, 4], [3, 4, 4, 5]][level])[Math.floor(rng() * 4)];
   const order = cand
     .map(i => ({ i, key: rng() * (opt.passStations.has(items[i].spec.stop!.station) ? 3 : 1) }))
     .sort((a, b) => a.key - b.key).map(x => x.i);
@@ -129,7 +130,7 @@ export function planOncoming(items: OncomingPlanItem[], opt: { seedKey: string; 
   let runs = 0;
   for (const i of order) {
     if (picked.has(i)) continue;
-    if (runs < (opt.rushHour ? 4 : 3) && rng() < .65) { modes[i] = 'run'; runs++; } else modes[i] = 'off';
+    if (runs < (level ? 4 : 3) && rng() < .65) { modes[i] = 'run'; runs++; } else modes[i] = 'off';
   }
   return modes;
 }

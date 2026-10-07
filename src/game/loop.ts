@@ -7,7 +7,7 @@ import type { GameActions, GameContext } from '../core/context';
 import type { CameraMode } from '../core/events';
 import { DEFAULT_PERF, TRAIN_PERF, stepTrain } from '../sim/train';
 import { serviceOf } from '../route/service';
-import { createOvertake } from './overtake';
+import { createOvertake, waitsAt } from './overtake';
 import { createMeet } from './meet';
 import { createReplay } from './replay';
 import { judgeStop, scoreGame } from './scoring';
@@ -108,7 +108,7 @@ export function createGame(ctx: GameContext): Game {
     const from = st.fromIndex, sta = route.stations[from];
     st.target = from;
     // 待避駅から始めるステージは定刻に着いた状態から（後続列車の通過を待つ）
-    const waits = !!ctx.service?.waits?.some(w => w.station === from) || !!route.meets?.some(m => m.station === from);
+    const waits = waitsAt(route, ctx.service, from).length > 0 || !!route.meets?.some(m => m.station === from);
     const dwell = waits ? Math.max(ORIGIN_DWELL, departureTime(route, from) - DOOR_CLOSE_TIME - sta.scheduledArrival) : ORIGIN_DWELL;
     st.t -= dwell + DOOR_CLOSE_TIME;
     st.dwellT = dwell;
@@ -289,12 +289,14 @@ export function createGame(ctx: GameContext): Game {
     reset();
   }
 
-  /** 時間帯に合わせて始発時刻を変える（タイトル・結果画面のときのみ。走行中は時計を飛ばさない） */
+  /** 時間帯に合わせて始発時刻とダイヤ（待避・追い越しのパターン、時刻表）を変える（タイトル・結果画面のときのみ。走行中は変えない） */
   function syncClock(e?: { timeOfDay: keyof typeof START_CLOCK }) {
-    const c = START_CLOCK[e?.timeOfDay ?? ctx.envState.timeOfDay] ?? START_CLOCK.noon; // 環境側より先に呼ばれるので payload を優先
-    if (c === route.startClock || (st.state !== 'title' && st.state !== 'result')) return;
+    const tod = e?.timeOfDay ?? ctx.envState.timeOfDay; // 環境側より先に呼ばれるので payload を優先
+    const c = START_CLOCK[tod] ?? START_CLOCK.noon;
+    if ((c === route.startClock && route.timeOfDay === tod) || (st.state !== 'title' && st.state !== 'result')) return;
     route.startClock = c;
-    if (st.state === 'title') events.emit('reset'); // HUD・時刻表・行路表を描き直す
+    route.timeOfDay = tod;
+    if (st.state === 'title') reset(); // 時刻表・待避を時間帯のものにして、HUD・時刻表・行路表を描き直す
   }
   events.on('envChange', syncClock);
 

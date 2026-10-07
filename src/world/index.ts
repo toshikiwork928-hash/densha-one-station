@@ -22,6 +22,7 @@ import { buildSuminoeDepot, buildSuminoeDepotTrains } from './suminoe-depot';
 import { buildKoyaPlatforms, buildKoyaTraffic } from './koya-traffic';
 import { buildNambaLandmarks } from './namba-landmarks';
 import { nambaFrame } from './namba-frame';
+import { createRunPasses } from './run-pass';
 
 export interface World {
   oncoming: OncomingSystem;
@@ -58,6 +59,7 @@ export function buildWorld(ctx: GameContext): World {
   }
   const player = createPlayerTrain(ctx);
   createOvertaking(ctx); // [G] 待避の通過列車・待避線の先行普通
+  createRunPasses(ctx); // 複々線の走行中の追い越し（時間帯のパターン）
   createCab(ctx);
 
   return {

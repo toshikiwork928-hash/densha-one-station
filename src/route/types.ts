@@ -101,6 +101,13 @@ export interface StationIsland {
 /** 単線の交換駅での行き違い（対向列車）。station = 交換駅の index（その向きの route.stations）。自列車はこの駅で対向列車の到着を待って発車する（game/meet.ts） */
 export interface MeetSpec { station: number; kind: TrainKind; cars: number; /** 巡航速度 [km/h] */ kmh: number; label?: string; dest?: string }
 
+/** 時間帯（ダイヤのパターン。core/config の START_CLOCK と同じキー） */
+export type TimeOfDay = 'morning' | 'noon' | 'evening' | 'night';
+/** 待避: 普通がこの駅で後続の優等列車 passedBy を待つ。同じ駅に複数並べると、並べた順に待つ（例 特急の通過 → 急行の接続） */
+export interface Wait { station: number; passedBy: ServiceId }
+/** 走行中の追い越し（複々線）: 普通が from 駅を出て to 駅に着くまで（from = to なら to 駅に停車中）に、隣の線を後続の優等列車 passedBy が追い抜く（描画のみ） */
+export interface RunPass { from: number; to: number; passedBy: ServiceId }
+
 /** 運行種別（プレイヤーが選ぶ） */
 /** southern = 特急サザン（10000系 + 7100系の8両。座席指定車と自由席車の併結） */
 export type ServiceId = 'local' | 'express' | 'airport' | 'limited' | 'southern';
@@ -142,8 +149,16 @@ export interface ServiceSpec {
   trackNames?: Record<number, string>;
   /** lane の分岐器などの制限（先頭基準の区間。to には編成長が加算される） */
   laneLimits?: SpeedLimit[];
-  /** 待避（この駅で後続の通過列車を待つ）: 駅 index と、通過していく列車の種別 */
-  waits?: { station: number; passedBy: ServiceId }[];
+  /** 待避（この駅で後続の通過列車を待つ）: 駅 index と、通過していく列車の種別。種別適用で時間帯のもの（waitsByTime）に置き換わる */
+  waits?: Wait[];
+  /** 時間帯ごとの待避（普通）。指定があれば、その時間帯に無い待避はしない */
+  waitsByTime?: Partial<Record<TimeOfDay, Wait[]>>;
+  /** 時間帯ごとの走行中の追い越し（普通、複々線） */
+  runPassesByTime?: Partial<Record<TimeOfDay, RunPass[]>>;
+  /** 種別適用後: 今の時間帯の走行中の追い越し */
+  runPasses?: RunPass[];
+  /** 時間帯ごとの時刻表（待避で停車時間が変わる普通。scripts/timetable.ts が生成） */
+  timetableByTime?: Partial<Record<TimeOfDay, ServiceSpec['timetable']>>;
 }
 
 /** 線路脇の標識。lat は左が負 */
@@ -256,6 +271,8 @@ export interface Route {
   extraTracks?: ExtraTrack[];
   /** 景観（住宅・ビル・道路）を置かない範囲（s・横位置の矩形）。車庫・大型施設の敷地 */
   reserved?: { from: number; to: number; lat0: number; lat1: number; /** この範囲には高架の橋脚を立てない（下を他の線路が通る） */ noPiers?: boolean }[];
+  /** 時間帯（ダイヤのパターン）。game/loop.ts が環境の時間帯から設定。未指定は昼 */
+  timeOfDay?: TimeOfDay;
   /** 種別適用後: 自列車の走行線（ServiceSpec.lane。route/service.ts が設定） */
   activeLane?: LatProfile;
   /** 鋼橋の塗色と形（throughGirder = 下路プレートガーダー: 線路の両脇に桁の側板が立つ。トラス区間 steel-bridge は除く） */
