@@ -108,7 +108,10 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
     return v;
   };
   // ラッシュ用の編成は末尾に足す（follow は直前の要素を相手にするので、既存の並びを崩さない）
-  const rushSpecs = route.singleTrack ? [] : rushStopScenes(route.stations, route.oncoming);
+  // 複々線の駅では対向の普通は緩行線（route.oncomingLocal の横位置）に停まる
+  const ol = route.oncomingLocal;
+  const rushSpecs = (route.singleTrack ? [] : rushStopScenes(route.stations, route.oncoming))
+    .map(o => ol && o.stop && ol.stations.includes(o.stop.station) ? { ...o, lat: ol.lat } : o);
   const trains: OncomingTrain[] = [...route.oncoming, ...rushSpecs].map((spec0, i) => {
     const mix = MIX[i % MIX.length];
     const spec: OncomingSpec = spec0.kind ? spec0 : { ...spec0, kind: mix.kind, cars: mix.cars, kmh: Math.round(spec0.kmh * mix.kmhScale) };

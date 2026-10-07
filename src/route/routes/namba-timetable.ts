@@ -14,8 +14,8 @@ export const NB: Record<Id, ServiceSpec['timetable']> = {
 /** 下り（難波 → 堺） */
 export const NB_UP: Record<Id, ServiceSpec['timetable']> = {
   local: { 0: { arr: 0, dep: 0 }, 1: { arr: 120, dep: 145 }, 2: { arr: 250, dep: 275 }, 3: { arr: 350, dep: 375 }, 4: { arr: 465, dep: 490 }, 5: { arr: 550, dep: 575 }, 6: { arr: 655, dep: 680 }, 7: { arr: 785, dep: 810 }, 8: { arr: 925 } },
-  express: { 0: { arr: 0, dep: 0 }, 1: { arr: 125, dep: 150 }, 2: { arr: 260, dep: 285 }, 3: { arr: 350 }, 4: { arr: 415 }, 5: { arr: 440 }, 6: { arr: 485 }, 7: { arr: 565 }, 8: { arr: 655 } },
-  airport: { 0: { arr: 0, dep: 0 }, 1: { arr: 120, dep: 145 }, 2: { arr: 245, dep: 270 }, 3: { arr: 330 }, 4: { arr: 395 }, 5: { arr: 420 }, 6: { arr: 465 }, 7: { arr: 545 }, 8: { arr: 630 } },
-  limited: { 0: { arr: 0, dep: 0 }, 1: { arr: 120, dep: 145 }, 2: { arr: 250, dep: 275 }, 3: { arr: 335 }, 4: { arr: 395 }, 5: { arr: 420 }, 6: { arr: 465 }, 7: { arr: 545 }, 8: { arr: 625 } },
-  southern: { 0: { arr: 0, dep: 0 }, 1: { arr: 125, dep: 150 }, 2: { arr: 260, dep: 285 }, 3: { arr: 350 }, 4: { arr: 415 }, 5: { arr: 440 }, 6: { arr: 485 }, 7: { arr: 565 }, 8: { arr: 655 } },
+  express: { 0: { arr: 0, dep: 0 }, 1: { arr: 125, dep: 150 }, 2: { arr: 260, dep: 285 }, 3: { arr: 350 }, 4: { arr: 400 }, 5: { arr: 425 }, 6: { arr: 465 }, 7: { arr: 530 }, 8: { arr: 620 } },
+  airport: { 0: { arr: 0, dep: 0 }, 1: { arr: 120, dep: 145 }, 2: { arr: 245, dep: 270 }, 3: { arr: 330 }, 4: { arr: 380 }, 5: { arr: 405 }, 6: { arr: 445 }, 7: { arr: 510 }, 8: { arr: 595 } },
+  limited: { 0: { arr: 0, dep: 0 }, 1: { arr: 120, dep: 145 }, 2: { arr: 250, dep: 275 }, 3: { arr: 335 }, 4: { arr: 380 }, 5: { arr: 405 }, 6: { arr: 445 }, 7: { arr: 510 }, 8: { arr: 595 } },
+  southern: { 0: { arr: 0, dep: 0 }, 1: { arr: 125, dep: 150 }, 2: { arr: 260, dep: 285 }, 3: { arr: 350 }, 4: { arr: 400 }, 5: { arr: 425 }, 6: { arr: 465 }, 7: { arr: 530 }, 8: { arr: 620 } },
 };

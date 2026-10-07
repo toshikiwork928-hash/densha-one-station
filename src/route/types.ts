@@ -260,6 +260,8 @@ export interface Route {
   activeLane?: LatProfile;
   /** 鋼橋の塗色と形（throughGirder = 下路プレートガーダー: 線路の両脇に桁の側板が立つ。トラス区間 steel-bridge は除く） */
   bridgeStyle?: { color: number; throughGirder?: boolean };
+  /** 複々線の駅（stations）でラッシュ時に足す対向の普通の走行線の横位置（trackProfiles のキー。緩行線） */
+  oncomingLocal?: { stations: number[]; lat: number };
   /** 市街地（海・工業地帯の遠景を置かない） */
   urban?: boolean;
 }

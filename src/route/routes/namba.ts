@@ -7,10 +7,11 @@
 // 横位置（左が負。route.tracks の 0 = 上り本線、4 = 下り本線）。配線略図.net の図と OSM、ユーザーの指摘（2026-10-07）による:
 //   堺: 上りは外側の4番線が本線（直進、優等）、内側の3番線が分岐側（普通、45km/h）。route/sakai-layout.ts
 //   七道: 島式1面2線。ホームの幅（線間 9.4m）のまま大和川を上下別々の単線橋で渡り、住ノ江の手前で複々線になる
-//   住ノ江〜岸里玉出: 複々線。上りは 急行線 0（外側・左端、堺から直進）・緩行線 9.4、下りは 緩行線 13.4・急行線 22.8（外側）。
-//     普通は内側の緩行線（住ノ江・住吉大社・粉浜は3番線）、優等は外側の急行線。島式ホームは急行線と緩行線の間。住ノ江の西（左）に住ノ江検車区
+//   住ノ江〜岸里玉出: 方向別の複々線。西から 上り急行線 0（堺から直進）・上り緩行線 9.4・下り急行線 13.4・下り緩行線 22.8（東端）。
+//     上りは 普通 = 内側の緩行線（住ノ江・住吉大社・粉浜は3番線）・優等 = 外側の急行線、下りは 優等 = 内側の急行線・普通 = 外側の緩行線。
+//     島式ホームは各方向の急行線と緩行線の間。住ノ江の西（左）に住ノ江検車区
 //   岸里玉出: 島式ホームは上りの緩行線と下りの線の間（優等は外側の急行線を通過）。上りは駅を過ぎてから緩行線が急行線へ合流（なんば側まで複々線）、
-//     下りは駅の堺側で急行線が分かれる。左端に汐見橋線の行き止まりの線と片面ホーム（2300系が停車）
+//     下りは駅の堺側で外側の緩行線が分かれる。左端に汐見橋線の行き止まりの線と片面ホーム（2300系が停車）
 //   岸里玉出〜なんば: 本線（0・4）の右に高野線（上り 9・下り 13）が並ぶ。天下茶屋・新今宮は 片面（上り本線）・島式（下り本線と高野線上り）・片面（高野線下り）。
 //     萩ノ茶屋・今宮戎は高野線だけの島式ホーム（本線は通過、ホームなし）。新今宮は JR の上を越えるため高い
 //   なんば: 頭端式 9面8線。左から 9番線（8番線併用。特急ラピート）・7番線（普通）・6番線（急行・空港急行）・5番線（特急サザン）・4〜1番線（高野線）
@@ -18,7 +19,7 @@ import type { ExtraTrack, LatProfile, Route, ServiceSpec, Sign, Station } from '
 import { airportService, customPlatformSide, profileLat, setDestinations } from '../service';
 import { mirrorProfile, reverseRoute, totalLength } from '../reverse';
 import { stopScenes, type StopScene } from '../oncoming-stops';
-import { sakaiLayout } from '../sakai-layout';
+import { SAKAI_LAT, sakaiLayout } from '../sakai-layout';
 import { NB, NB_UP } from './namba-timetable';
 
 /** 停止位置（6両基準。ホームは stopS − 180 〜 + 40） */
@@ -40,25 +41,25 @@ const bow = (i: number, base: number, off: number, len = 100): LatProfile => {
   const p = plat(i);
   return [[p.from - len, base], [p.from, base + off], [p.to, base + off], [p.to + len, base]];
 };
-/** 複々線の横位置: 上り緩行線・下り緩行線・下り急行線（上り急行線は 0） */
-export const QUAD = { upLocal: 9.4, downLocal: 13.4, downExpress: 22.8 } as const;
+/** 複々線の横位置: 上り緩行線・下り急行線・下り緩行線（上り急行線は 0）。西から 上り急行・上り緩行・下り急行・下り緩行 */
+export const QUAD = { upLocal: 9.4, downExpress: 13.4, downLocal: 22.8 } as const;
 const SAKAI = sakaiLayout(plat(0).from);
 /** 七道〜住ノ江: 七道の島式ホームの手前で下り線が外へ開き（線間 9.4m）、そのまま大和川を別々の単線橋で渡って、住ノ江の手前で複々線へ */
 const SHICHIDO_DOWN: LatProfile = [[plat(1).from - 100, 4], [plat(1).from, QUAD.upLocal]];
 /** 上り本線（複々線では上り急行線。堺からなんばの手前まで直進） */
 const UP: LatProfile = [[-1000, 0], [9600, 0], [9760, -6], [11000, -6]]; // 難波 7番線
-/** 下り本線（複々線では下り緩行線） */
-const DOWN_HEAD: LatProfile = [[-1000, 4], ...SAKAI.down, ...SHICHIDO_DOWN, [2780, QUAD.upLocal], [2900, QUAD.downLocal]];
+/** 下り本線（複々線では内側の下り急行線） */
+const DOWN_HEAD: LatProfile = [[-1000, 4], ...SAKAI.down, ...SHICHIDO_DOWN, [2780, QUAD.upLocal], [2900, QUAD.downExpress]];
 const DOWN_TAIL: LatProfile = [
-  // 岸里玉出: 島式ホームの分だけ外へ（下り急行線はここへ合流）、駅の先で戻る（右に高野線が来る）
-  [5780, QUAD.downLocal], [5880, 19.4], [6200, 19.4], [6340, 4],
+  // 岸里玉出: 島式ホームの分だけ外へ（下り緩行線はここへ合流）、駅の先で戻る（右に高野線が来る）
+  [5780, QUAD.downExpress], [5880, 19.4], [6200, 19.4], [6340, 4],
   [9480, 4], [9560, 6], [11000, 6], // 難波 6番線
 ];
 const DOWN: LatProfile = [...DOWN_HEAD, ...DOWN_TAIL];
-/** 下り急行線（住ノ江の堺側で緩行線から分かれ、岸里玉出の堺側で合流） */
-const DOWN_EXPRESS: LatProfile = [[2980, QUAD.downLocal], [3080, QUAD.downExpress], [5760, QUAD.downExpress], [5880, 19.4]];
-/** 下りの優等列車の走行線（対向列車用。route.trackProfiles の '30'） */
-const DOWN_EXPRESS_PATH: LatProfile = [...DOWN_HEAD, ...DOWN_EXPRESS.slice(1), ...DOWN_TAIL.slice(2)];
+/** 下り緩行線（東端。住ノ江の堺側で急行線から分かれ、岸里玉出の堺側で合流） */
+const DOWN_LOCAL: LatProfile = [[2980, QUAD.downExpress], [3080, QUAD.downLocal], [5760, QUAD.downLocal], [5880, 19.4]];
+/** 下りの普通の走行線（対向列車用。route.trackProfiles の '30'） */
+const DOWN_LOCAL_PATH: LatProfile = [...DOWN_HEAD, ...DOWN_LOCAL.slice(1), ...DOWN_TAIL.slice(2)];
 /** 高野線（上り・下り）。岸里玉出の先で右から合流し、天下茶屋・新今宮で島式ホームの分だけ右へ、萩ノ茶屋・今宮戎で下り線が右へ開く */
 const KOYA_UP: LatProfile = [
   [5850, 118], [6700, 9], ...bow(6, 9, 5.4), ...bow(7, 9, 5.4), [9400, 9], [9640, 30],
@@ -87,7 +88,7 @@ const extraTracks: ExtraTrack[] = [
   xt('up-local', [[3060, QUAD.upLocal]], 3060, 6140),                     // 上り緩行線
   xt('x-suminoe', [[2940, 0], [3060, QUAD.upLocal]], 2940, 3060),         // 住ノ江の堺側: 上り本線 → 上り緩行線
   xt('x-kishinosato', [[6140, QUAD.upLocal], [6260, 0]], 6140, 6260),     // 岸里玉出のなんば側: 上り緩行線 → 上り本線
-  xt('down-express', DOWN_EXPRESS, 2980, 5880),
+  xt('down-local', DOWN_LOCAL, 2980, 5880),
   // 合流までの高架は上下線を1枚の床版で受ける（上り線の床版を下り線側へ広げる）。架線柱は外側
   xt('koya-up', KOYA_UP, 5850, NAMBA_END, { bumpers: [NAMBA_END], deckSpan: [-2.7, 6.7], poleOffset: -2.7 }),
   xt('koya-down', KOYA_DOWN, 5850, NAMBA_END, { bumpers: [NAMBA_END], ownDeck: false, poleOffset: 2.7 }),
@@ -125,7 +126,7 @@ const LOCAL_LIMITS = [
 // ---- 駅 ----
 const quadPlatforms = (): Station['customPlatforms'] => [
   { kind: 'island', lat: QUAD.upLocal / 2, width: 6 },                         // 上り急行線（0）と上り緩行線（9.4）の間
-  { kind: 'island', lat: (QUAD.downLocal + QUAD.downExpress) / 2, width: 6 },  // 下り緩行線（13.4）と下り急行線（22.8）の間
+  { kind: 'island', lat: (QUAD.downExpress + QUAD.downLocal) / 2, width: 6 },  // 下り急行線（13.4）と下り緩行線（22.8）の間
 ];
 /** 天下茶屋・新今宮: 上り本線の左に片面、下り本線と高野線上りの間に島式、高野線下りの右に片面 */
 const koyaPlatforms = (): Station['customPlatforms'] => [
@@ -257,8 +258,9 @@ export const namba: Route = {
   prevName: '湊', nextName: '',
   signs: stations.slice(1).flatMap(st => approachSigns(st.stopS)),
   extent: { from: -400, to: NAMBA_END }, tracks: [0, 4],
-  // '30' は対向の優等列車の走行線（下り急行線）
-  trackProfiles: { 0: UP, 4: DOWN, 30: DOWN_EXPRESS_PATH },
+  // '30' は対向の普通の走行線（複々線は下り緩行線）
+  trackProfiles: { 0: UP, 4: DOWN, 30: DOWN_LOCAL_PATH },
+  oncomingLocal: { stations: QUAD_STATIONS, lat: 30 },
   extraTracks,
   // なんばの構内（扇状に開く番線）は一続きの床版
   deckJoin: [{ from: 3380, to: 3570 }, { from: 9300, to: NAMBA_END + 10 }],
@@ -273,9 +275,11 @@ export const namba: Route = {
   ],
   oncoming: [
     // 天下茶屋に停まる特急サザン（10000系 + 7100系）
-    ...stopScenes(stations, STOP_SCENES).map(o => o.kind === 'southern-10000' ? { ...o, unitKinds: ['southern-10000', 'commuter-old'] as ServiceSpec['kind'][], units: [4, 4], dest: '和歌山港' } : o),
+    // 複々線の駅（住吉大社）の普通は外側の下り緩行線（'30'）に停まる
+    ...stopScenes(stations, STOP_SCENES).map(o => o.kind === 'southern-10000' ? { ...o, unitKinds: ['southern-10000', 'commuter-old'] as ServiceSpec['kind'][], units: [4, 4], dest: '和歌山港' }
+      : o.stop && QUAD_STATIONS.includes(o.stop.station) ? { ...o, lat: 30 } : o),
     // 複々線の下り急行線を走り抜ける特急（住ノ江〜粉浜。停車駅の無い区間）
-    { spawnAt: 2300, startS: 5300, cars: 6, carLen: 20, gap: .8, kmh: 95, lat: 30, kind: 'limited', label: '特急', dest: '関西空港' },
+    { spawnAt: 2300, startS: 5300, cars: 6, carLen: 20, gap: .8, kmh: 95, lat: 4, kind: 'limited', label: '特急', dest: '関西空港' },
   ],
   signals,
   structures: [
@@ -308,16 +312,16 @@ const DEP: Record<9 | 7 | 5, LatProfile> = {
 const before = (p: LatProfile, s0: number) => p.filter(([q]) => q < s0);
 const PHYS_DOWN = {
   local: [
-    [-1000, 22.8], [SAKAI.pt + 20, 22.8], [SAKAI.pt + 130, QUAD.downLocal], [SAKAI.pt + 150, QUAD.downLocal], [SAKAI.pt + 260, 4],
-    ...DOWN.filter(([q]) => q > SAKAI.pt + 260 && q < 9380), ...DEP[7],
+    [-1000, SAKAI_LAT.down1], [SAKAI.pt + 20, SAKAI_LAT.down1], [SAKAI.pt + 130, SAKAI_LAT.down2], [SAKAI.pt + 150, SAKAI_LAT.down2], [SAKAI.pt + 260, 4],
+    ...DOWN_LOCAL_PATH.filter(([q]) => q > SAKAI.pt + 260 && q < 9380), ...DEP[7],
   ] as LatProfile,
-  express: DOWN_EXPRESS_PATH,
-  southern: [...before(DOWN_EXPRESS_PATH, 9380), ...DEP[5]],
-  limited: [...before(DOWN_EXPRESS_PATH, 9380), ...DEP[9]],
+  express: DOWN,
+  southern: [...before(DOWN, 9380), ...DEP[5]],
+  limited: [...before(DOWN, 9380), ...DEP[9]],
 };
 const L_NAMBA = totalLength(namba), mS = (q: number) => L_NAMBA - q;
-/** 下りの優等列車の分岐器（岸里玉出の堺側で急行線へ、住ノ江の堺側で緩行線へ）の制限 */
-const UP_FAST_LIMITS = [
+/** 下りの普通の分岐器（岸里玉出の堺側で外側の緩行線へ、住ノ江の堺側で本線へ）の制限 */
+const DOWN_LOCAL_LIMITS = [
   { from: mS(5880), to: mS(5760), kmh: 60, label: '分岐器制限' },
   { from: mS(3080), to: mS(2980), kmh: 60, label: '分岐器制限' },
 ];
@@ -338,12 +342,15 @@ export const nambaUp: Route = reverseRoute(namba, {
   delete r.precedingHeadway; // 普通の待避なし。先行の普通は従来の時隔
   r.precedingHeadway = { express: 560, airport: 560, limited: 600, southern: 600 };
   // 上りの '30'（下り急行線）を通る対向列車は写さない。複々線の上り急行線（外側）を走り抜ける特急を足す
-  r.oncoming = r.oncoming.filter(o => o.lat === 4);
+  r.oncoming = r.oncoming.filter(o => o.lat === 4 && !!o.stop);
+  // 対向（上り）の普通は複々線の駅で内側の上り緩行線に停まる（'30' = 上りの普通の進路を下りの座標へ写したもの）
+  r.trackProfiles = { ...r.trackProfiles, 30: mirrorProfile(namba, LANE.local) };
+  r.oncomingLocal = { stations: QUAD_STATIONS.map(i => n - 1 - i), lat: 30 };
   r.oncoming.push({ spawnAt: mS(6200), startS: mS(2500), cars: 6, carLen: 20, gap: .8, kmh: 95, lat: 4, kind: 'limited', label: '特急', dest: 'なんば' });
   for (const v of r.services!) {
     const phys = v.id === 'local' ? PHYS_DOWN.local : v.id === 'southern' ? PHYS_DOWN.southern : v.id === 'limited' ? PHYS_DOWN.limited : PHYS_DOWN.express;
     v.lane = mirrorProfile(namba, phys);
-    v.laneLimits = v.id === 'local' ? [{ from: mS(SAKAI.pt + 140), to: mS(-400), kmh: 45, label: '分岐器制限' }] : UP_FAST_LIMITS;
+    v.laneLimits = v.id === 'local' ? [...DOWN_LOCAL_LIMITS, { from: mS(SAKAI.pt + 140), to: mS(-400), kmh: 45, label: '分岐器制限' }] : [];
     // ドアの側は進路の横位置で駅のホームから決める
     const sides: Record<number, 'L' | 'R'> = {};
     r.stations.forEach((sta, i) => { const side = customPlatformSide(sta, profileLat(v.lane!, sta.stopS)); if (side) sides[i] = side; });
