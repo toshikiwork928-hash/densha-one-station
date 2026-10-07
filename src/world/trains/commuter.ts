@@ -91,7 +91,12 @@ export function paintCommuterSide(v: CommuterVariant, Lb: number, head: boolean,
     } else for (const dz of [-.53, .53]) s.glass(zc + dz - sq, zc + dz + sq, w0, w1, '#565c63', .07); // 正方形の1段下降窓を2枚ずつ（間に約13cmの窓柱）
   }
   if (v === 'new') s.glass(DOORS[3] + DOOR_W / 2 + .35, hz - .4, w0, w1, '#565c63', .1);
-  else s.glass((DOORS[3] + DOOR_W / 2 + hz) / 2 - sq, (DOORS[3] + DOOR_W / 2 + hz) / 2 + sq, w0, w1, '#565c63', .03);
+  else if (head) s.glass((DOORS[3] + DOOR_W / 2 + hz) / 2 - sq, (DOORS[3] + DOOR_W / 2 + hz) / 2 + sq, w0, w1, '#565c63', .03);
+  else {
+    // 7100系の中間車: 後ろ（+Z）の車端は窓が2枚（先頭車の乗務員扉の位置も窓になったような並び）。幅を少し細くして収める
+    const z0 = DOORS[3] + DOOR_W / 2, ww = .8, gap = .1, zc = (z0 + hz) / 2;
+    for (const sg of [-1, 1]) { const c = zc + sg * (ww + gap) / 2; s.glass(c - ww / 2, c + ww / 2, w0, w1, '#565c63', .03); }
+  }
   if (head) {
     door(crewZ, CREW_W, false);
     // 乗務員扉と客用扉の間の窓: 7100系にはあり、8300系は窓の無い壁（帯の立ち上がりだけ）
@@ -248,7 +253,7 @@ export function buildCommuterCar(v: CommuterVariant, kind: CarKind, Lb: number):
       if (kind === 'pan' && Math.abs(z - (-hz + 4.0)) < 1.6) continue;
       if (head && z < -8) continue;
       add(0, roofTop + .15, z, 1.3, .32, 1.3, 0xc0c4c9);
-      for (const sx of [-1, 1]) add(sx * .66, roofTop + .16, z, .02, .18, .9, 0x3a3f45);
+      for (const sx of [-1, 1]) for (const dz of [-.33, .33]) add(sx * .66, roofTop + .16, z + dz, .02, .18, .44, 0x3a3f45); // 側面のフィルター（1基に2つ）
     }
     for (const sx of [-.85, .85]) add(sx, roofTop - .05, 0, .06, .06, Lb - 1, 0x8a8f95); // 配管
     for (const z of [-8.2, -4, 0, 4, 8.2]) add(0, roofTop + .06, z, .3, .1, .3, 0x8a8f95); // 通風器
