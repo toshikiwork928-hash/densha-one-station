@@ -5,23 +5,24 @@
 // ctx.rng は使わない。車両生成は DOM を使うので world/index.ts からだけ呼ぶ（建築限界検査には含めない）
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
-import { NAMBA_END, NAMBA_TRACKS } from '../route/routes/namba';
+import { NAMBA_END, NAMBA_STOP, NAMBA_TRACKS } from '../route/routes/namba';
 import type { ServiceId, TrainKind } from '../route/types';
 import { onLight } from './batch';
 import { cullByDistance } from './cull';
 import { placeCar } from './emu';
 import { bogieOffset, createTrainSet, setTrainNight } from './train-models';
 
-interface Parked { track: keyof typeof NAMBA_TRACKS; kind: TrainKind; units: number[]; label: string; dest: string; /** 車止めからの余裕 [m] */ gap: number }
+interface Parked { track: keyof typeof NAMBA_TRACKS; kind: TrainKind; units: number[]; label: string; dest: string; /** 車止め側の端の位置 [m]（未指定は自列車の停止位置 NAMBA_STOP にそろえる） */ end?: number }
 /** 本線の候補（自列車の番線を除いて先頭から2本） */
 const MAIN: Parked[] = [
-  { track: 7, kind: 'commuter-new', units: [4, 4], label: '普通', dest: '羽倉崎', gap: 5 },
-  { track: 5, kind: 'commuter-1000', units: [6], label: '急行', dest: '和歌山市', gap: 5 },
-  { track: 9, kind: 'commuter-1000', units: [6], label: '普通', dest: '岸和田', gap: 6 },
+  { track: 7, kind: 'commuter-new', units: [4, 4], label: '普通', dest: '羽倉崎' },
+  { track: 5, kind: 'commuter-1000', units: [6], label: '急行', dest: '和歌山市' },
+  { track: 9, kind: 'commuter-1000', units: [6], label: '普通', dest: '岸和田' },
 ];
 const KOYA: Parked[] = [
-  { track: 3, kind: 'limited-30000', units: [4], label: 'こうや', dest: '極楽橋', gap: 5 },
-  { track: 1, kind: 'commuter-6300', units: [4, 2], label: '準急', dest: '和泉中央', gap: 5 },
+  { track: 3, kind: 'limited-30000', units: [4], label: 'こうや', dest: '極楽橋' },
+  // 1番線は終端が他より手前（車止めの近くまで寄せたまま）
+  { track: 1, kind: 'commuter-6300', units: [4, 2], label: '準急', dest: '和泉中央', end: NAMBA_END - 9.5 },
 ];
 const MAIN_SHOWN = 2;
 /** 自列車の難波の番線（route/routes/namba.ts の trackNames と同じ） */
@@ -36,8 +37,8 @@ export function buildNambaParked(ctx: GameContext): void {
     const cars = createTrainSet(p.kind, p.units.reduce((a, b) => a + b, 0), ctx.renderer, { dest: p.dest, label: p.label, units: p.units });
     const g = new THREE.Group(); g.name = `namba-parked-${p.track}`;
     const lat = NAMBA_TRACKS[p.track], len = cars.reduce((a, c) => a + c.length, 0);
-    // 先頭（index 0）は堺の側（s の小さい側）、最後尾が車止めの手前
-    let sc = NAMBA_END - 4.5 - p.gap - len;
+    // 先頭（index 0）は堺の側（s の小さい側）、最後尾（車止め側の端）は自列車の停止位置にそろえる
+    let sc = (p.end ?? NAMBA_STOP) - len;
     for (const c of cars) {
       sc += c.length / 2;
       const bog = bogieOffset(c.length);

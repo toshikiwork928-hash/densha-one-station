@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import { createRng } from '../core/rng';
 import type { LatProfile, Station, TrainKind } from '../route/types';
-import { KOYA_STATIONS, NAMBA_END } from '../route/routes/namba';
+import { KOYA_STATIONS, NAMBA_END, NAMBA_STOP } from '../route/routes/namba';
 import { profileLat } from '../route/service';
 import { onLight } from './batch';
 import { cullByDistance } from './cull';
@@ -64,7 +64,8 @@ const HALTS = [
   { from: KOYA_STATIONS[1].from, to: KOYA_STATIONS[1].to, local: true, doors: 'koya' as const },
 ];
 
-const ENTRY_S = 5850, THROAT_S = 9400, STOP_END = NAMBA_END - 4.5;
+// 難波の 4・2番線での停止位置（車止め側の端）は本線の停止位置にそろえる
+const ENTRY_S = 5850, THROAT_S = 9400, STOP_END = NAMBA_STOP;
 const DECEL = .9, ACCEL = .8, V_RUN = 60 / 3.6, V_THROAT = 30 / 3.6;
 const DWELL = 25, DWELL_TERM = 40, SPAWN_RANGE = 2500, MAX_ALIVE = 4, SPAWN_GAP = 10;
 /** 同じ向きの列車の出現間隔の下限 [s] と、出現位置の前方に空ける距離 [m]（各駅で停まる列車の後ろに詰まらないように） */

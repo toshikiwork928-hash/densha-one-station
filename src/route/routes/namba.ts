@@ -32,6 +32,8 @@ const names = [
 const LAST = names.length - 1;
 /** 難波の車止め（線路の終端） */
 export const NAMBA_END = 10032;
+/** 難波の停止位置（6・8両の先頭。自列車の停止位置目標）。留置・高野線の電車も車止め側の端をここにそろえる */
+export const NAMBA_STOP = STOPS[STOPS.length - 1];
 
 // ---- 線路の横位置 ----
 /** 複々線の駅（住ノ江・住吉大社・粉浜） */
