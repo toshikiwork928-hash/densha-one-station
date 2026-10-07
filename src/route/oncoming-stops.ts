@@ -85,7 +85,7 @@ function mulberry32(a: number): () => number {
   };
 }
 
-export interface OncomingPlanItem { spec: OncomingSpec; kind: TrainKind; rush: boolean; /** 本数合わせの予備（走行中のすれ違いだけ。meets に足りない分だけ使う） */ extra?: boolean }
+export interface OncomingPlanItem { spec: OncomingSpec; kind: TrainKind; rush: boolean }
 
 /** 対向列車ごとの扱いを決める。同じ seedKey（路線・方向・自列車の種別・時間帯）なら常に同じ結果（プレイ中に矛盾しない）。
  *  法則:
@@ -98,12 +98,10 @@ export function planOncoming(items: OncomingPlanItem[], opt: {
   seedKey: string; rushHour: boolean; passStations: Set<number>; /** 本数の多さ 0〜2（時間帯と向き。未指定はラッシュなら 2） */ level?: number;
   /** 種別の格ごとの本数の比率（HOURLY）。あれば、停車する普通が比率を超える分を走行中のすれ違いへ回す（すれ違いの種別は runClasses で決める） */
   share?: Record<TrainClass, number>;
-  /** 出す編成の総数の目安。あれば、停車に選ばれなかった編成と予備（extra）から、総数がこれに届くまで走行中のすれ違いにする */
-  meets?: number;
 }): OncomingMode[] {
   const level = opt.level ?? (opt.rushHour ? 2 : 0);
   const rng = mulberry32(hashSeed(opt.seedKey));
-  const modes: OncomingMode[] = items.map(it => (it.extra || (it.rush && !opt.rushHour) ? 'off' : 'stop'));
+  const modes: OncomingMode[] = items.map(it => (it.rush && !opt.rushHour ? 'off' : 'stop'));
   const cand: number[] = [];
   const chosen: { station: number; kind: TrainKind }[] = [];
   items.forEach((it, i) => {
@@ -137,23 +135,13 @@ export function planOncoming(items: OncomingPlanItem[], opt: {
   }
   // 停車に選ばれなかったもの: 一部を走行中のすれ違い（通常 最大3本・ラッシュ 最大4本）にし、残りは出さない
   let runs = 0;
-  if (opt.meets != null) {
-    // 総数の目安まで: 停車に選ばれなかった編成 → 予備（均等に間引いて使う）の順
-    let need = Math.max(0, opt.meets - items.filter((_, i) => modes[i] !== 'off' && !(cand.includes(i) && !picked.has(i))).length);
-    for (const i of order) {
-      if (picked.has(i)) continue;
-      if (need > 0) { modes[i] = 'run'; need--; } else modes[i] = 'off';
-    }
-    const extras = items.map((_, i) => i).filter(i => items[i].extra);
-    const use = Math.min(need, extras.length);
-    for (let j = 0; j < use; j++) modes[extras[Math.floor((j + .5) * extras.length / use)]] = 'run';
-  } else for (const i of order) {
+  for (const i of order) {
     if (picked.has(i)) continue;
     if (runs < (level ? 4 : 3) && rng() < .65) { modes[i] = 'run'; runs++; } else modes[i] = 'off';
   }
   // 普通の停車が比率を超える分は、停車をやめて走行中のすれ違いへ（種別は runClasses で優等列車になる）。停車は最低 1 本残す（待避線の普通がいれば 0 本でもよい）
   if (opt.share) {
-    const shown = opt.meets ?? items.filter((_, i) => modes[i] !== 'off').length;
+    const shown = items.filter((_, i) => modes[i] !== 'off').length;
     const total = opt.share.local + opt.share.kyuko + opt.share.tokkyu;
     // 待避線の普通（固定）も普通の1本に数える
     const loopLocals = items.filter((it, i) => modes[i] !== 'off' && it.spec.stop?.loop && classOfSpec(it.spec, it.kind) === 'local').length;
@@ -187,7 +175,7 @@ export function classOfSpec(spec: OncomingSpec, kind: TrainKind = spec.kind ?? '
   return kind === 'limited' || kind === 'southern-10000' || kind === 'limited-30000' ? 'tokkyu' : kind === 'commuter-old' ? 'kyuko' : 'local';
 }
 
-/** 走行中にすれ違う編成（停車しない編成。待避線の普通に続く優等列車は除く）の格を決める。
+/** 走行中にすれ違う編成（停車しない編成。待避線の普通に続く優等列車は除く）の格を決める（急行系か特急。普通は駅に停まるので使わない）。
  *  停車する編成も含めた全体が share の比率に近づくように、足りない格から順に割り当て、同じ格が続かないように並べる。
  *  戻り値は items と同じ並び（すれ違いでない要素は null） */
 export function runClasses(items: OncomingPlanItem[], modes: OncomingMode[], share: Record<TrainClass, number>, seedKey: string): (TrainClass | null)[] {
@@ -201,26 +189,27 @@ export function runClasses(items: OncomingPlanItem[], modes: OncomingMode[], sha
   const exact = classes.map(c => m * share[c] / total), target = exact.map(Math.floor);
   const rest = m - target.reduce((a, b) => a + b, 0);
   exact.map((x, k) => [x - target[k], k]).sort((a, b) => b[0] - a[0]).slice(0, rest).forEach(([, k]) => target[k]++);
-  const need = classes.map((c, k) => Math.max(0, target[k] - fixed[c]));
+  // 普通は駅に停まるので、停車しないすれ違いには使わない（通過する普通になる）。すれ違いは急行系・特急だけ
+  const need = classes.map((c, k) => c === 'local' ? 0 : Math.max(0, target[k] - fixed[c]));
   // 枠と必要数の差は比率で埋める / 削る
-  while (need.reduce((a, b) => a + b, 0) < slots.length) { const k = [0, 1, 2].sort((a, b) => share[classes[b]] / (need[b] + 1) - share[classes[a]] / (need[a] + 1))[0]; need[k]++; }
-  while (need.reduce((a, b) => a + b, 0) > slots.length) { const k = [0, 1, 2].filter(j => need[j] > 0).sort((a, b) => share[classes[a]] / need[a] - share[classes[b]] / need[b])[0]; need[k]--; }
-  // 並べ方: 残りの多い格から、直前と同じ格を避けて取る（開始は seedKey で決める）
+  while (need.reduce((a, b) => a + b, 0) < slots.length) { const k = [1, 2].sort((a, b) => share[classes[b]] / (need[b] + 1) - share[classes[a]] / (need[a] + 1))[0]; need[k]++; }
+  while (need.reduce((a, b) => a + b, 0) > slots.length) { const k = [1, 2].filter(j => need[j] > 0).sort((a, b) => share[classes[a]] / need[a] - share[classes[b]] / need[b])[0]; need[k]--; }
+  // 並べ方: 並び順（ほぼ出会う順）に見て、残りの多い格から、直前の編成（固定の編成も含む。待避線の普通に続く特急など）と同じ格を避けて取る
   const rng = mulberry32(hashSeed(seedKey + '|class'));
-  const left = [...need], seq: TrainClass[] = [];
+  const left = [...need], out: (TrainClass | null)[] = items.map(() => null);
   let prev = -1;
-  for (let n = 0; n < slots.length; n++) {
+  items.forEach((it, i) => {
+    if (modes[i] === 'off') return;
+    if (!isRun(i)) { prev = classes.indexOf(classOfSpec(it.spec, it.kind)); return; }
     const order = classes.map((_, j) => j).filter(j => left[j] > 0).sort((a, b) => left[b] - left[a] || rng() - .5);
     const k = order.find(j => j !== prev) ?? order[0];
-    seq.push(classes[k]); left[k]--; prev = k;
-  }
-  const out: (TrainClass | null)[] = items.map(() => null);
-  slots.forEach((i, n) => { out[i] = seq[n]; });
+    out[i] = classes[k]; left[k]--; prev = k;
+  });
   return out;
 }
 
 /** すれ違う編成の車両・両数・種別表示。格ごとに順に回す（k = その格の何本目）。towardWakayama = 対向列車が和歌山方面へ向かう */
-export function runConsist(cls: TrainClass, k: number, tod: TimeOfDay, towardWakayama: boolean): Pick<OncomingSpec, 'kind' | 'cars' | 'units' | 'unitKinds' | 'label' | 'kmh'> & { id: ServiceId } {
+export function runConsist(cls: TrainClass, k: number, tod: TimeOfDay, towardWakayama: boolean): Pick<OncomingSpec, 'kind' | 'cars' | 'units' | 'unitKinds' | 'label'> & { id: ServiceId } {
   type C = Pick<OncomingSpec, 'kind' | 'cars' | 'units' | 'unitKinds' | 'label'> & { id: ServiceId };
   const local: C[] = [
     { id: 'local', kind: 'commuter-new', cars: 4, units: [4], label: '普通' },
@@ -242,6 +231,5 @@ export function runConsist(cls: TrainClass, k: number, tod: TimeOfDay, towardWak
   const southern: C = { id: 'southern', kind: sk[0], cars: 8, units: [4, 4], label: '特急サザン', unitKinds: sk };
   const tokkyu: C[] = [{ id: 'limited', kind: 'limited', cars: 6, units: [6], label: '特急ラピートβ' }, southern];
   const list = cls === 'local' ? local : cls === 'kyuko' ? kyuko : tokkyu;
-  const c = list[k % list.length];
-  return { ...c, kmh: cls === 'local' ? 80 : cls === 'kyuko' ? 95 : 105 };
+  return list[k % list.length];
 }

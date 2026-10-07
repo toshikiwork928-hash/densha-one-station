@@ -33,8 +33,8 @@ interface Slot { dir: 1 | -1; v: Variant; /** 難波側の番線（up: 4、down:
 const V = {
   new4: (label: string, dest: string): Variant => ({ kind: 'commuter-new', units: [4], label, dest }),
   new6: (label: string, dest: string): Variant => ({ kind: 'commuter-new', units: [4, 2], label, dest }),
-  old2: (label: string, dest: string): Variant => ({ kind: 'commuter-2300', units: [2], label, dest }),
-  old4: (label: string, dest: string): Variant => ({ kind: 'commuter-2300', units: [2, 2], label, dest }),
+  // 2300系は橋本〜極楽橋の専用（なんばへは来ない）。4両の各停は 2000系
+  z4: (label: string, dest: string): Variant => ({ kind: 'commuter-2000', units: [2, 2], label, dest }),
   ss4: (label: string, dest: string): Variant => ({ kind: 'commuter-6300', units: [4], label, dest }),
   ss6: (label: string, dest: string): Variant => ({ kind: 'commuter-6300', units: [4, 2], label, dest }),
   ss8: (label: string, dest: string): Variant => ({ kind: 'commuter-6300', units: [4, 4], label, dest }),
@@ -46,8 +46,8 @@ const SLOTS: Slot[] = [
   { dir: 1, v: V.new6('急行', '難波'), bay: 4 },
   { dir: -1, v: V.ss8('準急', '和泉中央'), bay: 2 },
   { dir: 1, v: V.kouya('難波'), bay: 4 },
-  { dir: -1, v: V.old4('各停', '河内長野'), bay: 2 },
-  { dir: 1, v: V.old2('各停', '難波'), bay: 4 },
+  { dir: -1, v: V.z4('各停', '河内長野'), bay: 2 },
+  { dir: 1, v: V.z4('各停', '難波'), bay: 4 },
   { dir: -1, v: V.z8('急行', '橋本'), bay: 2 },
   { dir: 1, v: V.ss6('各停', '難波'), bay: 4 },
   { dir: -1, v: V.kouya('極楽橋'), bay: 2 },
@@ -66,7 +66,9 @@ const HALTS = [
 
 const ENTRY_S = 5850, THROAT_S = 9400, STOP_END = NAMBA_END - 4.5;
 const DECEL = .9, ACCEL = .8, V_RUN = 60 / 3.6, V_THROAT = 30 / 3.6;
-const DWELL = 25, DWELL_TERM = 40, SPAWN_RANGE = 2500, MAX_ALIVE = 3, SPAWN_GAP = 18;
+const DWELL = 25, DWELL_TERM = 40, SPAWN_RANGE = 2500, MAX_ALIVE = 5, SPAWN_GAP = 10;
+/** 難波行きの出現位置は自列車からこれ以上離さない [m]（消える距離 SPAWN_RANGE + 600 の内側。自列車が難波の近くでも出せるように） */
+const SPAWN_MAX_DIST = 2900;
 
 interface Stop { s: number; dwell: number; doors: 'L' | 'R' | 'both'; done: boolean }
 interface Running {
@@ -130,30 +132,34 @@ export function buildKoyaTraffic(ctx: GameContext): void {
   };
 
   let idx = 0, cool = 5;
+  /** 難波行きの出現位置: 合流の手前（ENTRY_S）。自列車が難波に近いときは自列車から SPAWN_MAX_DIST の位置（高野線の上で、見えない距離） */
+  const entryOf = (ps: number) => Math.max(ENTRY_S, Math.min(ps - SPAWN_MAX_DIST, STOP_END - 800));
   const canSpawn = (s: Slot, ps: number): boolean => {
     // 出現位置が見える範囲（自列車の前後 SPAWN_RANGE）のときだけ。難波発は自列車が難波に近いときだけ
-    if (s.dir === 1 ? ps < ENTRY_S - SPAWN_RANGE || ps > NAMBA_END - 600 : ps < ENTRY_S + 1000 || ps > NAMBA_END) return false;
+    if (s.dir === 1 ? ps < ENTRY_S - SPAWN_RANGE : ps < ENTRY_S + 1000 || ps > NAMBA_END) return false;
+    const entry = entryOf(ps);
     for (const t of trains) {
       if (t.slot.dir !== s.dir) continue;
       // 同じ向きの列車と出現位置が近いうちは出さない
-      if (s.dir === 1 ? t.pos - t.len < ENTRY_S + 60 : t.pos + t.len > STOP_END - 40) return false;
+      if (s.dir === 1 ? t.pos - t.len < entry + 60 && t.pos > entry - 400 : t.pos + t.len > STOP_END - 40) return false;
     }
     return true;
   };
 
-  function spawn(slot: Slot): void {
+  function spawn(slot: Slot, ps: number): void {
     const { e, key } = acquire(slot.v);
     const dir = slot.dir, len = e.len, local = slot.v.label === '各停';
     const doorsOf = (h: typeof HALTS[number]): Stop['doors'] => h.doors === 'island' ? 'L' : 'R';
     // 天下茶屋・新今宮: 上り（lat 14.4）は島式が左、下り（lat 18.4）は右の片面が進行方向左。萩ノ茶屋・今宮戎: どちらも島式が右
     const halts = HALTS.filter(h => local || !h.local);
-    const stops: Stop[] = (dir === 1 ? halts : [...halts].reverse()).map(h => ({
+    const entry = entryOf(ps);
+    const stops: Stop[] = (dir === 1 ? halts.filter(h => h.to - 6 > entry) : [...halts].reverse()).map(h => ({
       s: dir === 1 ? h.to - 6 : h.from + 6, dwell: DWELL, doors: doorsOf(h), done: false,
     }));
     if (dir === 1) stops.push({ s: STOP_END, dwell: DWELL_TERM, doors: 'both', done: false });
     const t: Running = {
       slot, cars: e.cars, group: e.group, key, len,
-      pos: dir === 1 ? ENTRY_S : STOP_END - len, v: 0, stops, wait: dir === 1 ? 0 : DWELL_TERM, end: false, lat: latFn(slot),
+      pos: dir === 1 ? entry : STOP_END - len, v: 0, stops, wait: dir === 1 ? 0 : DWELL_TERM, end: false, lat: latFn(slot),
     };
     if (dir === -1) for (const c of t.cars) c.setDoors(true);
     else t.v = V_RUN;
@@ -220,9 +226,9 @@ export function buildKoyaTraffic(ctx: GameContext): void {
     const ps = st.train.s, step_dt = Math.min(dt, .1);
     cool -= step_dt;
     if (cool <= 0 && trains.length < MAX_ALIVE) {
-      const slot = SLOTS[idx % SLOTS.length];
-      if (canSpawn(slot, ps)) { spawn(slot); idx++; cool = SPAWN_GAP; }
-      else if (cool < -30) { idx++; cool = 0; } // 出せない向きが続くとき次の枠へ
+      // 順番の枠が出せない向きなら、先の枠から出せるものを探す（待たずに次の向きへ）
+      const k = [0, 1, 2, 3].find(j => canSpawn(SLOTS[(idx + j) % SLOTS.length], ps));
+      if (k != null) { spawn(SLOTS[(idx + k) % SLOTS.length], ps); idx += k + 1; cool = SPAWN_GAP; }
     }
     for (let i = trains.length - 1; i >= 0; i--) {
       const t = trains[i];

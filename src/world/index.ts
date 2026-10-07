@@ -38,7 +38,7 @@ export function buildWorld(ctx: GameContext): World {
   buildTrackMesh(ctx);
   buildStructures(ctx);
   buildCoastalLandmarks(ctx);
-  buildHagoromoTrain(ctx); // 羽衣3番線に停車中の 2300系（描画のみ）
+  buildHagoromoTrain(ctx); // 羽衣3番線に停車中の 2000系（描画のみ）
   buildCatenary(ctx); // rng 不使用
   buildBackdrop(ctx);
   buildSigns(ctx);
