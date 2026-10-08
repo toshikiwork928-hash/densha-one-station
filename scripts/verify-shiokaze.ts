@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { shiokaze, shiokazeUp } from '../src/route/routes/shiokaze';
 import { mountain, mountainUp } from '../src/route/routes/mountain';
 import { kishiwada, kishiwadaUp } from '../src/route/routes/kishiwada';
+import { izumisano, izumisanoUp } from '../src/route/routes/izumisano';
 import { through, throughUp } from '../src/route/routes/through';
 import { namba, nambaUp, NAMBA_TRACKS } from '../src/route/routes/namba';
 import { approachText, departText } from '../src/audio/announce-text';
@@ -85,6 +86,45 @@ for (const route of [shiokaze, shiokazeUp]) {
     let eb = 0; const ats = createSignalSystem(ctx, () => eb++);
     ctx.state.train.s = stop - 40; ctx.state.train.v = 25 / 3.6; ctx.state.nextSignal = -1; ats.update(1 / 60, true);
     assert.equal(eb, 0, `${route.id}/${service}終着で低速進入ATSの非常制動なし`);
+  }
+}
+
+for (const route of [izumisano, izumisanoUp]) {
+  assert.equal(route.stations.length, 7, `${route.id}駅数`);
+  assert.equal(Math.abs(route.stations.at(-1)!.stopS - route.stations[0].stopS), 8000, `${route.id}営業キロ区間`);
+  assert.deepEqual(route.stations.map(s => s.name), route.id === 'izumisano'
+    ? ['岸和田', '蛸地蔵', '貝塚', '二色浜', '鶴原', '井原里', '泉佐野']
+    : ['泉佐野', '井原里', '鶴原', '二色浜', '貝塚', '蛸地蔵', '岸和田']);
+  assert.equal(route.services?.length, 5, `${route.id}種別数`);
+  const terminal = route.stations[route.id === 'izumisano' ? 6 : 0];
+  assert.equal(terminal.layout, 'custom', `${route.id}/泉佐野3面5線カスタム駅`);
+  assert.equal(terminal.customPlatforms?.length, 3, `${route.id}/泉佐野ホーム面数`);
+  assert.equal(route.extraTracks?.length, 3, `${route.id}/泉佐野追加線`);
+  const geometry = buildTrack(route);
+  for (const station of route.stations) {
+    const phi = geometry.trackAt(station.platform.from).phi;
+    const y = geometry.trackAt(station.platform.from).y;
+    for (let s = station.platform.from; s <= station.platform.to; s += 5) {
+      assert.ok(Math.abs(geometry.trackAt(s).phi - phi) < 1e-9, `${route.id}/${station.name}ホーム直線`);
+      assert.ok(Math.abs(geometry.trackAt(s).y - y) < 1e-6, `${route.id}/${station.name}ホーム水平`);
+    }
+  }
+  for (const crossing of route.crossings ?? []) {
+    const half = (crossing.roadWidth ?? 6) / 2;
+    assert.ok(Math.abs(geometry.trackAt(crossing.s).y) < .01, `${route.id}/${crossing.id}踏切は地上`);
+    for (const st of route.stations) assert.ok(crossing.s + half < st.platform.from || crossing.s - half > st.platform.to, `${route.id}/${crossing.id}ホームを横切らない`);
+  }
+  for (const service of route.services!) {
+    assert.ok(service.stops.every(i => i >= 0 && i < route.stations.length), `${route.id}/${service.id}停車駅範囲`);
+    assert.equal(service.timetable[route.stations.length - 1]?.arr != null, true, `${route.id}/${service.id}終着時刻`);
+    const r = structuredClone(route); applyService(r, service.id);
+    const at = route.id === 'izumisano' ? 6 : 0, sta = r.stations[at], track = buildTrack(r);
+    const airport = service.id === 'airport' || service.id === 'limited';
+    const want = route.id === 'izumisano' ? (service.id === 'local' ? -9.2 : airport ? 4 : 0) : (airport ? 4 - 22.4 : 4 - 13.2);
+    assert.ok(Math.abs(track.pathLat(sta.stopS) - want) < 1e-6, `${route.id}/${service.id}泉佐野番線の横位置`);
+    const p = sta.customPlatforms!.find(p => p.kind === 'island' && Math.abs(p.lat - want) < p.width! / 2 + 2 && (p.lat < want ? 'L' : 'R') === sta.platform.side);
+    assert.ok(p, `${route.id}/${service.id}走行線に接するホームがある`);
+    assert.equal(sta.platform.side, p!.lat < want ? 'L' : 'R', `${route.id}/${service.id}開扉側`);
   }
 }
 const downTrack = buildTrack(shiokaze), upTrack = buildTrack(shiokazeUp);
@@ -312,7 +352,7 @@ for (const [route, parts] of [[throughUp, [shiokazeUp, kishiwada]], [through, [k
   }
   assert.ok(departText(...(() => { const r = structuredClone(kishiwada); return [r, 0, false, applyService(r, 'southern')] as const; })()).includes('次は、キシワダに停まります。'));
   // 空港急行は急行と同じ停車駅（春木にも停車）
-  for (const route of [shiokaze, shiokazeUp, kishiwada, kishiwadaUp, throughUp, through]) {
+  for (const route of [shiokaze, shiokazeUp, kishiwada, kishiwadaUp, izumisano, izumisanoUp, throughUp, through]) {
     const a = route.services!.find(v => v.id === 'airport')!, e = route.services!.find(v => v.id === 'express')!;
     assert.deepEqual(a.stops, e.stops, `${route.id}空港急行は急行と同じ停車駅`);
     assert.equal(a.lineLimit, 100); assert.deepEqual(a.units, [4, 4]); assert.equal(a.kind, 'commuter-new');
@@ -332,7 +372,7 @@ for (const [route, parts] of [[throughUp, [shiokazeUp, kishiwada]], [through, [k
   assert.ok(!approachText(r, 5, sv).includes('待'), '昼の浜寺公園は待避なし');
   assert.ok(!approachText(r, 1, sv).includes('待'), '待避しない駅は案内なし');
 }
-for (const source of [kishiwada, kishiwadaUp, throughUp, through]) {
+for (const source of [kishiwada, kishiwadaUp, izumisano, izumisanoUp, throughUp, through]) {
   for (const service of ['local', 'express', 'airport', 'limited', 'southern'] as const) {
     const ctx = context(source, service), game = createGame(ctx);
     const finalSta = ctx.route.stations.at(-1)!, finalZone = loopZone(finalSta) ?? { inFrom: finalSta.platform.from - 160, outTo: finalSta.platform.to + 130 };
@@ -361,7 +401,7 @@ for (const source of [kishiwada, kishiwadaUp, throughUp, through]) {
     assert.equal(result.overspeed, 0, `${source.id}/${service}速度超過なし`);
     assert.ok(Math.abs(ctx.state.train.s - finalSta.stopS) < 15, `${source.id}/${service}終着停止`);
     assert.equal(ctx.state.stops.length, ctx.route.services!.find(s => s.id === service)!.stops.length - 1, `${source.id}/${service}停車駅数`);
-    if (service === 'local') assert.ok(zoneMax <= 46, `${source.id}/${service}終着の待避線へ45km/hで入線`);
+    if (service === 'local' && finalSta.loop) assert.ok(zoneMax <= 46, `${source.id}/${service}終着の待避線へ45km/hで入線`);
     const nst = ctx.route.stations.length, waits = [...new Set(ctx.route.services!.find(v => v.id === 'local')!.waits?.filter(w => w.station > 0 && w.station < nst - 1).map(w => w.station) ?? [])];
     assert.deepEqual([...observedWaits], service === 'local' ? waits : [], `${source.id}/${service}普通の待避`);
     for (const k of Object.keys(stopT)) {
@@ -448,7 +488,7 @@ console.log('泉大津〜岸和田・堺〜岸和田（5種別×上下）・サ�
 // 時間帯ごとのダイヤ（朝・夕・夜）: 全コース・全種別で完走、ATS非常制動なし、速度超過なし、普通は時間帯の待避駅で待つ
 {
   let n = 0;
-  for (const route of [shiokaze, shiokazeUp, kishiwada, kishiwadaUp, throughUp, through, namba, nambaUp]) {
+  for (const route of [shiokaze, shiokazeUp, kishiwada, kishiwadaUp, izumisano, izumisanoUp, throughUp, through, namba, nambaUp]) {
     for (const tod of ['morning', 'evening', 'night'] as const) {
       for (const service of route.services!.map(v => v.id)) {
         const ctx = context(route, service); ctx.envState.timeOfDay = tod;

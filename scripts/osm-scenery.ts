@@ -12,6 +12,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { namba } from '../src/route/routes/namba';
 import { shiokaze } from '../src/route/routes/shiokaze';
 import { kishiwada } from '../src/route/routes/kishiwada';
+import { izumisano } from '../src/route/routes/izumisano';
 import { profileLat } from '../src/route/service';
 import type { Route } from '../src/route/types';
 
@@ -49,6 +50,14 @@ const COURSES: Record<string, Course> = {
     bbox: [34.452, 135.362, 34.515, 135.425],
     railName: '南海本線',
     stations: ['泉大津', '忠岡', '春木', '和泉大宮', '岸和田'],
+    mainExtras: [],
+  },
+  // 岸和田〜泉佐野（データの座標は 'izumisano' = 岸和田 → 泉佐野）
+  'kishiwada-izumisano': {
+    route: izumisano,
+    bbox: [34.405, 135.310, 34.470, 135.385],
+    railName: '南海本線',
+    stations: ['岸和田', '蛸地蔵', '貝塚', '二色浜', '鶴原', '井原里', '泉佐野'],
     mainExtras: [],
   },
 };
@@ -446,7 +455,7 @@ async function main() {
   }
   B.sort((a, b) => a[0] - b[0]);
   const out = {
-    source: '© OpenStreetMap contributors（ODbL 1.0）。Overpass API で取得し、コースの座標へ写して簡略化',
+    source: '© OpenStreetMap contributors（ODbL 1.0）。OpenStreetMap API / Overpass API で取得し、コースの座標へ写して簡略化',
     course: courseId, range: RANGE, fetched: new Date().toISOString().slice(0, 10),
     /** 建物: [s, lat, 長さ, 幅, 角度(度, s 軸から), 階数, 種類の文字コード] */
     buildings: B,

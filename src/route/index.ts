@@ -4,11 +4,12 @@ import { sakuragaoka } from './routes/sakuragaoka';
 import { shiokaze, shiokazeUp } from './routes/shiokaze';
 import { mountain, mountainUp } from './routes/mountain';
 import { kishiwada, kishiwadaUp } from './routes/kishiwada';
+import { izumisano, izumisanoUp } from './routes/izumisano';
 import { through, throughUp } from './routes/through';
 import { namba, nambaUp } from './routes/namba';
 
 export const ROUTES: Record<string, Route> = { [sakuragaoka.id]: sakuragaoka, [shiokaze.id]: shiokaze, [shiokazeUp.id]: shiokazeUp, [mountain.id]: mountain, [mountainUp.id]: mountainUp,
-  [kishiwada.id]: kishiwada, [kishiwadaUp.id]: kishiwadaUp, [through.id]: through, [throughUp.id]: throughUp, [namba.id]: namba, [nambaUp.id]: nambaUp };
+  [kishiwada.id]: kishiwada, [kishiwadaUp.id]: kishiwadaUp, [izumisano.id]: izumisano, [izumisanoUp.id]: izumisanoUp, [through.id]: through, [throughUp.id]: throughUp, [namba.id]: namba, [nambaUp.id]: nambaUp };
 /** 方向の切替（下り ↔ 上り）。タイトルの方向ボタン用 */
 export const ROUTE_DIRS: { id: string; label: string; desc: string }[] = [
   { id: shiokaze.id, label: '上り', desc: '泉大津 → 堺' },
@@ -36,6 +37,10 @@ const NANKAI_SECTIONS: SectionEntry[] = [
       { id: throughUp.id, label: '下り', desc: '堺 → 岸和田' },
       { id: through.id, label: '上り', desc: '岸和田 → 堺' },
     ],
+  },
+  {
+    id: 'kishiwada-izumisano', name: '岸和田〜泉佐野', desc: '7駅・8.0km。貝塚の待避線と泉佐野の3面5線。普通・急行・空港急行・サザン・ラピートβ',
+    dirs: [{ id: izumisano.id, label: '下り', desc: '岸和田 → 泉佐野' }, { id: izumisanoUp.id, label: '上り', desc: '泉佐野 → 岸和田' }],
   },
   // 既定（dirs[0]）を変えないよう末尾に置く
   {

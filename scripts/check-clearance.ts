@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { shiokaze, shiokazeUp } from '../src/route/routes/shiokaze';
 import { mountain, mountainUp } from '../src/route/routes/mountain';
 import { kishiwada, kishiwadaUp } from '../src/route/routes/kishiwada';
+import { izumisano, izumisanoUp } from '../src/route/routes/izumisano';
 import { through, throughUp } from '../src/route/routes/through';
 import { namba, nambaUp } from '../src/route/routes/namba';
 import { buildTrack } from '../src/route/track';
@@ -84,6 +85,7 @@ const option = (name: string) => process.argv.find(a => a.startsWith(`--${name}=
 const routeFilter = option('route'), serviceFilter = option('service');
 const cases: [Route, ServiceId[]][] = [[shiokaze, ['local', 'express', 'airport', 'limited']], [shiokazeUp, ['local', 'express', 'airport', 'limited']], [mountain, ['local']], [mountainUp, ['local']],
   [kishiwada, ['local', 'express', 'airport', 'southern']], [kishiwadaUp, ['local', 'express', 'airport', 'southern']],
+  [izumisano, ['local', 'express', 'airport', 'southern', 'limited']], [izumisanoUp, ['local', 'express', 'airport', 'southern', 'limited']],
   [throughUp, ['local', 'airport', 'southern']], [through, ['local', 'airport', 'southern']],
   [namba, ['local', 'express', 'southern', 'limited']], [nambaUp, ['local', 'express', 'southern', 'limited']]];
 let total = 0;

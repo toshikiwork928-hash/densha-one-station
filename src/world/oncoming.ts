@@ -1,4 +1,5 @@
-// 対向列車（route.oncoming ごとに1編成。種別・両数が混在）。frame で移動し、警笛・すれ違いをイベントで通知
+// 対向列車。南海本線は oncoming-timetable の時刻付き共通運行を使う。
+// 以下の路線設定による処理は、実ダイヤ未収録のコース・単線交換用。警笛・すれ違いをイベントで通知。
 // 走り抜けるものと、駅（spec.stop）に停車してドアを開け、自列車が同じ駅で停車して少し経つと発車するものがある
 // 2面4線駅（汐見町・海浜公園）の対向側には待避線（対向線の +lat 側へ鏡像）があり、対向の普通（spec.stop.loop）はそこへ分岐器（制限 45km/h）で入って停車し、
 // 島式ホーム側のドアだけ開ける。同じ駅の対向の優等列車（spec.follow）は本線に停車 / 通過し、普通はその優等列車が分岐器を抜けてから発車する
@@ -12,6 +13,7 @@ import type { OncomingSpec, ServiceId, Station, TimeOfDay, TrainKind } from '../
 import { carLenOf, customPlatformSide, islandOffset, loopShape, loopZone, sameClass, serviceOf, WAKAYAMA_DEST, type LoopZone } from '../route/service';
 import { classOfSpec, hourlyOf, planOncoming, runClasses, runConsist, rushStopScenes, tokkyuOrder, type TrainClass } from '../route/oncoming-stops';
 import MEETS from '../data/oncoming-meets.json';
+import { counterTimetable, createTimetableOncoming } from './oncoming-timetable';
 import { onLight } from './batch';
 import { placeCar } from './emu';
 import { createTrainSet, setTrainNight, TRAIN_KINDS, type TrainCar } from './train-models';
@@ -153,7 +155,7 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
     return lat + islandOffset(route, lat, s) + (o.zone ? -o.zone.lat * loopShape(o.zone, s) : 0);
   };
   // 種別・両数ごとに1セットを先に作る（出現時の負荷を避ける）
-  for (const o of trains) if (!sets.has(keyOf(o))) build(o);
+  if (!counterTimetable(route.id, ctx.envState.timeOfDay)) for (const o of trains) if (!sets.has(keyOf(o))) build(o);
   const acquire = (o: OncomingTrain): SetView => {
     const v = sets.get(keyOf(o))?.find(x => !x.inUse) ?? build(o);
     v.inUse = true; v.group.visible = true;
@@ -409,6 +411,10 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
     return { id: 'limited', kind: 'limited', cars: 6, units: [6], label: code === 'Ra' ? '特急ラピートα' : '特急ラピートβ' };
   }
 
+  const timed = createTimetableOncoming(ctx, (code, k, towardNamba) => {
+    const { id, ...spec } = realConsist(code, k, towardNamba);
+    return { ...spec, cars: spec.cars!, kind: spec.kind!, dest: towardNamba ? WAKAYAMA_DEST[id][0] : 'なんば' };
+  });
   // 停車シーンの間引き: プレイ開始後の最初のフレームで決める（種別・時間帯が確定してから。同じプレイ中は変わらない）
   let planned = false;
   function applyPlan() {
@@ -478,6 +484,7 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
 
   events.on('frame', ({ dt }) => {
     if ((st.state !== 'run' && st.state !== 'dwell') || st.paused) return;
+    if (timed.update()) return;
     if (!planned) applyPlan();
     const ps = st.train.s, pv = st.train.v;
     let p = updateMeet(ps, pv);
@@ -496,18 +503,19 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
     if (p >= 0) events.emit('oncomingPass', { proximity: p });
   });
   events.on('reset', () => {
+    timed.reset();
     planned = false;
     for (const o of trains) { Object.assign(o, { active: false, done: false, started: false, horn: false }); release(o); }
     for (const o of meetSpecs) { o.active = false; release(o); }
   });
 
   // 開発時の確認用: 各編成の状態
-  if (import.meta.env.DEV) (window as any).__oncomingDebug = () => trains.map(o => ({ mode: o.mode, kind: o.kind, rush: o.rush, started: o.started, stop: o.spec.stop?.station, loop: !!o.zone, active: o.active, done: o.done, phase: o.phase, head: Math.round(o.head), len: Math.round(lenOf(o)), lat: +laneLat(o, o.head).toFixed(1), kmh: Math.round(o.v * 3.6), tStop: Math.round(o.tStop), tPlayer: Math.round(o.tPlayer), label: o.spec.label, specLat: o.spec.lat, halts: o.halts.map(h => route.stations[h.station].name) }));
+  if (import.meta.env.DEV) (window as any).__oncomingDebug = () => timed.debug() ?? trains.map(o => ({ mode: o.mode, kind: o.kind, rush: o.rush, started: o.started, stop: o.spec.stop?.station, loop: !!o.zone, active: o.active, done: o.done, phase: o.phase, head: Math.round(o.head), len: Math.round(lenOf(o)), lat: +laneLat(o, o.head).toFixed(1), kmh: Math.round(o.v * 3.6), tStop: Math.round(o.tStop), tPlayer: Math.round(o.tPlayer), label: o.spec.label, specLat: o.spec.lat, halts: o.halts.map(h => route.stations[h.station].name) }));
 
   return {
     activeSpans: () => [
       ...trains.filter(o => o.active && o.view && o.phase !== 'stopped' && o.phase !== 'closing'),
       ...meetSpecs.filter(o => o.active && o.view && o.v > 0),
-    ].map(o => ({ head: o.head, tail: o.head + o.view!.length })),
+    ].map(o => ({ head: o.head, tail: o.head + o.view!.length })).concat(timed.spans()),
   };
 }

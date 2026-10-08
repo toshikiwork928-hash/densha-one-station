@@ -12,6 +12,7 @@ import { T3_GAP, hagoromoSpec } from './hagoromo-branch';
 import { buildIndoorStations } from './indoor-station';
 import { buildCustomStation } from './custom-stations';
 import { buildElevatedConcourse, buildHeritageFacade, buildCoastalSpecialStations, coastalThirdTracks } from './coastal-stations';
+import { addCanopyRoof, addCanopyBraces, addPlatformWall, architectureOf } from './station-architecture';
 
 const platMat = new THREE.MeshLambertMaterial({ color: 0xc9c5bc });
 const bodyMat = new THREE.MeshLambertMaterial({ vertexColors: true });
@@ -57,25 +58,36 @@ export function buildStation(ctx: GameContext, sta: Station, prevName: string, n
   const grp = new THREE.Group(); grp.position.copy(track.at(sc, opt.lat ?? 0, 0)); grp.rotation.y = -t.phi; ctx.scene.add(grp);
   const plat = new THREE.Mesh(new THREE.BoxGeometry(5, 1.1, len), platMat); plat.position.set(X(-(1.6 + 2.5)), .55, 0); grp.add(plat);
   const b = new GeoBatch();
+  const arch = architectureOf(sta.name);
   const box = (x: number, y: number, z: number, w: number, h: number, d: number, col: number) => b.add('body', P.box, M(X(x), y, z, 0, w, h, d), col);
   // 点字ブロック・白線・ホーム端
   box(-2.3, 1.11, 0, .3, .02, len, 0xf2c200);
   box(-1.72, 1.115, 0, .25, .03, len, 0xf4f4f4);
   box(-1.62, .9, 0, .06, .3, len, 0x9a968c);
   // 上屋（屋根・梁・柱）
-  const rl = len * .62;
-  box(-4.3, 4.35, 0, 4.6, .14, rl, 0x6b7680);
-  box(-4.3, 4.22, 0, 4.4, .12, rl, 0xdcdcd8); // 天井
-  box(-2.0, 4.15, 0, .1, .35, rl, 0x6b7680); // 鼻隠し
-  for (let z = -rl / 2 + 4; z <= rl / 2 - 4; z += 10) {
-    box(-5.0, 2.65, z, .2, 3.1, .2, 0x8a9096);
-    box(-4.3, 4.1, z, 4.2, .16, .14, 0x8a9096);
+  const rl = len * (arch && arch.kind !== 'hall' ? arch.roofRatio : .62);
+  if (arch?.kind !== 'hall') {
+    const roofY = arch ? arch.Yroof : 4.35;
+    if (arch?.roofShape) addCanopyRoof(b, X(-4.3), 4.6, rl, arch);
+    else {
+      box(-4.3, roofY, 0, 4.6, .14, rl, arch ? arch.roofColor : 0x6b7680);
+      box(-4.3, roofY - .13, 0, 4.4, .12, rl, 0xdcdcd8);
+    }
+    if (arch) addCanopyBraces(b, X(-5), 4.2, rl, arch);
+    box(-2.0, roofY - .2, 0, .1, .35, rl, arch ? arch.roofColor : 0x6b7680);
+    for (let z = -rl / 2 + 4; z <= rl / 2 - 4; z += arch ? arch.supportSpacing : 10) {
+      box(-5.0, roofY - 1.7, z, .2, 3.1, .2, arch ? arch.supportColor ?? 0x8a9096 : 0x8a9096);
+      box(-4.3, roofY - .25, z, 4.2, .16, .14, arch ? arch.supportColor ?? 0x8a9096 : 0x8a9096);
+    }
+  }
+  if (arch?.kind === 'platform-wall') {
+    addPlatformWall(b, X(-6.6), rl, arch);
   }
   // 柵（ホーム裏側）
   {
     const stairOpening: number | undefined = undefined;
-    for (let z = -len / 2; z <= len / 2; z += 2.5) if (stairOpening === undefined || Math.abs(z - stairOpening) > 1.2) box(-6.55, 1.75, z, .06, 1.3, .06, 0x8a9096);
-    const segments = stairOpening === undefined ? [[-len / 2, len / 2]] : [[-len / 2, stairOpening - 1.2], [stairOpening + 1.2, len / 2]];
+    for (let z = -len / 2; z <= len / 2; z += 2.5) if ((arch?.kind !== 'platform-wall' || Math.abs(z) > rl / 2) && (stairOpening === undefined || Math.abs(z - stairOpening) > 1.2)) box(-6.55, 1.75, z, .06, 1.3, .06, 0x8a9096);
+    const segments = arch?.kind === 'platform-wall' ? [[-len / 2, -rl / 2], [rl / 2, len / 2]] : stairOpening === undefined ? [[-len / 2, len / 2]] : [[-len / 2, stairOpening - 1.2], [stairOpening + 1.2, len / 2]];
     for (const [from, to] of segments) {
       box(-6.55, 2.35, (from + to) / 2, .05, .06, to - from, 0x8a9096);
       box(-6.55, 1.8, (from + to) / 2, .02, .9, to - from, 0x9fb0a8);
@@ -180,6 +192,7 @@ export function buildIsland(ctx: GameContext, sta: Station, prevName: string, ne
   const grp = new THREE.Group(); grp.position.copy(track.at(sc, lat, 0)); grp.rotation.y = -t.phi; ctx.scene.add(grp);
   const plat = new THREE.Mesh(new THREE.BoxGeometry(PW, 1.1, len), platMat); plat.position.set(0, .55, 0); grp.add(plat);
   const b = new GeoBatch();
+  const arch = architectureOf(sta.name);
   const box = (x: number, y: number, z: number, w: number, h: number, d: number, col: number) => b.add('body', P.box, M(x, y, z, 0, w, h, d), col);
   for (const sx of [-1, 1]) {
     const e = sx * PW / 2;
@@ -188,14 +201,19 @@ export function buildIsland(ctx: GameContext, sta: Station, prevName: string, ne
     box(e - sx * .02, .9, 0, .06, .3, len, 0x9a968c);
   }
   // 上屋（中央の柱1列）
-  const rl = len * (opt.roof ?? .7);
-  if (!opt.indoor) {
-    box(0, 4.35, 0, PW - .8, .14, rl, 0x6b7680);
-    box(0, 4.22, 0, PW - 1, .12, rl, 0xdcdcd8);
-    for (const sx of [-1, 1]) box(sx * (PW / 2 - .45), 4.15, 0, .1, .35, rl, 0x6b7680);
-    for (let z = -rl / 2 + 4; z <= rl / 2 - 4; z += 10) {
-      box(0, 2.65, z, .22, 3.1, .22, 0x8a9096);
-      box(0, 4.1, z, PW - 1.2, .16, .14, 0x8a9096);
+  const rl = len * (arch && arch.kind !== 'hall' ? arch.roofRatio : (opt.roof ?? .7));
+  if (!opt.indoor && arch?.kind !== 'hall') {
+    const roofY = arch ? arch.Yroof : 4.35;
+    if (arch?.roofShape) addCanopyRoof(b, 0, PW - .8, rl, arch);
+    else {
+      box(0, roofY, 0, PW - .8, .14, rl, arch ? arch.roofColor : 0x6b7680);
+      box(0, roofY - .13, 0, PW - 1, .12, rl, 0xdcdcd8);
+    }
+    if (arch) addCanopyBraces(b, 0, PW - 1.2, rl, arch);
+    for (const sx of [-1, 1]) box(sx * (PW / 2 - .45), roofY - .2, 0, .1, .35, rl, arch ? arch.roofColor : 0x6b7680);
+    for (let z = -rl / 2 + 4; z <= rl / 2 - 4; z += arch ? arch.supportSpacing : 10) {
+      box(0, roofY - 1.7, z, .22, 3.1, .22, arch ? arch.supportColor ?? 0x8a9096 : 0x8a9096);
+      box(0, roofY - .25, z, PW - 1.2, .16, .14, arch ? arch.supportColor ?? 0x8a9096 : 0x8a9096);
     }
   }
   // ベンチ（背中合わせ）・自販機・時計

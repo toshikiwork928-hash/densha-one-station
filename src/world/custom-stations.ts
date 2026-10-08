@@ -7,6 +7,7 @@ import { buildIsland, buildStation } from './stations';
 import { GeoBatch, M, P } from './batch';
 import { getTerrain } from './terrain';
 import { trackSpan } from '../route/service';
+import { addHallArchitecture, architectureOf, hallBounds } from './station-architecture';
 
 export function buildCustomStation(ctx: GameContext, sta: Station, prev: string, next: string): void {
   const T = getTerrain(ctx), list = sta.customPlatforms ?? [];
@@ -18,6 +19,15 @@ export function buildCustomStation(ctx: GameContext, sta: Station, prev: string,
     const st: Station = { ...sta, platform: { ...sta.platform, from: p.from ?? sta.platform.from, to: p.to ?? sta.platform.to } };
     if (p.kind === 'island') buildIsland(ctx, st, prev, next, p.lat, p.width, { stairs: true, roof: p.roof });
     else { buildStation(ctx, st, prev, next, { lat: p.lat, side: p.side, minimal: !main, elevatedDy: dy }); main = false; }
+  }
+  const arch = architectureOf(sta.name);
+  if (arch?.kind === 'hall') {
+    const t = ctx.track.trackAt(sc), b = new GeoBatch();
+    const grp = new THREE.Group(); grp.position.copy(ctx.track.at(sc, 0, 0)); grp.rotation.y = -t.phi; ctx.scene.add(grp);
+    const hb = hallBounds(ctx.route, sta);
+    addHallArchitecture(b, { ...hb, from: hb.from - sc, to: hb.to - sc }, arch);
+    grp.name = `station-hall-${sta.name}`;
+    b.build({ body: new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x454545, emissiveIntensity: .25 }) }, grp);
   }
   if (!sta.elevated || !main || list.every(p => p.external)) return;
   // 片面ホームが無い（島式だけの）高架駅: 高架下の改札・駅舎（線路の範囲の左外）

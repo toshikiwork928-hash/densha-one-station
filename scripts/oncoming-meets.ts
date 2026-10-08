@@ -2,8 +2,9 @@
 // ゲームの各コース × 種別 × 時間帯について、ゲームと同じ開始時刻（core/config.ts の START_CLOCK）・同じ時刻表（applyService）で走ったときに、
 // 実際のダイヤで出会う逆向きの列車を、すれ違う位置（コースの s）・種別・停車中の駅とともに求め、src/data/oncoming-meets.json に書く。
 // 取得した時刻表そのものはリポジトリに入れない（node_modules/.cache/unyohub に一時保存）。
-//   npm run oncoming:meets               … 取得（一時保存があれば使う）して作る
-//   npm run oncoming:meets -- --refresh  … 取り直す
+//   npm run oncoming:meets                         … 全コースを作る
+//   npm run oncoming:meets -- --new-route-only=...  … 指定コースだけ更新する
+//   npm run oncoming:meets -- --refresh             … 取り直す
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { ROUTES } from '../src/route/index';
 import { applyService } from '../src/route/service';
@@ -12,8 +13,11 @@ import type { Route, TimeOfDay } from '../src/route/types';
 
 (globalThis as any).window = {};
 const args = new Set(process.argv.slice(2));
+const newRouteOnly = [...args].find(a => a.startsWith('--new-route-only='))?.slice('--new-route-only='.length);
 const CACHE = 'node_modules/.cache/unyohub';
 const API = 'https://unyohub.2pd.jp/api';
+type TimedPoint = { s: number; depart: number; stop: boolean; station: number | null };
+type TimedTrain = { id: string; code: string; points: TimedPoint[] };
 
 async function post(name: string, body: string): Promise<any> {
   const file = `${CACHE}/${name}.json`;
@@ -54,6 +58,7 @@ async function main() {
   const KM: Record<string, number> = {};
   { const r = ROUTES['namba'], sN = r.stations.at(-1)!.stopS; for (const s of r.stations) KM[nameOf(s.name)] = (sN - s.stopS) / 1000; }
   { const r = ROUTES['nankai-through-up'], s0 = r.stations[0].stopS; for (const s of r.stations) KM[s.name] ??= KM['堺'] + (s.stopS - s0) / 1000; }
+  { const r = ROUTES['izumisano'], s0 = r.stations[0].stopS; for (const s of r.stations) KM[s.name] ??= KM['岸和田'] + (s.stopS - s0) / 1000; }
   const tsec = (v: string | null) => { const m = v ? /(\d+):(\d+)/.exec(v) : null; return m ? +m[1] * 3600 + +m[2] * 60 : null; };
   const trains = (dir: 'inbound_trains' | 'outbound_trains') => {
     const out: { kind: string; pts: Pt[] }[] = [];
@@ -89,9 +94,112 @@ async function main() {
       return s[i - 1] + (s[i] - s[i - 1]) * (km - k[i - 1]) / (k[i] - k[i - 1]);
     };
   };
-  const result: Record<string, Record<string, Record<string, [number, string, number][]>>> = {};
+  if (args.has('--timetable')) {
+    // API の全駅を、既知駅の営業キロから補間・外挿する。コース外の駅も
+    // 入出場点として残すため、路線ごとの変換前に全駅の距離を埋める。
+    const apiNames = NAMES.map(nameOf);
+    const known = apiNames.map((name, i) => KM[name] == null ? null : { i, km: KM[name]! }).filter((x): x is { i: number; km: number } => x != null);
+    for (let i = 0; i < apiNames.length; i++) if (KM[apiNames[i]] == null) {
+      const left = [...known].reverse().find(x => x.i < i), right = known.find(x => x.i > i);
+      if (left && right) KM[apiNames[i]] = left.km + (right.km - left.km) * (i - left.i) / (right.i - left.i);
+      else if (left) {
+        const prev = [...known].reverse().find(x => x.i < left.i);
+        KM[apiNames[i]] = left.km + (left.km - (prev?.km ?? left.km - 1)) * (i - left.i) / (left.i - (prev?.i ?? left.i - 1));
+      } else if (right) {
+        const next = known.find(x => x.i > right.i);
+        KM[apiNames[i]] = right.km - ((next?.km ?? right.km + 1) - right.km) * (right.i - i) / ((next?.i ?? right.i + 1) - right.i);
+      }
+    }
+    const routes: Record<string, Record<TimeOfDay, TimedTrain[]>> = {};
+    const revision = '2024-12-21';
+    const kinds = (dir: 'inbound_trains' | 'outbound_trains') => {
+      const out: { id: string; code: string; pts: { km: number; t: number; stop: boolean; apiIndex: number }[] }[] = [];
+      for (const [id, arr] of Object.entries<any[]>(tt[dir])) for (const tr of arr) {
+        const code = kindOf(tr.train_type);
+        if (!code) continue;
+        const pts: { km: number; t: number; stop: boolean; apiIndex: number }[] = [];
+          tr.departure_times.forEach((v: string | null, j: number) => {
+          const t = tsec(v);
+            const apiIndex = dir === 'inbound_trains' ? N - 1 - j : j;
+            if (t == null || KM[apiNames[apiIndex]] == null) return;
+            pts.push({ km: KM[apiNames[apiIndex]], t, stop: !String(v).startsWith('|'), apiIndex });
+        });
+        if (pts.length >= 2) out.push({ id, code, pts });
+      }
+      return out;
+    };
+    const OUT = kinds('outbound_trains'), IN = kinds('inbound_trains');
+    const timeOfDays: TimeOfDay[] = ['morning', 'noon', 'evening', 'night'];
+    const timetableSOf = (r: Route) => {
+      const k = r.stations.map(s => KM[nameOf(s.name)]!), s = r.stations.map(x => x.platform.from + 8), up = k[0] < k.at(-1)!;
+      return (km: number) => {
+        let i = 1;
+        while (i < k.length - 1 && (up ? km > k[i] : km < k[i])) i++;
+        return s[i - 1] + (s[i] - s[i - 1]) * (km - k[i - 1]) / (k[i] - k[i - 1]);
+      };
+    };
+    for (const [id, r0] of Object.entries(ROUTES)) {
+      if (r0.lineId !== 'shiokaze' || r0.singleTrack) continue;
+      routes[id] = { morning: [], noon: [], evening: [], night: [] };
+      const firstKm = KM[nameOf(r0.stations[0].name)]!, lastKm = KM[nameOf(r0.stations.at(-1)!.name)]!;
+      const oncoming = firstKm < lastKm ? IN : OUT;
+      for (const tod of timeOfDays) {
+        const r = structuredClone(r0); r.timeOfDay = tod;
+        let courseMax = 0;
+        for (const sv of r0.services ?? []) {
+          const rs = structuredClone(r0); rs.timeOfDay = tod; applyService(rs, sv.id);
+          courseMax = Math.max(courseMax, ...rs.stations.map(s => s.scheduledArrival));
+        }
+        const start = START_CLOCK[tod], winStart = start - 600, winEnd = start + courseMax + 600;
+        const toS = timetableSOf(r), routeMin = Math.min(r.extent.from, r.extent.to), routeMax = Math.max(r.extent.from, r.extent.to);
+        const result: TimedTrain[] = [];
+        for (const tr of oncoming) {
+          const points0 = tr.pts.map(p => ({ s: Math.round(toS(p.km)), depart: p.t, stop: p.stop, station: r.stations.findIndex(s => nameOf(s.name) === apiNames[p.apiIndex]) })).map(p => ({ ...p, station: p.station < 0 ? null : p.station }));
+          points0.sort((a, b) => a.depart - b.depart || b.s - a.s);
+          const points: TimedPoint[] = [];
+          for (const p of points0) {
+            const prev = points.at(-1);
+            if (prev && p.depart === prev.depart) continue;
+            if (prev && p.s >= prev.s) continue;
+            points.push(p);
+          }
+          if (points.length < 2) continue;
+          const crosses = points.some(p => p.s >= routeMin && p.s <= routeMax && p.depart >= winStart && p.depart <= winEnd)
+            || points.some((p, i) => {
+              const q = points[i + 1];
+              if (!q) return false;
+              return Math.max(routeMin, Math.min(p.s, q.s)) <= Math.min(routeMax, Math.max(p.s, q.s))
+                && Math.max(winStart, p.depart) <= Math.min(winEnd, q.depart);
+            });
+          if (!crosses) continue;
+          const inside = points.map((p, i) => p.s >= routeMin && p.s <= routeMax ? i : -1).filter(i => i >= 0);
+          let from = inside.length ? Math.max(0, inside[0] - 1) : 0;
+          let to = inside.length ? Math.min(points.length - 1, inside.at(-1)! + 1) : points.length - 1;
+          if (!inside.length) {
+            const crossing = points.findIndex((p, i) => points[i + 1] && p.s >= routeMax && points[i + 1].s <= routeMin);
+            if (crossing >= 0) { from = crossing; to = crossing + 1; }
+          }
+          result.push({ id: tr.id, code: tr.code, points: points.slice(from, to + 1) });
+        }
+        result.sort((a, b) => (a.points.find(p => p.s >= routeMin)?.depart ?? a.points[0].depart) - (b.points.find(p => p.s >= routeMin)?.depart ?? b.points[0].depart) || a.id.localeCompare(b.id));
+        routes[id][tod] = result;
+      }
+    }
+    const out = { source: '南海電鉄の平日ダイヤ（鉄道運用Hub https://unyohub.2pd.jp/railroad_nankai/ の時刻表データ）。コース外駅の距離は既知駅からの補間・外挿推定', revision, routes };
+    mkdirSync('src/data', { recursive: true });
+    writeFileSync('src/data/oncoming-timetable.json', JSON.stringify(out));
+    let trains = 0, points = 0;
+    for (const byTod of Object.values(routes)) for (const list of Object.values(byTod)) { trains += list.length; points += list.reduce((n, x) => n + x.points.length, 0); }
+    console.log(`src/data/oncoming-timetable.json: ${(JSON.stringify(out).length / 1024).toFixed(0)} KB、${Object.keys(routes).length}コース、${trains}列車、${points}点`);
+    return;
+  }
+  const old = newRouteOnly && existsSync('src/data/oncoming-meets.json')
+    ? JSON.parse(readFileSync('src/data/oncoming-meets.json', 'utf8')) as { source?: string; meets?: Record<string, Record<string, Record<string, [number, string, number][]>>> }
+    : undefined;
+  const result: Record<string, Record<string, Record<string, [number, string, number][]>>> = newRouteOnly ? structuredClone(old?.meets ?? {}) : {};
   for (const [id, r0] of Object.entries(ROUTES)) {
     if (r0.lineId !== 'shiokaze' || r0.singleTrack) continue;
+    if (newRouteOnly && id !== newRouteOnly) continue;
     result[id] = {};
     for (const sv of r0.services ?? []) {
       result[id][sv.id] = {};

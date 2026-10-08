@@ -7,6 +7,7 @@ import { cullByDistance } from './cull';
 import { getTerrain } from './terrain';
 import { loopShape, loopZone } from '../route/service';
 import { BUMPER_D, DIVERGE_D, hagoromoSpec } from './hagoromo-branch';
+import { addPlatformWall, architectureOf } from './station-architecture';
 
 /** 浜寺公園の物理的な副線（両方向で同じ2本）。泉大津方面は島式ホームを挟む外側線、堺方面は本線の外側に寄り添う待避線でホームはその外側。 */
 export interface CoastalThird {
@@ -72,7 +73,14 @@ export function buildElevatedConcourse(ctx: GameContext, sta: Station, centers: 
   }
   for (const x of centers) box(x, dy / 2, len * .18, 2.6, -dy + 1, 10, 0xd5d8d2);
   // ホーム背面の高架駅スクリーン。屋根を覆い尽くさず列車の顔が見える高さ。
-  if (!opt.noScreen) for (const x of [left + .2, right - .2]) {
+  const arch = architectureOf(sta.name);
+  if (sta.layout === 'hagoromo' && arch?.kind === 'platform-wall') {
+    // 高師浜線の外周壁。片面ホーム背面の壁はbuildStationが描く。
+    // 島式ホームの端に壁を置くと3番線への乗降口を塞ぐため、線路の外へ置く。
+    const h = hagoromoSpec(ctx.route);
+    if (h) addPlatformWall(batch, h.t3 + h.side * 3.2, len * arch.roofRatio, arch);
+  }
+  if (!opt.noScreen && arch?.kind !== 'platform-wall' && arch?.kind !== 'hall') for (const x of [left + .2, right - .2]) {
     box(x, 2.4, 0, .12, 2.4, len * .85, 0xd2d6d5);
     for (let z = -len * .4; z < len * .4; z += 12) box(x, 3, z, .14, 1, 8, 0x9caeb5);
   }

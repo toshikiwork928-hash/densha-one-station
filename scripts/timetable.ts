@@ -4,6 +4,7 @@
 import { writeFileSync } from 'node:fs';
 import { shiokaze, shiokazeUp } from '../src/route/routes/shiokaze';
 import { kishiwada, kishiwadaUp } from '../src/route/routes/kishiwada';
+import { izumisano, izumisanoUp } from '../src/route/routes/izumisano';
 import { through, throughUp } from '../src/route/routes/through';
 import { namba, nambaUp } from '../src/route/routes/namba';
 import { mountain, mountainUp } from '../src/route/routes/mountain';
@@ -98,10 +99,26 @@ function tableOf(route: Route, id: ServiceId, log = false): string {
     return `{ ${tt.join(', ')} }`;
   }
 }
+
+const izumisanoOnly = process.argv.includes('--izumisano-only');
+if (izumisanoOnly) {
+  const dn = table(izumisano), up = table(izumisanoUp);
+  const body = (r: Record<string, string>) => `{
+  local: ${r.local}, express: ${r.express}, airport: ${r.airport}, limited: ${r.limited}, southern: ${r.southern},
+}`;
+  writeFileSync('src/route/routes/izumisano-timetable.ts', `// 南海本線 岸和田〜泉佐野の時刻表（scripts/timetable.ts が生成。手で直さない）
+import type { ServiceSpec } from '../types';
+
+type Id = 'local' | 'express' | 'airport' | 'limited' | 'southern';
+export const IT: Record<Id, ServiceSpec['timetable']> = ${body(dn)};
+export const IT_UP: Record<Id, ServiceSpec['timetable']> = ${body(up)};
+`);
+  process.exit(0);
+}
 // 時間帯ごとの普通の時刻表（待避で停車時間が変わる）。全コースの普通（時間帯のパターンを持つもの）
 {
   const lines: string[] = [];
-  for (const route of [shiokaze, shiokazeUp, kishiwadaUp, throughUp, through, namba, nambaUp]) {
+  for (const route of [shiokaze, shiokazeUp, kishiwadaUp, izumisano, izumisanoUp, throughUp, through, namba, nambaUp]) {
     const local = route.services?.find(v => v.id === 'local');
     if (!local?.waitsByTime) continue;
     const byTod: string[] = [];
@@ -120,6 +137,7 @@ export const LOCAL_TT: Record<string, Partial<Record<TimeOfDay, ServiceSpec['tim
 ${lines.join('\n')}
 };
 `);
+
 }
 
 // --namba-only は堺〜難波だけ更新
@@ -185,6 +203,19 @@ export const KT: Record<Id, ServiceSpec['timetable']> = ${kBody(kDn)};
 
 /** 上り（岸和田 → 泉大津） */
 export const KT_UP: Record<Id, ServiceSpec['timetable']> = ${kBody(kUp)};
+`);
+
+// 南海本線 岸和田〜泉佐野（独立コース）
+const iDn = table(izumisano), iUp = table(izumisanoUp);
+const iBody = (r: Record<string, string>) => `{
+  local: ${r.local}, express: ${r.express}, airport: ${r.airport}, limited: ${r.limited}, southern: ${r.southern},
+}`;
+writeFileSync('src/route/routes/izumisano-timetable.ts', `// 南海本線 岸和田〜泉佐野の時刻表（scripts/timetable.ts が生成。手で直さない）
+import type { ServiceSpec } from '../types';
+
+type Id = 'local' | 'express' | 'airport' | 'limited' | 'southern';
+export const IT: Record<Id, ServiceSpec['timetable']> = ${iBody(iDn)};
+export const IT_UP: Record<Id, ServiceSpec['timetable']> = ${iBody(iUp)};
 `);
 
 // 南海本線 堺〜岸和田（通し）。下り = 堺 → 岸和田（throughUp）、上り = 岸和田 → 堺（through）

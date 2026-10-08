@@ -19,9 +19,11 @@ import type { Route } from '../route/types';
 import { namba } from '../route/routes/namba';
 import { shiokaze } from '../route/routes/shiokaze';
 import { kishiwada } from '../route/routes/kishiwada';
+import { izumisano } from '../route/routes/izumisano';
 import nambaData from '../data/osm/namba.json';
 import sakaiIzumiotsuData from '../data/osm/sakai-izumiotsu.json';
 import izumiotsuKishiwadaData from '../data/osm/izumiotsu-kishiwada.json';
+import kishiwadaIzumisanoData from '../data/osm/kishiwada-izumisano.json';
 
 export interface OsmData {
   source: string;
@@ -41,6 +43,7 @@ const DATASETS: { id: string; base: Route; data: OsmData }[] = [
   { id: 'namba', base: namba, data: nambaData as unknown as OsmData },
   { id: 'sakai-izumiotsu', base: shiokaze, data: sakaiIzumiotsuData as unknown as OsmData },
   { id: 'izumiotsu-kishiwada', base: kishiwada, data: izumiotsuKishiwadaData as unknown as OsmData },
+  { id: 'kishiwada-izumisano', base: izumisano, data: kishiwadaIzumisanoData as unknown as OsmData },
 ];
 
 const cache = new WeakMap<Route, OsmData | null>();
