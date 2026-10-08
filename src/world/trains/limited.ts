@@ -17,7 +17,7 @@ const BLUE_CSS = '#2a318c';
 const NOSE_LEN = 3.7;
 /** 横から見た先頭部の輪郭（d = 鼻先からの距離 [m]）: 鼻先の下（スカート〜FACE_Y）は垂直、そこから屋根まで前へ膨らんだ1本の弧（超楕円、指数 PROFILE_P）。
  *  鼻先の下端で垂直に立ち上がり、屋根へ向かって寝ていく（横から見て胸が張った形。途中で凹まない） */
-const FACE_Y = 1.24, PROFILE_P = 2.2;
+const FACE_Y = 1.50, PROFILE_P = 3.4;
 const noseTopAt = (d: number) => {
   const t = Math.min(1, Math.max(0, (NOSE_LEN - d) / NOSE_LEN));
   return FACE_Y + (YTOP_L - FACE_Y) * Math.pow(Math.max(0, 1 - t ** PROFILE_P), 1 / PROFILE_P);
@@ -26,14 +26,22 @@ const noseTopAt = (d: number) => {
 const PLAN_R = .9;
 const planW = (d: number) => { const t = 1 - Math.min(1, d / PLAN_R); return .8 + .2 * Math.sqrt(Math.max(0, 1 - t * t)); };
 /** 正面から見た顔の丸み: 鼻先ほど左右の端を後ろへ下げる（横方向に反った、球のように膨らんだ顔）。BOW = 端での後退量 [m] */
-const BOW = .55, BOW_D = 2.4;
+const BOW = .60, BOW_D = 2.4;
 /** 中央の舳先: 顔の中央が前へ突き出す（幅 PROW_W、突き出し PROW [m]）。屋根の近くでは消える */
-const PROW = .22, PROW_W = .2;
+const PROW = .32, PROW_W = .28;
+const NOSE_FORWARD = .85;
 const smo = (t: number) => { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 * t); };
 /** 外板の前後方向のずれ（+ = 後ろ）。x, y = 位置、d = 鼻先からの距離 */
 const zOff = (x: number, y: number, d: number) => {
   const front = 1 - smo(d / BOW_D);
-  return BOW * (x / HW_L) ** 2 * front - PROW * Math.exp(-((x / PROW_W) ** 2)) * (1 - smo((y - 3.35) / .45)) * (1 - smo(d / 2.8));
+  return BOW * (x / HW_L) ** 2 * front - PROW * Math.exp(-((x / PROW_W) ** 2)) * (1 - smo((y - 3.35) / .45)) * (1 - smo(d / 2.8))
+    + .14 * Math.exp(
+      -(((Math.abs(x) - .65) / .35) ** 2)
+      -(((y - 2.20) / .55) ** 2)
+    ) * front
+    - NOSE_FORWARD
+      * (1 - smo((y - 1.50) / 1.75))
+      * (1 - smo(d / 3.20));
 };
 /** 車体断面 HALF（右半分）の高さ y での半幅 */
 const halfAt = (y: number) => {
@@ -133,7 +141,7 @@ function resample(half: V2[], n: number): V2[] {
 const sm = (e0: number, e1: number, x: number): number => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
 
 /** 前面窓: 高さ WS_Y、鼻先から WS_D まで（前面から側面へ回り込む。真横からは細長い窓）。正面の幅は顔の約 2/3（断面の半幅に対する比 WS_X まで） */
-const WS_Y: V2 = [2.47, 3.19], WS_D = 2.3, WS_X = .7;
+const WS_Y: V2 = [2.50, 3.24], WS_D = 2.15, WS_X = .80;
 /** 乗務員室の小窓（側面、前面窓の後ろの縦長の楕円） */
 const CREW = { d: 2.62, y: 2.78, rd: .16, ry: .3 };
 const C = {
@@ -209,13 +217,13 @@ function buildNose(b: GeoBatch, lit: GeoBatch, tl: GeoBatch, glows: THREE.Vector
     return { p, nrm };
   };
   // 灯具: 顔の外側の縁に、小さい丸を縦に3個ずつ（上2つ = 前照灯、下 = 尾灯）
-  for (const sx of [-1, 1]) for (const [y, kind] of [[2.7, 'h'], [2.27, 'h'], [1.84, 't']] as const) {
+  for (const sx of [-1, 1]) for (const [y, kind] of [[3.12, 'off'], [2.78, 't'], [2.42, 'h']] as const) {
     const { p, nrm } = surf(sx * halfAt(y) * .86, y);
     const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), nrm);
     const m = (k: number, r: number, h: number) => new THREE.Matrix4().compose(p.clone().addScaledVector(nrm, k), q, new THREE.Vector3(r, h, r));
     b.add('paint', P.cyl, m(.01, .2, .04), 0x9aa2b6); // 銀の縁
     b.add('paint', P.cyl, m(.025, .16, .02), 0x0a0c14);
-    (kind === 'h' ? lit : tl).add('l', P.cyl, m(.035, .12, .02), 0xffffff);
+    if (kind !== 'off') (kind === 'h' ? lit : tl).add('l', P.cyl, m(.035, .12, .02), 0xffffff);
     if (kind === 'h') glows.push(p.clone().addScaledVector(nrm, .25));
   }
   // 乗務員室の後ろの側面の溝（3本の水平なえら）

@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { GeoBatch, M, P } from '../batch';
 import {
-  Y0, adder, addEndWall, addLozenge, addSingleArm, addUnderfloor, capGeo, faceSheet, roundRings, shellGeo, sideSheet, sweepBand,
+  Y0, adder, addEndWall, addLozenge, addSingleArm, addTaperedSkirt, addUnderfloor, capGeo, faceSheet, roundRings, shellGeo, sideSheet, sweepBand,
   type CarKind, type CarParts, type Ring, type SheetMaps, type V2,
 } from './common';
 
@@ -105,7 +105,10 @@ export function paintCommuterSide(v: CommuterVariant, Lb: number, head: boolean,
       for (const sg of [-1, 1]) s.glass(sg < 0 ? zc - bw : zc + .03, sg < 0 ? zc - .03 : zc + bw, w0, w1, '', .04);
     } else for (const dz of [-.53, .53]) s.glass(zc + dz - sq, zc + dz + sq, w0, w1, '#565c63', .07); // 正方形の1段下降窓を2枚ずつ（間に約13cmの窓柱）
   }
-  if (v === 'new') s.glass(DOORS[3] + DOOR_W / 2 + .35, hz - .4, w0, w1, '#565c63', .1);
+  if (v === 'new') {
+    const zc = (DOORS[3] + DOOR_W / 2 + .35 + hz - .4) / 2;
+    s.glass(zc - sq, zc + sq, w0, w1, '#565c63', .05);
+  }
   else if (head) s.glass((DOORS[3] + DOOR_W / 2 + hz) / 2 - sq, (DOORS[3] + DOOR_W / 2 + hz) / 2 + sq, w0, w1, '#565c63', .03);
   else {
     // 7100系の中間車: 後ろ（+Z）の車端は窓が2枚（先頭車の乗務員扉の位置も窓になったような並び）。幅を少し細くして収める
@@ -120,7 +123,10 @@ export function paintCommuterSide(v: CommuterVariant, Lb: number, head: boolean,
       const zc = (crewZ + CREW_W / 2 + doors[0] - DOOR_W / 2) / 2;
       s.glass(zc - sq, zc + sq, w0, w1, '#565c63', .07);
     }
-  } else if (v === 'new') s.glass(-hz + .4, DOORS[0] - DOOR_W / 2 - .35, w0, w1, '#565c63', .05);
+  } else if (v === 'new') {
+    const zc = (-hz + .4 + DOORS[0] - DOOR_W / 2 - .35) / 2;
+    s.glass(zc - sq, zc + sq, w0, w1, '#565c63', .05);
+  }
   else s.glass((DOORS[0] - DOOR_W / 2 - hz) / 2 - sq, (DOORS[0] - DOOR_W / 2 - hz) / 2 + sq, w0, w1, '#565c63', .03);
   // 号車札・小表示（文字なし）
   s.rect(DOORS[1] + .9, DOORS[1] + 1.2, 3.46, 3.53, '#2b3138');
@@ -147,7 +153,7 @@ export function paintCommuterFace(v: CommuterVariant, ss = false): SheetMaps {
     // 貫通扉（銀）
     s.rect(-.5, .5, 1.18, 3.42, '#9aa0a7', .4, .7, .03);
     s.rect(-.44, .44, 1.22, 3.36, '#cdd2d7', .35, .8, .02);
-    s.glass(-.3, .3, 2.38, 3.12, '#3d434a', .03);
+    s.glass(-.3, .3, ss ? 2.38 : 2.20, ss ? 3.12 : 3.18, '#3d434a', .03);
     s.rect(-.2, .2, 1.24, 1.3, '#8a9097');
     // 上部の前照灯箱まわり
     s.rect(-.42, .42, 3.47, 3.72, '#0d0f11', .2, .2);
@@ -162,18 +168,18 @@ export function paintCommuterFace(v: CommuterVariant, ss = false): SheetMaps {
     s.rect(-HW, HW, L.frontLine[0], L.frontLine[1], ORANGE, .35, .1);
     s.rect(-HW, HW, 1.4, 1.43, '#f3f5f8', .35, .1); // 細い白線
     // 前面窓: 左右とも正方形（約0.58m角）。上下端は貫通扉の窓とそろえる（FW）。黒ゴム枠・角の丸い四角
-    const FW: V2 = [2.36, 2.96];
-    s.glass(.54, 1.12, FW[0], FW[1], '#22262b', .07);
-    s.glass(-1.12, -.54, FW[0], FW[1], '#22262b', .07);
+    const FW: V2 = ss ? [2.36, 2.96] : [2.25, 3.04];
+    s.glass(ss ? .54 : .50, ss ? 1.12 : 1.18, FW[0], FW[1], '#22262b', .07);
+    s.glass(ss ? -1.12 : -1.18, ss ? -.54 : -.50, FW[0], FW[1], '#22262b', .07);
     // 貫通扉と、その周りの幌の枠（灰色の太い枠）
     s.rect(-.5, .5, 1.2, 3.22, '#7f858c', .5, .1, .06);
     s.rect(-.37, .37, 1.27, 3.12, L.door, L.rough, L.metal, .04);
     s.rect(-.37, .37, L.frontBand[0], L.frontBand[1], BLUE, .35, .1);
     s.rect(-.37, .37, L.frontLine[0], L.frontLine[1], ORANGE, .35, .1);
     // 貫通扉の窓: 縦長の長方形（幅0.42m・高さは前面窓と同じ）
-    s.glass(-.21, .21, FW[0], FW[1], '#22262b', .05);
+    s.glass(ss ? -.21 : -.25, ss ? .21 : .25, FW[0], FW[1], '#22262b', .05);
     // 車号は中央（貫通扉の窓の下、青い帯の中に白文字）
-    s.text(ss ? '6301' : '7185', 0, 1.81, .2, '#f4f6fa', 600);
+    s.text(ss ? '6301' : '7157', 0, 1.81, .2, '#f4f6fa', 600);
     // 行先表示器（左窓の上）の枠
     s.rect(.52, 1.12, 3.16, 3.4, '#15171a', .3, 0, .02);
     s.emit(-HW, HW, Y0, YTOP + .1, '#000'); // 夜は運転台の窓を光らせない
@@ -182,7 +188,7 @@ export function paintCommuterFace(v: CommuterVariant, ss = false): SheetMaps {
 }
 
 /** 1両分のジオメトリ */
-export function buildCommuterCar(v: CommuterVariant, kind: CarKind, Lb: number): CarParts {
+export function buildCommuterCar(v: CommuterVariant, kind: CarKind, Lb: number, ss = false): CarParts {
   const L = LOOK[v], HALF = HALFS[v], hz = Lb / 2, head = kind === 'head', zf = -hz;
   const rings: Ring[] = [...(head ? roundRings(zf, L.r, 1) : [{ z: -hz, inset: 0 }]), { z: hz, inset: 0 }];
   const shell = shellGeo(HALF, rings, YTOP, Lb);
@@ -216,11 +222,7 @@ export function buildCommuterCar(v: CommuterVariant, kind: CarKind, Lb: number):
       led = mergeLed([[.93, 3.42, .62]], z - .01, .17);
       led2 = mergeLed([[-.93, 3.42, .62]], z - .01, .17);
       // スカート（角ばった銀灰色）と連結器
-      for (const sx of [-1, 1]) {
-        b.add('paint', P.box, M(sx * .98, .7, zf - .1, sx * .15, .8, .6, .08, -.22), 0x9ca2a9);
-        add(sx * 1.36, .78, zf + .2, .06, .46, .6, 0x9ca2a9);
-      }
-      add(0, .45, zf - .1, 1.3, .12, .12, 0x9aa0a6, -.2);
+      addTaperedSkirt(b, zf, 1.30, .97, .78, .42, 0xd3d7dc);
       add(0, .88, zf - .15, .3, .24, .5, 0x22252a);
       // ワイパー
       for (const sx of [-1, 1]) add(sx * .95, 2.38, z - .03, .55, .025, .025, 0x111111, 0, 0, sx * .35);
@@ -247,11 +249,12 @@ export function buildCommuterCar(v: CommuterVariant, kind: CarKind, Lb: number):
       }
       marks = { l: mkL.geometry('l')!, r: mkR.geometry('l')! };
       // 行先表示器（左窓の上）: 枠・庇・奥行きを付けて1面に種別 + 行先
-      add(.82, 3.28, z - .015, .62, .27, .03, 0x15171a);
+      add(.82, 3.28, z - .015, .62, .27, ss ? .03 : .01, 0x15171a);
       add(.82, 3.425, z - .03, .66, .03, .06, 0x2a2d31);
-      led = mergeLed([[.82, 3.28, .54]], z - .05, .2);
+      led = mergeLed([[.82, 3.28, .54]], ss ? z - .05 : z - .025, .2);
       // 簡易スカート・連結器・ホース
-      add(0, .78, zf + .05, 2.4, .42, .1, 0x8e9399, -.1);
+      if (ss) add(0, .78, zf + .05, 2.4, .42, .1, 0x8e9399, -.1);
+      else addTaperedSkirt(b, zf, 1.30, 1.20, .66, .56, 0x8e9399);
       add(0, .9, zf - .15, .3, .24, .5, 0x22252a);
       for (const sx of [-.75, -.55, -.35]) b.add('paint', P.cyl, M(sx, 1.0, zf - .1, 0, .07, .35, .07), 0x1c1e21);
       for (const sx of [-1, 1]) add(sx * .93, 2.5, z - .03, .5, .025, .025, 0x111111, 0, 0, sx * .5);

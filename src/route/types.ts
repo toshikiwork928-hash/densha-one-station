@@ -116,7 +116,7 @@ export type ServiceId = 'local' | 'express' | 'airport' | 'limited' | 'southern'
  *  以下は運転できない車種（対向列車・高野線の電車・留置車両のモブ）: commuter-1000 = 1000系（本線・6両）、commuter-2000 = 2000系（17m・2扉。高野線 4両×2・支線 2両。本線には出さない）、
  *  commuter-6300 = 6300系（高野線。7100系と同じ形のステンレス無塗装）、limited-30000 = 30000系（特急こうや。17m・4両） */
 export type TrainKind = 'commuter-new' | 'commuter-old' | 'limited' | 'commuter-2300' | 'southern-10000'
-  | 'commuter-1000' | 'commuter-2000' | 'commuter-6300' | 'limited-30000';
+  | 'southern-12000' | 'commuter-1000' | 'commuter-9000' | 'commuter-2000' | 'commuter-6300' | 'limited-30000';
 export interface ServiceSpec {
   id: ServiceId;
   /** 表示名（普通 / 急行 / 空港急行 / 特急ラピートβ / 特急サザン） */

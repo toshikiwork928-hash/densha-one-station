@@ -24,7 +24,7 @@ const dnIdx = (name: string) => name === '岸和田' ? 13 : name === '春木' ? 
 const dnServices: ServiceSpec[] = [
   {
     id: 'local', name: '普通', cars: 4, units: [4], kind: 'commuter-new',
-    kindOptions: ['commuter-new', 'commuter-old'], formationOptions: [[4], [4, 2]],
+    kindOptions: ['commuter-new', 'commuter-old', 'commuter-1000'], formationOptions: [[4], [4, 2], [6]],
     lineLimit: 90, useLoop: true, stops: ALL, timetable: NT.local,
     // 1駅に複数の待避を並べたときは、普通（自列車）は先頭の種別を待つ。優等列車側は自分の種別の行を使う
     waits: [
@@ -34,7 +34,7 @@ const dnServices: ServiceSpec[] = [
   },
   {
     id: 'express', name: '急行', cars: 6, units: [4, 2], kind: 'commuter-old',
-    kindOptions: ['commuter-old', 'commuter-new'], formationOptions: [[4, 2], [4, 4], [4, 2, 2]],
+    kindOptions: ['commuter-old', 'commuter-new', 'commuter-1000', 'commuter-9000'], formationOptions: [[4, 2], [4, 4], [4, 2, 2], [6]],
     lineLimit: 100, stops: [0, dnIdx('羽衣'), dnIdx('泉大津'), dnIdx('春木'), 13], timetable: NT.express,
   },
   airportService([0, dnIdx('羽衣'), dnIdx('泉大津'), dnIdx('春木'), 13], NT.airport),

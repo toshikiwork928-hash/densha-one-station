@@ -117,7 +117,7 @@ export const shiokaze: Route = {
   services: [
     {
       id: 'local', name: '普通', cars: 4, units: [4], kind: 'commuter-new',
-      kindOptions: ['commuter-new', 'commuter-old'], formationOptions: [[4], [4, 2]],
+      kindOptions: ['commuter-new', 'commuter-old', 'commuter-1000'], formationOptions: [[4], [4, 2], [6]],
       lineLimit: 90, useLoop: true, stops: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], timetable: TT.local,
       waits: [{ station: 3, passedBy: 'limited' }, { station: 5, passedBy: 'express' }, { station: 5, passedBy: 'airport' }],
       // 堺は内側の3番線へ（分岐器制限 45km/h）
@@ -126,7 +126,7 @@ export const shiokaze: Route = {
     },
     {
       id: 'express', name: '急行', cars: 6, units: [4, 2], kind: 'commuter-old',
-      kindOptions: ['commuter-old', 'commuter-new'], formationOptions: [[4, 2], [4, 4], [4, 2, 2]],
+      kindOptions: ['commuter-old', 'commuter-new', 'commuter-1000', 'commuter-9000'], formationOptions: [[4, 2], [4, 4], [4, 2, 2], [6]],
       lineLimit: 100, stops: [0, 4, 9], timetable: TT.express, platformSides: { 9: 'R' }, trackNames: { 9: '4番線' },
     },
     { ...airportService([0, 4, 9], TT.airport), platformSides: { 9: 'R' }, trackNames: { 9: '4番線' } },

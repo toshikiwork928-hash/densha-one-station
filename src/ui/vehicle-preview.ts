@@ -79,7 +79,11 @@ export function createVehiclePreview(ctx: GameContext) {
     const key = `${kindsKey(svc)}:${svc.units.join('+')}:${svc.name}:${full}`;
     if (key === modelKey) return;
     modelKey = key; root.clear(); for (const m of materials) m.dispose();
-    const m = model(svc.kind, full ? svc.cars : 1, full ? svc.units : [1], svc.name, full ? svc.unitKinds : undefined, destOf(ctx.route, svc));
+    // サザンの単車表示は物理先頭ではなく座席指定車を表示する。
+    const previewKind = svc.id === 'southern'
+      ? (svc.unitKinds?.find(k => k === 'southern-10000' || k === 'southern-12000') ?? svc.kind)
+      : svc.kind;
+    const m = model(full ? svc.kind : previewKind, full ? svc.cars : 1, full ? svc.units : [1], svc.name, full ? svc.unitKinds : undefined, destOf(ctx.route, svc));
     root.add(m.group); materials = m.owned;
     const box = new THREE.Box3().setFromObject(root); box.getCenter(center); box.getSize(size);
     zoom = 1; dirty = true;

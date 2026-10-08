@@ -53,7 +53,10 @@ export function createGame(ctx: GameContext): Game {
   let appliedService = '';
   function syncService() {
     ctx.service = serviceOf(route, st.sel.service);
-    ctx.trainEnv.perf = ctx.service ? TRAIN_PERF[ctx.service.kind] : DEFAULT_PERF;
+    // 12000系混成は指定席側の性能を編成全体へ適用する。
+    const perfKind = ctx.service?.id === 'southern' && ctx.service.unitKinds?.includes('southern-12000')
+      ? 'southern-12000' : ctx.service?.kind;
+    ctx.trainEnv.perf = perfKind ? TRAIN_PERF[perfKind] : DEFAULT_PERF;
     const key = ctx.service ? `${ctx.service.id}:${ctx.service.kind}:${ctx.service.units.join('+')}` : '';
     if (ctx.service && key !== appliedService) {
       appliedService = key;
@@ -336,7 +339,9 @@ export function createGame(ctx: GameContext): Game {
       if (st.state !== 'title') return;
       const svc = serviceOf(route, st.sel.service);
       if (!svc) return;
-      st.sel.vehicles = { ...st.sel.vehicles, [svc.id]: { kind: v.kind ?? svc.kind, units: v.units ?? svc.units } };
+      const prev = st.sel.vehicles[svc.id];
+      const seatKind = svc.id === 'southern' ? svc.unitKinds?.find(k => k === 'southern-10000' || k === 'southern-12000') : undefined;
+      st.sel.vehicles = { ...st.sel.vehicles, [svc.id]: { kind: v.kind ?? prev?.kind ?? seatKind ?? svc.kind, freeKind: v.freeKind ?? prev?.freeKind, units: v.units ?? prev?.units ?? svc.units } };
       saveSelection(st.sel);
       reset();
     },

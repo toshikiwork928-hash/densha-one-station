@@ -19,7 +19,7 @@ const ROOF: V2[] = [[HW_S, 3.4], [HW_S - .04, 3.56], [HW_S - .24, 3.71], [HW_S -
 const HALF: V2[] = [[HW_S - .03, Y0], [HW_S, 1.4], ...ROOF];
 /** 先頭部の丸み（前面は側面へ丸く回り込む）。前面シートの有効幅は HW_S - R_S */
 const R_S = .38;
-const BLUE = '#1a2f86', ROYAL = '#1f3fae', ORANGE = '#f2895a';
+const BLUE = '#1a2f86', ROYAL = '#1f3fae', ORANGE = '#f0961c';
 const WIN: V2 = [2.0, 2.95];
 /** 側面の帯（7100系 commuter.ts の old と同じ並び）: 窓上 = 太い青（TOP_BAND）とその下の細い橙（TOP_LINE）、窓下 = 細い青（LOW_BAND）とその下の橙（LOW_LINE） */
 const TOP_BAND: V2 = [3.4, 3.65], TOP_LINE: V2 = [3.26, 3.37], LOW_BAND: V2 = [1.44, 1.53], LOW_LINE: V2 = [1.34, 1.43];

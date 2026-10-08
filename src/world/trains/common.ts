@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { FONT } from '../../core/config';
-import { GeoBatch, M, P } from '../batch';
+import { basePart, GeoBatch, M, P } from '../batch';
 
 export type V2 = [number, number];
 export type CarKind = 'head' | 'mid' | 'pan';
@@ -271,6 +271,35 @@ export interface CarParts {
 type Add = (x: number, y: number, z: number, w: number, h: number, d: number, col: number | string, rx?: number, ry?: number, rz?: number) => void;
 export function adder(b: GeoBatch, key = 'paint'): Add {
   return (x, y, z, w, h, d, col, rx = 0, ry = 0, rz = 0) => b.add(key, P.box, M(x, y, z, ry, w, h, d, rx, rz), col);
+}
+
+export function addTaperedSkirt(
+  b: GeoBatch, zf: number,
+  outerTop: number, outerBottom: number,
+  innerTop: number, innerBottom: number,
+  color: number,
+) {
+  for (const sx of [-1, 1]) {
+    const shape = new THREE.Shape([
+      new THREE.Vector2(sx * outerTop, Y0 + .01),
+      new THREE.Vector2(sx * innerTop, Y0 + .01),
+      new THREE.Vector2(sx * innerBottom, .40),
+      new THREE.Vector2(sx * outerBottom, .40),
+    ]);
+    const geo = new THREE.ExtrudeGeometry(shape, {
+      depth: .14, bevelEnabled: false,
+    });
+    b.add('paint', basePart(geo), M(0, 0, zf - .12), color);
+    geo.dispose();
+  }
+  const add = adder(b);
+  add(0, .72, zf - .06, innerTop * 2, .58, .08, 0x22252a);
+  add(0, .40, zf - .05, outerBottom * 2, .14, .14, color);
+  for (const sx of [-1, 1])
+    add(sx * .46, .80, zf - .14, .08, .42, .08, 0x969b9f);
+  for (const y of [.61, .99])
+    add(0, y, zf - .14, 1.00, .08, .08, 0x969b9f);
+  add(0, .83, zf - .43, .36, .22, .08, 0x81868b);
 }
 
 /** 台車・台枠・床下機器 */

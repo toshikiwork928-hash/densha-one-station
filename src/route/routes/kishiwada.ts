@@ -118,12 +118,12 @@ export const kishiwada: Route = {
   services: [
     {
       id: 'local', name: '普通', cars: 4, units: [4], kind: 'commuter-new',
-      kindOptions: ['commuter-new', 'commuter-old'], formationOptions: [[4], [4, 2]],
+      kindOptions: ['commuter-new', 'commuter-old', 'commuter-1000'], formationOptions: [[4], [4, 2], [6]],
       lineLimit: 90, useLoop: true, stops: [0, 1, 2, 3, 4], timetable: KT.local,
     },
     {
       id: 'express', name: '急行', cars: 6, units: [4, 2], kind: 'commuter-old',
-      kindOptions: ['commuter-old', 'commuter-new'], formationOptions: [[4, 2], [4, 4], [4, 2, 2]],
+      kindOptions: ['commuter-old', 'commuter-new', 'commuter-1000', 'commuter-9000'], formationOptions: [[4, 2], [4, 4], [4, 2, 2], [6]],
       lineLimit: 100, stops: [0, 2, 4], timetable: KT.express,
     },
     airportService([0, 2, 4], KT.airport),

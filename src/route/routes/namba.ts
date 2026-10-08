@@ -204,14 +204,14 @@ const fast = (track: string, side: 'L' | 'R') => ({ platformSides: { 0: 'R', [LA
 const services: ServiceSpec[] = [
   {
     id: 'local', name: '普通', cars: 4, units: [4], kind: 'commuter-new',
-    kindOptions: ['commuter-new', 'commuter-old'], formationOptions: [[4], [4, 2]],
+    kindOptions: ['commuter-new', 'commuter-old', 'commuter-1000'], formationOptions: [[4], [4, 2], [6]],
     lineLimit: 90, stops: ALL, timetable: NB.local, lane: LANE.local, laneLimits: LOCAL_LIMITS,
     // 堺・住ノ江・住吉大社・粉浜は3番線（内側の緩行線）
     trackNames: { 0: '3番線', 2: '3番線', 3: '3番線', 4: '3番線' },
   },
   {
     id: 'express', name: '急行', cars: 6, units: [4, 2], kind: 'commuter-old',
-    kindOptions: ['commuter-old', 'commuter-new'], formationOptions: [[4, 2], [4, 4], [4, 2, 2]],
+    kindOptions: ['commuter-old', 'commuter-new', 'commuter-1000', 'commuter-9000'], formationOptions: [[4, 2], [4, 4], [4, 2, 2], [6]],
     lineLimit: 100, stops: FAST, timetable: NB.express, lane: LANE.express, ...fast('6番線', 'R'),
   },
   { ...airportService(FAST, NB.airport), lane: LANE.express, ...fast('6番線', 'R') },

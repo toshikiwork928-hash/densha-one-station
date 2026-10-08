@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { GeoBatch, M, P } from '../batch';
 import {
-  Y0, adder, addEndWall, addLozenge, addSingleArm, addUnderfloor, capGeo, faceSheet, roundRings, shellGeo, sideSheet, sweepBand,
+  Y0, adder, addEndWall, addLozenge, addSingleArm, addTaperedSkirt, addUnderfloor, capGeo, faceSheet, roundRings, shellGeo, sideSheet, sweepBand,
   type CarKind, type CarParts, type Ring, type SheetMaps, type V2,
 } from './common';
 
@@ -101,7 +101,7 @@ const ROOF = (hw: number, ytop: number): V2[] => [[hw, ytop - .42], [hw - .05, y
 const SPEC: Record<NewLiveryModel, Spec> = {
   '1000': {
     hw: 1.45, ytop: 3.84, half: [[1.39, Y0], [1.45, 1.5], ...ROOF(1.45, 3.84)], slant: { depth: .3, bow: .14, hw: 1.45, ytop: 3.84 }, r: .2,
-    doors: [-7.2, -2.4, 2.4, 7.2], doorW: 1.3, win: [2.0, 2.93], roofY: 3.7,
+    doors: [-7.2, -2.4, 2.4, 7.2], doorW: 1.3, win: [2.08, 2.90], roofY: 3.7,
     base: L7100.base, rough: .42, metal: .12, top: [L7100.topBand, L7100.topLine],
     crewOff: .55, crewW: .64, fwin: [2.2, 3.58], face: '#c9cdd3', num: '1010',
   },
@@ -124,8 +124,8 @@ export function paintNewLiverySide(m: NewLiveryModel, Lb: number, head: boolean,
     for (let y = 1.2; y < 1.6; y += .06) s.rect(-hz, hz, y, y + .014, 'rgba(255,255,255,.16)');
     for (let z = -hz + 1.6; z < hz; z += 2.9) s.rect(z, z + .015, Y0, S.roofY, 'rgba(0,0,0,.05)');
   }
-  // 1000系: 先頭車は乗務員扉の後ろで客用扉1を少し後ろへずらす（間に窓1枚）
-  const D = head && m === '1000' ? [S.doors[0] + .4, ...S.doors.slice(1)] : S.doors;
+  // 1000系の乗務員扉と最初の客用扉の間には客室窓を置かない。
+  const D = S.doors;
   {
     // 7100系と同じ帯: 幕板の太い青＋細い橙、腰の青＋橙。先頭車は前面の帯から斜めに立ち上がる
     const L = L7100, [tb, tl] = S.top, band = (b: V2, col: string, z0 = -hz - 1) => s.rect(z0, hz + 1, b[0], b[1], col, .35, .1);
@@ -141,16 +141,24 @@ export function paintNewLiverySide(m: NewLiveryModel, Lb: number, head: boolean,
   const win = (z0: number, z1: number) => s.glass(z0, z1, w0, w1, '#3d4248', .05);
   /** 区間 [a, b] に n 枚の窓（間に窓柱 gap） */
   const row = (a: number, b: number, n: number, gap = .12, pad = .2) => {
-    const w = (b - a - 2 * pad - gap * (n - 1)) / n;
-    for (let i = 0; i < n; i++) { const z0 = a + pad + i * (w + gap); win(z0, z0 + w); }
+    const w = m === '1000'
+      ? w1 - w0
+      : (b - a - 2 * pad - gap * (n - 1)) / n;
+    const start = m === '1000'
+      ? (a + b - n * w - gap * (n - 1)) / 2
+      : a + pad;
+    for (let i = 0; i < n; i++) {
+      const z0 = start + i * (w + gap);
+      win(z0, z0 + w);
+    }
   };
   const dw = S.doorW / 2;
-  for (let i = 0; i < D.length - 1; i++) row(D[i] + dw, D[i + 1] - dw, m === '1000' ? 2 : 3);
+  for (let i = 0; i < D.length - 1; i++) row(D[i] + dw, D[i + 1] - dw, m === '1000' ? 2 : 3, .12, m === '1000' ? .5 : .2);
   row(D[D.length - 1] + dw, hz, m === '1000' ? 1 : 2, .12, .3);
   if (head) {
     const crewZ = -hz + S.crewOff;
     paintDoor(s, crewZ, S.crewW, y1, S.win, dc, false, false);
-    row(crewZ + S.crewW / 2, D[0] - dw, 1, .12, m === '1000' ? .15 : .25); // 乗務員扉と客用扉の間に窓1枚
+    if (m === '2000') row(crewZ + S.crewW / 2, D[0] - dw, 1, .12, .25);
   } else row(-hz, D[0] - dw, m === '1000' ? 1 : 2, .12, .3);
   s.rect(D[1] - .9, D[1] - .55, 3.28, 3.38, '#22272d'); // 号車札（文字なし）
   return s.textures();
@@ -171,9 +179,12 @@ export function paintNewLiveryFace(m: NewLiveryModel): SheetMaps {
   // 貫通扉（銀色の枠・扉。窓は縦長、帯は扉にも通す）
   s.rect(-.45, .45, 1.22, f1 + .08, '#a9aeb4', .45, .3, .04);
   s.rect(-.38, .38, 1.27, f1, '#d0d4d9', .4, .2, .03);
-  s.glass(-.25, .25, 2.32, f1 - .16, '#3d434a', .03, ['#24303a', '#0f1418']);
+  if (m !== '1000') s.glass(-.25, .25, 2.32, f1 - .16,
+    '#3d434a', .03, ['#24303a', '#0f1418']);
   s.rect(-.38, .38, L.frontBand[0], L.frontBand[1], L.blue, .35, .1);
   s.rect(-.38, .38, L.frontLine[0], L.frontLine[1], L.orange, .35, .1);
+  if (m === '1000') s.glass(-.25, .25, 1.94, 3.15,
+    '#3d434a', .03, ['#24303a', '#0f1418']);
   // 灯具の黒いケース（青帯の中、左右）
   const lc = (hw - .2 + .5) / 2; // 灯具の中心（貫通扉と車体の角の間）
   for (const sx of [-1, 1]) s.rect(sx * lc - .3, sx * lc + .3, 1.7, 1.92, '#0e1012', .2, .3, .04);
@@ -212,8 +223,11 @@ export function buildNewLiveryCar(m: NewLiveryModel, kind: CarKind, Lb: number):
     const lw = S.hw - S.r - .55, lxc = .55 + lw / 2 + .02, lyc = S.fwin[1] - .16;
     led = slantLed(sl, zf, [[lxc, lyc, lw - .08]], .15); led2 = slantLed(sl, zf, [[-lxc, lyc, lw - .08]], .15);
     // スカート・連結器・ホース
-    for (const sx of [-1, 1]) b.add('paint', P.box, M(sx * .92, .72, zf + .06, sx * .18, .95, .6, .08, -.2), 0x9ca2a9);
-    add(0, .48, zf + .02, 1.1, .1, .1, 0x9ca2a9, -.2);
+    if (m === '1000') addTaperedSkirt(b, zf, 1.30, 1.22, .92, .88, 0x9ca2a9);
+    else {
+      for (const sx of [-1, 1]) b.add('paint', P.box, M(sx * .92, .72, zf + .06, sx * .18, .95, .6, .08, -.2), 0x9ca2a9);
+      add(0, .48, zf + .02, 1.1, .1, .1, 0x9ca2a9, -.2);
+    }
     add(0, .88, zf - .1, .3, .24, .5, 0x22252a);
     for (const sx of [-.5, -.35, .35]) b.add('paint', P.cyl, M(sx, 1.0, zf - .05, 0, .07, .34, .07), 0x1c1e21);
     // ワイパー（傾いた窓の下端）
@@ -223,11 +237,16 @@ export function buildNewLiveryCar(m: NewLiveryModel, kind: CarKind, Lb: number):
   } else addEndWall(b, -hz, S.ytop, S.hw, 0xb9bec4);
   addUnderfloor(b, Lb, kind, { frame: 0x3a3d42, equip: 0x2b2e33, bogie: 0x24272b });
   if (m === '1000') {
-    // セミ集中式冷房 3基
-    for (const z of [-6, 0, 6]) {
-      add(0, roofTop + .11, z, 1.7, .22, 2.3, 0xb5bac0);
-      add(0, roofTop + .23, z, 1.3, .03, 1.8, 0x9fa5ab);
-      for (const dz of [-.6, 0, .6]) add(0, roofTop + .25, z + dz, .9, .02, .34, 0x6a7076);
+    // 低く長い冷房カバーを屋根中央に3基。前後端は斜めに下がる。
+    for (const z of [-3.8, 0, 3.8]) {
+      add(0, roofTop + .035, z, 1.7, .05, 3.7, 0xb5bac0);
+      add(0, roofTop + .125, z, 1.7, .18, 3.1, 0xb5bac0);
+      add(0, roofTop + .225, z, 1.7, .02, 3.1, 0xc4c8cc);
+      for (const end of [-1, 1]) add(0, roofTop + .145, z + end * 1.69, 1.7, .035, .36, 0xc4c8cc, end * .5);
+      for (const side of [-1, 1]) for (const dz of [-.8, .8]) {
+        add(side * .855, roofTop + .13, z + dz, .018, .1, .72, 0x565d64);
+        for (const dy of [-.025, 0, .025]) add(side * .866, roofTop + .13 + dy, z + dz, .01, .008, .72, 0x9fa5ab);
+      }
     }
   } else {
     // 2000系: 箱形の冷房装置を4基（側面に丸い吸い込み口）

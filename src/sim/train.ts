@@ -28,9 +28,13 @@ export const TRAIN_PERF: Record<TrainKind, TrainPerf> = {
   'commuter-2300': { a0: kmh(2.8), vBase: kmh(30), k: 1.4, bMax: 1.2, eb: 1.45, vMax: kmh(100) },
   // 10000系（特急サザンの座席指定車）: 7100系と併結する抵抗制御車。加速 2.5km/h/s・最高 110km/h（7100系と同等）
   'southern-10000': { a0: kmh(2.5), vBase: kmh(35), k: 1.25, bMax: 1.1, eb: 1.4, vMax: kmh(110) },
+  // 12000系（サザンプレミアム）: 指定席側を基準にしたゲーム用近似。
+  'southern-12000': { a0: kmh(2.5), vBase: kmh(40), k: 1, bMax: 3.7 / 3.6, eb: 4.0 / 3.6, vMax: kmh(120) },
   limited: { a0: kmh(2.5), vBase: kmh(55), k: 1, bMax: 1.15, eb: 1.45, vMax: kmh(120) },
   // 以下はモブ（運転しない）。表を埋めるための近い値
   'commuter-1000': { a0: kmh(2.5), vBase: kmh(40), k: 1, bMax: 1.2, eb: 1.45, vMax: kmh(110) },
+  // 9000系更新VVVF車: 既存通勤形に近い値を使うゲーム用近似。
+  'commuter-9000': { a0: kmh(2.5), vBase: kmh(40), k: 1, bMax: 1.2, eb: 1.45, vMax: kmh(110) },
   'commuter-2000': { a0: kmh(2.5), vBase: kmh(35), k: 1.2, bMax: 1.2, eb: 1.45, vMax: kmh(110) },
   'commuter-6300': { a0: kmh(2.5), vBase: kmh(35), k: 1.25, bMax: 1.1, eb: 1.4, vMax: kmh(100) },
   'limited-30000': { a0: kmh(2.5), vBase: kmh(35), k: 1.25, bMax: 1.1, eb: 1.4, vMax: kmh(110) },

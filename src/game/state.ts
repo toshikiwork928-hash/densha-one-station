@@ -1,7 +1,8 @@
 // ゲーム状態（1プレイ分）
 import { NOTCH_INITIAL } from '../core/config';
 import type { SignalAspect } from '../core/events';
-import { applyService, applyVehicles } from '../route/service';
+import { applyService } from '../route/service';
+import { applyPlayerVehicles } from '../route/player-vehicles';
 import type { Route, ServiceId, TrainKind } from '../route/types';
 import type { TrainState } from '../sim/train';
 import type { PassJudgement, StopJudgement } from './scoring';
@@ -18,7 +19,7 @@ export interface Stage { id: string; from: number; to: number; label: string }
 
 /** 種別ごとに選んだ車種・両数 */
 /** units = 連結するユニット（両数）。cars は旧形式の保存データ（両数のみ）の読み込み用 */
-export type VehicleSel = Partial<Record<ServiceId, { kind: TrainKind; units?: number[]; cars?: number }>>;
+export type VehicleSel = Partial<Record<ServiceId, { kind: TrainKind; freeKind?: TrainKind; units?: number[]; cars?: number }>>;
 export interface Selection {
   stageId: string; mode: GameMode; /** 運行種別（route.services が無い路線では無視） */ service: ServiceId;
   vehicles: VehicleSel;
@@ -166,7 +167,7 @@ export function resetState(st: GameState, route: Route): void {
   const sel: Selection = st.sel ?? { stageId: '', mode: 'normal', service: route.services?.find(x => x.id === 'express')?.id ?? route.services?.[0]?.id ?? 'express', vehicles: {} };
   // 別のコースで選んだ種別がこのコースに無い（例: 泉大津〜岸和田のサザン → 堺〜泉大津）ときは急行、無ければ先頭の種別
   if (route.services?.length && !route.services.some(x => x.id === sel.service)) sel.service = route.services.find(x => x.id === 'express')?.id ?? route.services[0].id;
-  applyVehicles(route, sel.vehicles);
+  applyPlayerVehicles(route, sel.vehicles);
   applyService(route, sel.service); // 停車駅・時刻・編成長を種別に合わせてから区間を決める
   if (!sel.stageId) sel.stageId = stagesOf(route)[0]?.id ?? 'all';
   const stage = findStage(route, sel.stageId);
