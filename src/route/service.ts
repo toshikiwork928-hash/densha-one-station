@@ -307,8 +307,9 @@ export function applyService(route: Route, id: ServiceId | undefined): ServiceSp
     sta.stopMarkerCars = svc.cars;
     sta.mainTrack = svc.trackNames?.[i] ?? base.mainTrack;
     // 普通（useLoop）は待避線へ。loopPriority の駅（堺の上り）は逆で、優等列車が外側の線、普通が本線側
-    // 普通（useLoop）が待避線へ入るのは、この時間帯にその駅で待避・待ち合わせがあるときだけ（始発駅・終着駅は従来どおり待避線）
-    const waitsHere = i === 0 || i === route.stations.length - 1 || !!svc.waits?.some(w => w.station === i);
+    // 普通（useLoop）が待避線へ入るのは、この時間帯にその駅で待避・待ち合わせがあるときだけ（始発駅・終着駅は従来どおり待避線）。
+    // 待避線の外側にだけホームがある駅（浜寺公園の堺方面。本線にホームが無い）は、待避が無くても待避線へ
+    const waitsHere = i === 0 || i === route.stations.length - 1 || !!sta.loop?.outside || !!svc.waits?.some(w => w.station === i);
     sta.enterLoop = !!sta.loop && !sta.pass && (sta.loopPriority ? !svc.useLoop : !!svc.useLoop && waitsHere);
     // 2面4線: 待避線に入ると右側、本線は左側がホーム。島式1面2線: 自線の右側
     // 待避線のホームが外側にある駅（浜寺公園の堺方面）は、待避線に入ると待避線の外（左）がホーム

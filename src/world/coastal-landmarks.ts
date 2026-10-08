@@ -6,13 +6,12 @@ import { GeoBatch, M, P } from './batch';
 import { cullByDistance } from './cull';
 import { getTerrain } from './terrain';
 import { islandOffset } from '../route/service';
-import { buildTower } from './coastal-tower';
 import { buildTwinTower } from './izumiotsu-towers';
 import { buildHankaiTram } from './hankai-tram';
 import { BUMPER_D, DIVERGE_D, hagoromoSpec } from './hagoromo-branch';
 
 type Landmark = {
-  kind: 'road-overpass' | 'tram-overpass' | 'steel-bridge' | 'branch' | 'tower' | 'twin-tower';
+  kind: 'road-overpass' | 'tram-overpass' | 'steel-bridge' | 'branch' | 'twin-tower';
   s: number;
   length?: number;
   label?: string;
@@ -185,7 +184,6 @@ export function buildCoastalLandmarks(ctx: GameContext): void {
   if (!list.length) return;
   const material = new THREE.MeshLambertMaterial({ vertexColors: true });
   for (const st of list) {
-    if (st.kind === 'tower') { buildTower(ctx, st); continue; }
     if (st.kind === 'twin-tower') { buildTwinTower(ctx, st); continue; } // 泉大津駅前の2棟並びのタワー
     if (st.kind === 'tram-overpass') { buildHankaiTram(ctx, st); continue; } // 阪堺線の跨線橋（world/hankai-tram.ts）
     const batch = new GeoBatch(), group = new THREE.Group();

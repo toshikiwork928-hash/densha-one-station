@@ -194,18 +194,22 @@ export function buildNambaTerminal(ctx: GameContext): void {
   solid(big, 'body', CC1 + 35, CC1 + 45, 14, 36, sTop + 7.6, sTop + 12, 0x6d8d78);
 
   // ================= なんばパークス風の段状の複合施設（左 = 西側、カーブの内側。OpenStreetMap の位置） =================
-  // 線路側から外へ段々に高くなる。北端（駅の手前）に細身の高層棟
-  const TIERS = 7, TW = 19, STEP = 20;
+  // 駅のホームの西に沿って s 9570〜9850（OSM のなんばパークスの外形）。線路側から外へ段々に高くなる。
+  // 西寄りにパークスタワー（約150m）、南西にタワーマンション（約150m）
+  const TIERS = 6, TW = 19, STEP = 20, PK0 = 9570, PK1 = 9850;
+  const TOWERS = [{ s: 9756, lat: -121, h: 148, w: 26 }, { s: 9584, lat: -150, h: 149, w: 28 }];
+  const onTower = (sc: number, lc: number) => TOWERS.some(t => Math.abs(sc - t.s) < t.w / 2 + STEP / 2 && Math.abs(lc - t.lat) < t.w / 2 + TW / 2);
   for (let k = 0; k < TIERS; k++) {
-    const l1 = -(70 + k * TW), l0 = l1 - TW, lc = (l0 + l1) / 2, H = 14 + k * 5.5, Hp = k ? 14 + (k - 1) * 5.5 : 0;
-    for (let s = 9390; s < 9690; s += STEP) {
+    const l1 = -(46 + k * TW), l0 = l1 - TW, lc = (l0 + l1) / 2, H = 14 + k * 5.5, Hp = k ? 14 + (k - 1) * 5.5 : 0;
+    for (let s = PK0; s < PK1; s += STEP) {
       const sc = s + STEP / 2, dy = dyAt(sc), d = arc(sc, lc) + .5;
+      if (onTower(sc, lc)) continue;
       bx(park, 'body', sc, lc, dy + H / 2 - .5, TW, H + 1, d, 0xd9d1c0);
       bx(park, 'body', sc, lc, dy + H + .3, TW - 2, .6, d - 1, 0x4f8f45);                  // 屋上緑化
       pl(park, 'terr', sc, l1 + .05, dy + (Hp + H) / 2, 'R', d, H - Hp, 4, 5.5);
-      if (s === 9390) pl(park, 'terr', sc - STEP / 2 - .05, lc, dy + H / 2, 'F', TW, H, 4, 5.5);
+      if (s === PK0) pl(park, 'terr', sc - STEP / 2 - .05, lc, dy + H / 2, 'F', TW, H, 4, 5.5);
       for (let q = 0; q < 2; q++) bx(park, 'body', sc + (rnd() - .5) * (d - 4), lc + (rnd() - .5) * (TW - 6), dy + H + 1.1, 3, 1.4, 3, 0x2f6f3a); // 植え込み
-      if (((s - 9390) / STEP + k) % 2 === 0) {
+      if (((s - PK0) / STEP + k) % 2 === 0) {
         const x = sc + (rnd() - .5) * (d - 6), y = lc + (rnd() - .5) * (TW - 8);
         bx(park, 'body', x, y, dy + H + 1.6, .4, 2, .4, 0x6a4a2a);
         const v = track.at(x, y, dy + H + 4.4);
@@ -213,9 +217,9 @@ export function buildNambaTerminal(ctx: GameContext): void {
       }
     }
   }
-  // 細身の高層棟（約120m）
-  {
-    const s = 9728, lat = -128, dy = dyAt(s), h = 120, w = 24;
+  // 高層棟
+  for (const { s, lat, h, w } of TOWERS) {
+    const dy = dyAt(s);
     bx(park, 'body', s, lat, dy + h / 2 - .5, w, h + 1, w, 0x9fb0be);
     pl(park, 'tower', s - w / 2 - .05, lat, dy + h / 2, 'F', w, h, 3, 3.6);
     pl(park, 'tower', s + w / 2 + .05, lat, dy + h / 2, 'B', w, h, 3, 3.6);

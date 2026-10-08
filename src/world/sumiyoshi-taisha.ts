@@ -26,15 +26,30 @@ export function buildSumiyoshiTaisha(ctx: GameContext): void {
     const p = at(s, lat); b.add('body', part, M(p.x, p.y + y, p.z, yaw0(s) + ry, w, h, d, rx, rz), col);
   };
 
-  // ---- 西の大鳥居（朱の明神鳥居。線路側を向く） ----
+  // ---- 鳥居（朱の明神鳥居。線路側を向く）: 西の大鳥居と、本宮の前の角鳥居 ----
+  const torii = (s: number, lat: number, H: number, W: number) => {
+    const k = H / 9;
+    for (const ds of [-W / 2, W / 2]) put(P.cyl, s + ds, lat, H / 2, .9 * k, H, .9 * k, VERMILION);
+    put(P.box, s, lat, H + .55 * k, .9 * k, .6 * k, W + 4.2 * k, 0x222222);   // 笠木（黒）
+    put(P.box, s, lat, H - .1 * k, .75 * k, .5 * k, W + 3.2 * k, VERMILION); // 島木
+    put(P.box, s, lat, H - 1.6 * k, .55 * k, .5 * k, W + 1.6 * k, VERMILION); // 貫
+    put(P.box, s, lat, H - .85 * k, .4 * k, 1.1 * k, .5 * k, VERMILION);     // 額束
+    for (const ds of [-W / 2, W / 2]) put(P.cyl, s + ds, lat, .4 * k, 1.4 * k, .8 * k, 1.4 * k, 0x2a2a2a);
+  };
+  torii(TORII.s, TORII.lat, 9, 8.5);
+  torii(4205, 236, 6, 5.5);
+
+  // ---- 本宮を囲む玉垣（朱の板垣に緑青の笠）と西の神門 ----
   {
-    const { s, lat } = TORII, H = 9, W = 8.5;
-    for (const ds of [-W / 2, W / 2]) put(P.cyl, s + ds, lat, H / 2, .9, H, .9, VERMILION);
-    put(P.box, s, lat, H + .55, .9, .6, W + 4.2, 0x222222);             // 笠木（黒）
-    put(P.box, s, lat, H - .1, .75, .5, W + 3.2, VERMILION);           // 島木
-    put(P.box, s, lat, H - 1.6, .55, .5, W + 1.6, VERMILION);          // 貫
-    put(P.box, s, lat, H - .85, .4, 1.1, .5, VERMILION);               // 額束
-    for (const ds of [-W / 2, W / 2]) put(P.cyl, s + ds, lat, .4, 1.4, .8, 1.4, 0x2a2a2a);
+    const E = { s0: 4174, s1: 4243, l0: 243, l1: 352 }, H = 2.6, ROOF = 0x4f7a68;
+    const wallL = (s: number, l0: number, l1: number) => { put(P.boxB, s, (l0 + l1) / 2, 0, l1 - l0, H, .45, VERMILION); put(P.boxB, s, (l0 + l1) / 2, H, l1 - l0 + .6, .35, 1.6, ROOF); };
+    const wallS = (lat: number, s0: number, s1: number) => { put(P.boxB, (s0 + s1) / 2, lat, 0, .45, H, s1 - s0, VERMILION); put(P.boxB, (s0 + s1) / 2, lat, H, 1.6, .35, s1 - s0 + .6, ROOF); };
+    wallL(E.s0, E.l0, E.l1); wallL(E.s1, E.l0, E.l1);
+    wallS(E.l1, E.s0, E.s1); wallS(E.l0, E.s0, 4198); wallS(E.l0, 4212, E.s1);
+    // 神門（四脚門。棟は s の向き）
+    for (const ds of [-5, 5]) for (const dl of [-1.6, 1.6]) put(P.cyl, 4205 + ds, E.l0 + dl, 2.2, .55, 4.4, .55, VERMILION);
+    put(P.box, 4205, E.l0, 4.5, 4.4, .5, 11.5, VERMILION);
+    put(P.gable, 4205, E.l0, 4.75, 6.4, 2.6, 13.5, ROOF);
   }
 
   // ---- 反橋（太鼓橋）: 朱の高欄の急な弧。池は osm-town.ts が地面に貼る ----

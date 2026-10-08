@@ -5,6 +5,7 @@ import type { GameContext } from '../core/context';
 import type { Route } from '../route/types';
 import type { Track } from '../route/track';
 import { loopZone } from '../route/service';
+import { osmFor } from './osm-town';
 import { buildMountainTerrain, makeMountainTerrain, type MountainTerrain } from './mountain-terrain';
 
 export type StructureKind = 'tunnel' | 'viaduct' | 'bridge';
@@ -153,10 +154,12 @@ export function buildTerrain(ctx: GameContext): Terrain {
   };
   // 大都市（route.urban）は舗装・空き地の灰色がちの地面
   const gc = new THREE.Color(route.urban ? 0x9a9a8e : 0x7fa05a), dirt = new THREE.Color(0x9a9270);
+  // OSM の沿線データで街並みを作るコース（海沿いの市街地）は、線路から約 500m まで町の地面の色（舗装・空き地）
+  const town = !route.urban && !!osmFor(route), townC = new THREE.Color(0x9a9886);
   for (let s = S0; s < S1; s += 1000) {
     const g = gridAlong(track, s, Math.min(S1, s + 1000), 10, cols, groundMat, (q, j, out) => {
       const h = hash(Math.floor(q / 30), j);
-      out.copy(gc).multiplyScalar(.85 + h * .22);
+      out.copy(town && j >= 1 && j <= LAT.length - 2 ? townC : gc).multiplyScalar(.85 + h * .22);
       if (j >= 5 && j <= 8) out.lerp(dirt, .35); // 線路際は土っぽく
     });
     g.name = 'ground'; scene.add(g);

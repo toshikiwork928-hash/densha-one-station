@@ -164,8 +164,6 @@ export const shiokaze: Route = {
     { kind: 'steel-bridge', s: 7465, length: 150, label: '石津川橋梁' },
     // 羽衣の3番線（高師浜線）。s = 島式ホームの泉大津側の端。3線並行のまま約300m高架を進み、のち海側（西）へ離れる（配線略図 011_03）。
     { kind: 'branch', s: stations[4].platform.from, length: 760, side: -1, direction: -1, label: '高師浜線' },
-    // 羽衣駅直結のタワー: 泉大津寄りのホーム端（上り線の右側）。direction=1 は +z が s 増加方向。上りでは reverseRoute が反転する。
-    { kind: 'tower', s: stations[4].platform.from - 24, side: 1, direction: 1, label: '羽衣駅直結タワー' },
     // 泉大津駅前の2棟並びのタワーマンション（泉大津〜岸和田 kishiwada.ts と同じ物理位置）。駅中心（110m）から岸和田側（s の負の向き）へ約 135m、内陸（右）。direction = 岸和田側の向き
     { kind: 'twin-tower', s: 110 - 135, side: 1, direction: -1, label: '泉大津駅前タワー' },
   ],

@@ -1,6 +1,6 @@
 // 阪堺線（路面電車）の跨線橋。浜寺公園〜諏訪ノ森の間で南海本線を約20°の斜交で越える（描画専用。走行経路・信号は持たない）。
 // 地上の複線 → 上り勾配（最大 約58‰、盛土は擁壁・高い所は橋脚）→ 南海の真上（レール面 +9.35m の床版）→ 下り勾配 → 地上。
-// 浜寺公園側（s が小さい側）は海側（西）、堺側は内陸側（東）。海側の地上区間の西に国道（4車線）を添える。
+// 浜寺公園側（s が小さい側）は海側（西）、堺側は内陸側（東）。周りの道路は OpenStreetMap の沿線データ（osm-town.ts）。
 // 物理配置は下りの向き（s 増加 = 北東）の局所座標 (u: 進行方向, v: 右) で定義し、上りの区間データ（reversed）は座標を 180° 回して同じ位置へ置く。
 import * as THREE from 'three';
 import { profileLat } from '../route/service';
@@ -60,8 +60,8 @@ function discs(route: Route): Disc[] | null {
       out!.push({ s: mk.s + sgn * u, lat: PIVOT_LAT + sgn * v, r, span });
     };
     for (let a = -HALF - 30; a <= HALF + 30; a += 5) {
-      put(a, 0, 8, Math.abs(a) <= PIER_V / SIN + 8);
-      if (Math.abs(a) >= 75) put(a, -14, 9.5, false); // 西側の国道
+      // 南海の真上の径間と、高さ 4.5m 以上の高架の下は道路を通す
+      put(a, 0, 8, Math.abs(a) <= PIER_V / SIN + 8 || prof(a) * 9.35 > 4.5);
     }
   }
   // 羽衣の3番線（高師浜線）の高架支線: 本線から離れていく先の通り道（中心 ±11m）にも建物・木を置かない
@@ -85,8 +85,8 @@ function discs(route: Route): Disc[] | null {
   return out;
 }
 
-/** 長方形 [s0,s1] × [lat0,lat1] が阪堺線の跨線橋（地上・斜路・高架・国道）に掛かるか。
- *  underSpan = true なら南海の真上の径間（床版が水平な区間）の下は通す（道路・柵向け。電柱・建物・木は false） */
+/** 長方形 [s0,s1] × [lat0,lat1] が阪堺線の跨線橋（地上・斜路・高架）に掛かるか。
+ *  underSpan = true なら南海の真上の径間と高い高架の下は通す（道路・柵向け。電柱・建物・木は false） */
 export function tramBlocks(route: Route, s0: number, s1: number, lat0: number, lat1: number, underSpan = false): boolean {
   const a = Math.min(s0, s1), b = Math.max(s0, s1), c = Math.min(lat0, lat1), d = Math.max(lat0, lat1);
   // 景観を置かない敷地（車庫・大型施設）
@@ -149,14 +149,6 @@ export function buildHankaiTram(ctx: GameContext, st: Mark): void {
       band(a, a1, 0, bed, .08, 8.4, .16, COLOR.ballast);
     } else {
       band(a, a1, 0, bed, .1, 6.4, .2, COLOR.ballast);
-    }
-    // 国道（海側の地上区間の西、4車線）。直線の斜めの帯
-    if (Math.abs(am) >= 75) {
-      const off = -14, rg = (q: number) => gnd(q, off) + .03;
-      band(a, a1, off, rg, .03, 15, .06, COLOR.road);
-      if (Math.round((a + HALF) / STEP) % 2 === 0) for (const o of [off - 3.6, off + 3.6]) band(a, a1 - 1.5, o, rg, -.015, .15, .03, COLOR.line);
-      for (const o of [off - .12, off + .12]) band(a, a1, o, rg, -.015, .1, .03, COLOR.yellow);
-      for (const o of [off - 7.2, off + 7.2]) band(a, a1, o, rg, -.015, .14, .03, COLOR.line);
     }
     // 複線のレール（軌間 1.435、線間 3.1m）
     for (const c of [-1.55, 1.55]) for (const r of [c - .7175, c + .7175]) band(a, a1, r, bed, -.06, .065, .12, COLOR.rail);

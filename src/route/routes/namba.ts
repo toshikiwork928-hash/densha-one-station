@@ -272,9 +272,9 @@ export const namba: Route = {
   reserved: [
     { from: 3040, to: 3700, lat0: -120, lat1: -9 },   // 住ノ江検車区
     { from: 1380, to: 1900, lat0: -190, lat1: -14 },  // 七道駅西側の大型商業施設
-    { from: 9350, to: 10400, lat0: -60, lat1: 95 },   // 難波の駅ビル
-    { from: 4180, to: 4235, lat0: 248, lat1: 350 },   // 住吉大社の本宮（world/sumiyoshi-taisha.ts）
-    { from: 9370, to: 9760, lat0: -215, lat1: -60 },  // なんばパークス（西側。world/namba-terminal.ts）
+    { from: 9740, to: 10400, lat0: -60, lat1: 95 },   // 難波の駅ビル・大屋根（手前の線路の広がりは osm-town.ts が線路から離す）
+    { from: 4170, to: 4247, lat0: 232, lat1: 356 },   // 住吉大社の本宮・玉垣・角鳥居（world/sumiyoshi-taisha.ts）
+    { from: 9555, to: 9865, lat0: -200, lat1: -42 },  // なんばパークス（西側。world/namba-terminal.ts）
     { from: 8440, to: 8640, lat0: -400, lat1: 400 },  // 新今宮の JR 高架
     { from: 8508, to: 8552, lat0: -30, lat1: 40, noPiers: true }, // JR の真上は橋脚なし
   ],

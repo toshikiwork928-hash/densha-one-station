@@ -6,7 +6,7 @@ import type { GameContext } from '../core/context';
 import { createRng, type Rng } from '../core/rng';
 import { ChunkedBatch, GeoBatch, M, P, basePart, onLight } from './batch';
 import { cullByDistance } from './cull';
-import { loopZone, seaSideOf } from '../route/service';
+import { loopZone, seaSideOf, trackSpan } from '../route/service';
 import { coastalThirdTracks } from './coastal-stations';
 import { towerZones } from './coastal-tower';
 import { tramBlocks } from './hankai-tram';
@@ -480,6 +480,15 @@ export function buildTown(ctx: GameContext): TownResult {
       house: (k, w, d) => house(k as Kit, w, d), apartment: (k, w, d) => apartment(k as Kit, w, d),
       mansion: (k, w, d, f) => mansion(k as Kit, w, d, f), shop: (k, w, d) => shop(k as Kit, w, d),
     }, trees);
+  }
+  // OSM のコース: 地上区間の線路の柵（すべての線路の外側 3.8m。駅・踏切・構造物・分岐する線路の付近は除く）
+  if (osm) for (const sd of [-1, 1]) for (let s = S0; s < S1; s += 6) {
+    if (T.structureAt(s, 10) || T.nearStation(s, 15) || thirdNear(sd, s, 30) || T.nearCrossing(s, 3) || T.trackY(s) - T.groundY(s) > 1 || !flatOk(s)) continue;
+    const [lo, hi] = trackSpan(route, s, 30), lat = sd < 0 ? lo - 3.8 : hi + 3.8;
+    if (tramBlocks(route, s - 3, s + 3, lat - .3, lat + .3, true) || towerNear(sd, s - 3, s + 3)) continue;
+    const t = track.trackAt(s), g = T.groundY(s), b = chunks.at(s); b.parent = null;
+    b.add('body', P.box, M(t.x + t.rx * lat, g + .75, t.z + t.rz * lat, -t.phi, .08, 1.5, .08), 0x5f7a66);
+    b.add('fence', P.box, M(t.x + t.rx * lat, g + .95, t.z + t.rz * lat, -t.phi, .03, 1.0, 6), 0x7f9a86);
   }
   for (const sd of osm ? [] : [-1, 1]) {
     // ---- 線路沿いの道路・電柱・電線・柵 ----

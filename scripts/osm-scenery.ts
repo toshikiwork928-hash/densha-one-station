@@ -77,17 +77,21 @@ node["railway"="station"]["name"~"^(${st})$"](${bb})->.st;
 (
   way(${A})["building"];
   relation(${A})["building"];
-  way(${A})["highway"~"^(trunk|primary|secondary|tertiary|unclassified|residential|living_street|trunk_link|primary_link|secondary_link)$"];
+  way(${A})["highway"~"^(motorway|motorway_link|trunk|primary|secondary|tertiary|unclassified|residential|living_street|trunk_link|primary_link|secondary_link|tertiary_link)$"];
   way(${A})["leisure"~"^(park|garden|pitch|playground|sports_centre)$"];
-  relation(${A})["leisure"="park"];
+  relation(${A})["leisure"~"^(park|garden|pitch|sports_centre)$"];
   way(${A})["landuse"~"^(grass|forest|cemetery|recreation_ground|religious|railway)$"];
+  relation(${A})["landuse"~"^(grass|forest|cemetery|recreation_ground|religious)$"];
   way(${A})["natural"~"^(wood|water|scrub)$"];
-  relation(${A})["natural"~"^(wood|water)$"];
+  relation(${A})["natural"~"^(wood|water|scrub)$"];
   way(${A})["waterway"~"^(river|canal|riverbank)$"];
+  relation(${A})["waterway"="riverbank"];
+  way(${A})["railway"~"^(tram|light_rail)$"];
+  way(${A})["amenity"="parking"];
   way(${A})["amenity"~"^(place_of_worship|school|grave_yard)$"];
   relation(${A})["amenity"="place_of_worship"];
 );
-out tags geom;
+out geom;
 .rail out tags geom;
 .st out;`;
   const url = args.get('endpoint') ?? 'https://overpass-api.de/api/interpreter';
@@ -159,7 +163,9 @@ function projector(line: V[]) {
         for (const i of grid.get(`${ix},${iy}`) ?? []) {
           if (seen.has(i)) continue; seen.add(i);
           const [x0, y0] = line[i], [x1, y1] = line[i + 1], dx = x1 - x0, dy = y1 - y0, L2 = dx * dx + dy * dy || 1;
-          const t = Math.max(0, Math.min(1, ((p[0] - x0) * dx + (p[1] - y0) * dy) / L2));
+          // 線の両端の外は延長線に射影する（端の点へ寄せると、範囲の外の点がみな端の s に集まる）
+          const t0 = ((p[0] - x0) * dx + (p[1] - y0) * dy) / L2;
+          const t = i === 0 && t0 < 0 ? t0 : i === line.length - 2 && t0 > 1 ? t0 : Math.max(0, Math.min(1, t0));
           const qx = x0 + dx * t, qy = y0 + dy * t, dist = Math.hypot(p[0] - qx, p[1] - qy);
           if (dist < best) { best = dist; bc = cum[i] + t * Math.sqrt(L2); bd = ((p[0] - x0) * dy - (p[1] - y0) * dx) / Math.sqrt(L2); }
         }
@@ -246,10 +252,69 @@ const levelsOf = (t: Record<string, string>, type: string, footprint: number) =>
   return footprint < 400 ? 3 : 4;
 };
 
-function rings(el: OsmEl): { lat: number; lon: number }[][] {
-  if (el.type === 'way') return el.geometry ? [el.geometry] : [];
-  return (el.members ?? []).filter(m => m.role === 'outer' && m.geometry).map(m => m.geometry!);
+type G = { lat: number; lon: number };
+/** 多角形の辺を細かく分ける（範囲の外の頂点を帯で切るとき、線路の曲がりに沿うように） */
+function densify(r: G[], step: number): G[] {
+  const out: G[] = [];
+  for (let i = 0; i + 1 < r.length; i++) {
+    const a = r[i], b = r[i + 1], L = Math.hypot((b.lat - a.lat) * 110574, (b.lon - a.lon) * 92000), n = Math.max(1, Math.ceil(L / step));
+    for (let k = 0; k < n; k++) out.push({ lat: a.lat + (b.lat - a.lat) * k / n, lon: a.lon + (b.lon - a.lon) * k / n });
+  }
+  out.push(r[r.length - 1]);
+  return out;
 }
+const same = (a: G, b: G) => a.lat === b.lat && a.lon === b.lon;
+
+/** 外周。multipolygon は外周の線（複数の way に分かれている）を端点でつないで閉じた輪にする */
+function rings(el: OsmEl): G[][] {
+  if (el.type === 'way') return el.geometry ? [el.geometry] : [];
+  const parts = (el.members ?? []).filter(m => m.role === 'outer' && m.geometry && m.geometry.length > 1).map(m => m.geometry!.slice());
+  return joinLines(parts).filter(r => r.length > 3 && same(r[0], r[r.length - 1]));
+}
+
+/** 端点を共有する折れ線をつなぐ（向きは必要なら反転）。key が同じものだけつなぐ */
+function joinLines(parts: G[][], keyOf: (i: number) => string = () => '', firsts: number[] = []): G[][] {
+  const used = new Uint8Array(parts.length), out: G[][] = [];
+  const ends = new Map<string, number[]>();
+  const k = (g: G) => `${g.lat},${g.lon}`;
+  parts.forEach((p, i) => { for (const g of [p[0], p[p.length - 1]]) { const a = ends.get(k(g)) ?? []; a.push(i); ends.set(k(g), a); } });
+  for (let i = 0; i < parts.length; i++) {
+    if (used[i]) continue;
+    used[i] = 1;
+    let line = parts[i].slice();
+    const key = keyOf(i);
+    for (let dir = 0; dir < 2; dir++) {
+      for (;;) {
+        const tail = line[line.length - 1];
+        if (same(line[0], tail) && line.length > 2) break; // 閉じた
+        const cand = (ends.get(k(tail)) ?? []).filter(j => !used[j] && keyOf(j) === key);
+        if (!cand.length) break;
+        const j = cand[0]; used[j] = 1;
+        const q = same(parts[j][0], tail) ? parts[j] : parts[j].slice().reverse();
+        line = line.concat(q.slice(1));
+      }
+      line.reverse();
+    }
+    out.push(line); firsts.push(i);
+  }
+  return out;
+}
+
+/** 道路の way を、同じ等級・名前・高架かどうかでつないだ長い折れ線にする（つぎはぎを減らす） */
+function mergeRoads(els: OsmEl[]): OsmEl[] {
+  const roads = els.filter(e => e.type === 'way' && e.tags?.highway && e.geometry && e.geometry.length > 1);
+  const rest = els.filter(e => !roads.includes(e));
+  const keyOf = (e: OsmEl) => { const t = e.tags!; return `${roadClass(t)}|${t.name ?? ''}|${isElevated(t) ? 1 : 0}|${t.lanes ?? ''}`; };
+  const keys = roads.map(keyOf);
+  const firsts: number[] = [];
+  const lines = joinLines(roads.map(r => r.geometry!), i => keys[i], firsts);
+  const merged: OsmEl[] = lines.map((ln, i) => ({ type: 'way', id: roads[firsts[i]].id, tags: roads[firsts[i]].tags, geometry: ln }));
+  console.log(`道路 ${roads.length} 本 → つないで ${merged.length} 本`);
+  return [...rest, ...merged];
+}
+const roadClass = (t: Record<string, string>) => /^motorway/.test(t.highway) ? 0 : /^(trunk|primary)/.test(t.highway) ? 1 : /^(secondary|tertiary)/.test(t.highway) ? 2 : 3;
+/** 都市高速（阪神高速など）は高架として別に描く */
+const isElevated = (t: Record<string, string>) => /^motorway/.test(t.highway ?? '');
 
 async function main() {
   const els = await fetchOsm();
@@ -287,7 +352,7 @@ async function main() {
   };
   /** far = 範囲の外の頂点も写す（大きな公園・森の多角形を帯で切るため） */
   const toSL = (lat: number, lon: number, far = false): V | null => {
-    const r = proj(xy(lat, lon), far ? 2500 : RANGE + 80);
+    const r = proj(xy(lat, lon), far ? 8000 : RANGE + 80);
     if (!r || (!far && Math.abs(r.d) > RANGE + 60)) return null;
     const s = toS(r.c);
     return [s, r.d + center(s)];
@@ -299,13 +364,17 @@ async function main() {
   const counts: Record<string, number> = {};
   const inS = (p: V[]) => p.some(([s]) => s >= S0 && s <= S1);
   const flat = (p: V[]) => p.flatMap(([s, l]) => [r1(s), r1(l)]);
-  for (const el of els) {
+  // 都市高速の本線の点（ランプの高い側の判定）
+  const mwNodes = new Set(els.filter(e => e.type === 'way' && e.tags?.highway === 'motorway').flatMap(e => (e.geometry ?? []).map(g => `${g.lat},${g.lon}`)));
+  const highways: [number, number[]][] = [];
+  for (const el of mergeRoads(els)) {
     const t = el.tags ?? {};
     if (el.type === 'node') continue;
+    if (t.railway === 'tram' || t.railway === 'light_rail') continue;
     if (t.railway === 'rail') continue;
-    const isArea = !t.building && !t.highway;
+    const isArea = !t.building && !t.highway, farOk = isArea || isElevated(t);
     for (const ring of rings(el)) {
-      const raw = ring.map(g => toSL(g.lat, g.lon, isArea));
+      const raw = (isArea ? densify(ring, 20) : ring).map(g => toSL(g.lat, g.lon, farOk));
       if (raw.some(p => !p)) { if (!t.highway) continue; }
       if (t.building) {
         const p = raw as V[];
@@ -324,8 +393,23 @@ async function main() {
         const segs: V[][] = []; let cur: V[] = [];
         for (const p of raw) { if (p && Math.abs(p[1]) <= RANGE + 40) cur.push(p); else { if (cur.length > 1) segs.push(cur); cur = []; } }
         if (cur.length > 1) segs.push(cur);
-        const cls = /^(trunk|primary)/.test(t.highway) ? 1 : /^(secondary|tertiary)/.test(t.highway) ? 2 : 3;
         const lanes = parseFloat(t.lanes ?? ''), width = parseFloat(t.width ?? '');
+        if (isElevated(t)) {
+          // 高架の都市高速: 本線は高さ 12m、ランプは本線につながる側が高く、もう一方は地上
+          const ring2 = ring, n = ring2.length, hiA = mwNodes.has(`${ring2[0].lat},${ring2[0].lon}`), hiB = mwNodes.has(`${ring2[n - 1].lat},${ring2[n - 1].lon}`);
+          const main = t.highway === 'motorway';
+          const cum = [0]; for (let i = 1; i < n; i++) cum.push(cum[i - 1] + Math.hypot(...(xy(ring2[i].lat, ring2[i].lon).map((v, k) => v - xy(ring2[i - 1].lat, ring2[i - 1].lon)[k]) as V)));
+          const Lt = cum[n - 1] || 1, H = 12;
+          const hAt = (i: number) => main || (hiA && hiB) ? H : hiA ? H * Math.max(0, 1 - cum[i] / Math.min(Lt, 300)) : hiB ? H * Math.max(0, 1 - (Lt - cum[i]) / Math.min(Lt, 300)) : H;
+          const w = width > 0 ? width : lanes > 0 ? lanes * 3.5 + 3 : main ? 10 : 7;
+          let cur: number[] = [];
+          const flush = () => { if (cur.length >= 6) highways.push([r1(w), cur]); cur = []; };
+          raw.forEach((p, i) => { if (p && Math.abs(p[1]) <= RANGE + 200) cur.push(r1(p[0]), r1(p[1]), r1(hAt(i))); else flush(); });
+          flush();
+          counts.hw = (counts.hw ?? 0) + 1;
+          continue;
+        }
+        const cls = roadClass(t);
         const w = width > 0 ? width : lanes > 0 ? lanes * 3.2 + 2 : cls === 1 ? 16 : cls === 2 ? 9 : 5;
         for (const sg of segs) {
           const p = simplify(sg, 1.2);
@@ -343,6 +427,7 @@ async function main() {
         else if (t.leisure === 'pitch' || t.leisure === 'sports_centre') type = 'pitch';
         else if (t.amenity === 'school') type = 'school';
         else if (t.amenity === 'grave_yard' || t.landuse === 'cemetery') type = 'grave';
+        else if (t.amenity === 'parking') type = 'lot';
         if (!type || raw.some(p => !p)) continue;
         // 閉じた多角形だけ（川の中心線などは除く）
         const first = ring[0], last = ring[ring.length - 1];
@@ -367,6 +452,8 @@ async function main() {
     buildings: B,
     /** 道路: [等級 1=幹線 2=主要 3=生活, 幅 m, 名前, s,lat の並び] */
     roads,
+    /** 高架の都市高速: [幅 m, s,lat,高さ の並び] */
+    highways,
     /** 面: [種類, s,lat の並び（反時計回り）] */
     areas: green,
     /** 名前のある主な施設: [名前, s, lat] */

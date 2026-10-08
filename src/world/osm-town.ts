@@ -12,6 +12,7 @@ import { loopShape, loopZones, trackLines, trackSpan } from '../route/service';
 import { getTerrain, hash } from './terrain';
 import { tramBlocks } from './hankai-tram';
 import { towerZones } from './coastal-tower';
+import { coastalThirdTracks } from './coastal-stations';
 import { twinTowerZones } from './izumiotsu-towers';
 import type { TreeSpot } from './town-jp';
 import type { Route } from '../route/types';
@@ -30,6 +31,8 @@ export interface OsmData {
   roads: (number | string | number[])[][];
   /** [種類, s,lat の並び] */
   areas: (string | number[])[][];
+  /** 高架の都市高速 [幅, s,lat,高さ の並び] */
+  highways?: (number | number[])[][];
   landmarks: (string | number)[][];
 }
 
@@ -48,7 +51,7 @@ const cache = new WeakMap<Route, OsmData | null>();
  */
 export function osmFor(route: Route): OsmData | null {
   if (cache.has(route)) return cache.get(route)!;
-  const out: OsmData = { source: '', buildings: [], roads: [], areas: [], landmarks: [] };
+  const out: OsmData = { source: '', buildings: [], roads: [], areas: [], landmarks: [], highways: [] };
   let any = false;
   const center = (st: Route['stations'][number]) => (st.platform.from + st.platform.to) / 2;
   for (const ds of DATASETS) {
@@ -74,6 +77,12 @@ export function osmFor(route: Route): OsmData | null {
       const pts = r[3] as number[], keep: number[] = [];
       const flush = () => { if (keep.length >= 4) out.roads.push([r[0], r[1], r[2], keep.slice()]); keep.length = 0; };
       for (let i = 0; i < pts.length; i += 2) { if (inR(pts[i])) keep.push(mapS(pts[i]), mapL(pts[i + 1])); else flush(); }
+      flush();
+    }
+    for (const h of ds.data.highways ?? []) {
+      const pts = h[1] as number[], keep: number[] = [];
+      const flush = () => { if (keep.length >= 6) out.highways!.push([h[0], rev ? reverseTriples(keep) : keep.slice()]); keep.length = 0; };
+      for (let i = 0; i < pts.length; i += 3) { if (inR(pts[i])) keep.push(mapS(pts[i]), mapL(pts[i + 1]), pts[i + 2]); else flush(); }
       flush();
     }
     for (const a of ds.data.areas) {
@@ -106,6 +115,11 @@ function clipS(poly: [number, number][], v: number, keep: 1 | -1): [number, numb
   }
   return out;
 }
+function reverseTriples(f: number[]): number[] {
+  const out: number[] = [];
+  for (let i = f.length - 3; i >= 0; i -= 3) out.push(f[i], f[i + 1], f[i + 2]);
+  return out;
+}
 /** s,lat の並びの順を逆に（鏡像で反時計回りが時計回りになるのを戻す） */
 function reversePairs(f: number[]): number[] {
   const out: number[] = [];
@@ -135,14 +149,14 @@ export interface OsmKit {
 
 /** 近景（部品で詳しく作る）の範囲: 線路の端からの距離 [m] */
 const NEAR = 45;
-/** 木の本数の上限 */
-const TREE_MAX = 650;
+/** 木の本数の上限（コース 1km あたり・全体） */
+const TREE_PER_KM = 150, TREE_CAP = 2400;
 
 const WALL = [0xe9e2cf, 0xf0efe9, 0xd9c9a8, 0xcfcfca, 0xb39673, 0xbfc6cc, 0xe3d3bb, 0xd8d0c4, 0xa7aeb3, 0xeee6d6];
 const ROOF = [0x3c3f45, 0x4a5561, 0x5e4436, 0x3b4c62, 0x6b6e73, 0x55595e];
 const BLOCK = [0xc9c2b4, 0xb9b4aa, 0xd2cfc7, 0xa9aaa6, 0xc4b9a5, 0xb3b9bd, 0xd8d2c4, 0xbfc3c4];
 const AREA_COL: Record<string, number> = {
-  park: 0x7e9e5c, grass: 0x8aa863, pitch: 0x9a9070, school: 0xb4a888, grave: 0xa3a39b, shrine: 0xc9c2ae, wood: 0x5d7a46, water: 0x6f93a2,
+  park: 0x7e9e5c, grass: 0x8aa863, pitch: 0x9a9070, school: 0xb4a888, grave: 0xa3a39b, shrine: 0xb9b49e, wood: 0x56733f, water: 0x5f8797, lot: 0x8e8e88,
 };
 
 export interface OsmTownResult {
@@ -177,6 +191,8 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
       { from: z.inFrom, to: z.outTo, lat: (q: number) => L0 + z.lat * loopShape(z, q) },
       { from: z.inFrom, to: z.outTo, lat: (q: number) => L1 - z.lat * loopShape(z, q) },
     ]),
+    // 浜寺公園の副線・羽衣の3番線（分岐器を含む）
+    ...route.stations.flatMap(st => coastalThirdTracks(route, st)).map(t => ({ from: t.from - 60, to: t.to + 60, lat: t.lat })),
   ];
   const nearLine = (s0: number, s1: number, l0: number, l1: number) => {
     for (let q = s0 - 2; q <= s1 + 2; q += Math.max(2, (s1 - s0 + 4) / 6)) for (const ln of lines) {
@@ -186,19 +202,19 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
     }
     return false;
   };
-  // 他のモジュールの敷地: 地上駅の駅舎・駅前（ホームの前後 25m、線路から 34m。待避線のある駅は 54m）、
+  // 他のモジュールの敷地: 地上駅の駅舎・駅前（ホームの前後 12m、線路から 24m。待避線のある駅は 44m）、
   // 駅直結のタワー、道路の跨線橋、阪堺線・高師浜線の高架
   const towers = [...towerZones(route), ...twinTowerZones(route)];
   const overpasses = (route.coastalLandmarks ?? []).filter(l => l.kind === 'road-overpass').map(l => l.s);
   const elevated = (s: number) => T.trackY(s) - T.groundY(s) > 3;
-  const blocked = (s0: number, s1: number, l0: number, l1: number, g: number) => {
+  const blocked = (s0: number, s1: number, l0: number, l1: number, g: number, road = false) => {
     const s = (s0 + s1) / 2, [a, b] = span(s), sd = (l0 + l1) / 2 < (a + b) / 2 ? -1 : 1;
     if (towers.some(t => t.side === sd && s0 < t.to && s1 > t.from)) return true;
     if (overpasses.some(o => s0 < o + 45 && s1 > o - 45)) return true;
-    if (tramBlocks(route, s0, s1, l0, l1)) return true;
+    if (tramBlocks(route, s0, s1, l0, l1, road)) return true;
     for (const st of route.stations) {
-      if (s1 < st.platform.from - 25 || s0 > st.platform.to + 25) continue;
-      if (g < (elevated(s) ? 12 : st.loop ? 54 : 34)) return true;
+      if (s1 < st.platform.from - 12 || s0 > st.platform.to + 12) continue;
+      if (g < (elevated(s) ? 12 : st.loop ? 44 : 24)) return true;
     }
     return false;
   };
@@ -210,11 +226,10 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
   };
   const ground = (s: number) => T.groundY(Math.max(route.extent.from, Math.min(route.extent.to, s)));
 
-  // ================= 建物 =================
-  // OSM に建物がほとんど登録されていない所（道路はある）は、道路・公園・水面を避けて戸建て中心に補う
-  const roadNear0 = buildRoadIndex(data);
-  const areaPolys = data.areas.map(a => a[1] as number[]);
-  const inPoly0 = (pts: number[], ps: number, pl: number) => {
+  // 川（route.structures の橋の下は地面が下がって水面がある）と OSM の水面: 建物を置かない
+  const bridges = (route.structures ?? []).filter(x => x.kind === 'bridge');
+  const inRiver = (s: number, m = 0) => bridges.some(x => s > x.from - m && s < x.to + m);
+  const inPolyF = (pts: number[], ps: number, pl: number) => {
     let c = false;
     for (let i = 0, j = pts.length - 2; i < pts.length; j = i, i += 2) {
       const si = pts[i], li = pts[i + 1], sj = pts[j], lj = pts[j + 1];
@@ -222,35 +237,99 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
     }
     return c;
   };
+  /** 面の外接矩形つき（判定を速く） */
+  const polys = data.areas.map(x => {
+    const pts = x[1] as number[];
+    let s0 = Infinity, s1 = -Infinity, l0 = Infinity, l1 = -Infinity;
+    for (let i = 0; i < pts.length; i += 2) { s0 = Math.min(s0, pts[i]); s1 = Math.max(s1, pts[i]); l0 = Math.min(l0, pts[i + 1]); l1 = Math.max(l1, pts[i + 1]); }
+    return { type: x[0] as string, pts, s0, s1, l0, l1 };
+  });
+  const inArea = (ps: number, pl: number, types?: Set<string>) => polys.some(q => (!types || types.has(q.type)) && ps >= q.s0 && ps <= q.s1 && pl >= q.l0 && pl <= q.l1 && inPolyF(q.pts, ps, pl));
+  const WATER = new Set(['water']);
+  const NOFILL = new Set(['water', 'park', 'wood', 'grass', 'pitch', 'school', 'grave', 'shrine', 'lot']);
+
+  // ================= 建物 =================
+  const roadNear0 = buildRoadIndex(data);
+  // 空き地の補い: OSM の建物・道路・面のない所に、線路沿いの住宅を間をあけて置く（密集させすぎない）
+  const occ = new Set<string>();
+  const C8 = 8, ck = (s: number, l: number) => `${Math.floor(s / C8)},${Math.floor(l / C8)}`;
+  /** 置ける建物か（線路・専用モジュールの敷地・駅前・川・道路を避ける） */
+  const placeable = (row: number[]) => {
+    const [s, lat, len, wid, angDeg] = row;
+    if (s < S0 || s > S1) return false;
+    const a = angDeg * Math.PI / 180, half = Math.max(len, wid) / 2, g = gap(s, lat);
+    // 線路（本線・ホーム・分かれていく線路・入出庫線）との離隔: 建物の外形の s 方向・横方向の張り出しで測る
+    const hs = (len * Math.abs(Math.cos(a)) + wid * Math.abs(Math.sin(a))) / 2, hl = (len * Math.abs(Math.sin(a)) + wid * Math.abs(Math.cos(a))) / 2;
+    if (g < hl + 4) return false; // 本線群の帯にかかる
+    if (nearLine(s - hs, s + hs, lat - hl, lat + hl)) return false;
+    if (inReserved(s - half, s + half, lat - half, lat + half)) return false; // 専用モジュールの敷地（駅ビル・車庫・商業施設）
+    if (blocked(s - half, s + half, lat - half, lat + half, g)) return false;
+    if (inRiver(s - hs, 6) || inRiver(s + hs, 6) || inArea(s, lat, WATER)) return false; // 川・池の上
+    if (half < 12 && roadNear0(s, lat)) return false; // 写し方のずれで道路に載った小さな建物
+    return true;
+  };
+  const osmB = data.buildings.filter(placeable);
+  for (const bd of osmB) {
+    // 建物の外形（向きのある長方形）＋ 2m
+    const a = bd[4] * Math.PI / 180, ca = Math.cos(a), sa = Math.sin(a), hu = bd[2] / 2 + 2, hv = bd[3] / 2 + 2;
+    for (let u = -hu; u <= hu + .01; u += Math.min(C8 / 2, hu)) for (let v = -hv; v <= hv + .01; v += Math.min(C8 / 2, hv)) occ.add(ck(bd[0] + u * ca - v * sa, bd[1] + u * sa + v * ca));
+  }
   const filler: number[][] = [];
   {
-    const W = 100, count = new Map<string, number>();
-    for (const b of data.buildings) { const k = `${Math.floor(b[0] / W)},${Math.sign(b[1] - (span(b[0])[0] + span(b[0])[1]) / 2)}`; count.set(k, (count.get(k) ?? 0) + 1); }
     const frnd = createRng(777);
-    for (let w0 = Math.floor(S0 / W) * W; w0 < S1; w0 += W) for (const sd of [-1, 1]) {
-      if ((count.get(`${Math.floor(w0 / W)},${sd}`) ?? 0) >= 12) continue;
-      for (let cs = w0 + 6; cs < w0 + W; cs += 13) for (let d = 14; d < 230; d += 12) {
-        const [lo, hi] = span(cs), cl = sd < 0 ? lo - d : hi + d;
-        if (frnd() < .32 || roadNear0(cs, cl) || roadNear0(cs + 4, cl) || roadNear0(cs, cl + 4) || roadNear0(cs, cl - 4)) continue;
-        if (areaPolys.some(a => inPoly0(a, cs, cl))) continue;
-        const apt = frnd() < .1;
-        filler.push([cs + (frnd() - .5) * 2, cl + (frnd() - .5) * 2, apt ? 14 : 8 + frnd() * 2.5, apt ? 9 : 7 + frnd() * 2, 0, apt ? 3 : 2, (apt ? 'a' : 'h').charCodeAt(0)]);
+    for (const sd of [-1, 1]) for (let cs = S0 + 6; cs < S1; cs += 12) {
+      const [lo, hi] = span(cs);
+      for (let d = 13; d < 200; d += 12.5) {
+        const cl = sd < 0 ? lo - d : hi + d;
+        const p = d < 70 ? .58 : .45; // 線路沿いは建て込み、奥はまばら
+        if (frnd() > p) continue;
+        let free = true;
+        for (const [ds, dl] of [[0, 0], [-5, -4], [5, -4], [-5, 4], [5, 4]]) {
+          if (occ.has(ck(cs + ds, cl + dl)) || roadNear0(cs + ds, cl + dl)) { free = false; break; }
+        }
+        if (!free || inArea(cs, cl, NOFILL)) continue;
+        const apt = frnd() < (d < 60 ? .14 : .08);
+        const w = apt ? 14 : 8 + frnd() * 2.5, dep = apt ? 9 : 7 + frnd() * 2;
+        const row = [cs + (frnd() - .5) * 2, cl + (frnd() - .5) * 2, w, dep, 0, apt ? 3 : 2, (apt ? 'a' : 'h').charCodeAt(0)];
+        if (!placeable(row)) continue;
+        filler.push(row);
+        occ.add(ck(cs, cl));
       }
     }
   }
+  // 建物の登録がない学校の敷地には校舎（4階の横長の棟）を1棟置く
+  for (const q of polys) {
+    if (q.type !== 'school' || (q.s1 - q.s0) * (q.l1 - q.l0) < 3000) continue;
+    if (data.buildings.some(b => b[0] > q.s0 && b[0] < q.s1 && b[1] > q.l0 && b[1] < q.l1 && inPolyF(q.pts, b[0], b[1]))) continue;
+    // 線路から遠い側の端寄り（校庭を線路側に残す）
+    const cs = (q.s0 + q.s1) / 2, far = Math.abs(q.l0) > Math.abs(q.l1) ? q.l0 + 12 : q.l1 - 12;
+    if (!inPolyF(q.pts, cs, far)) continue;
+    const row = [cs, far, Math.min(70, (q.s1 - q.s0) * .7), 13, 0, 4, 'p'.charCodeAt(0)];
+    if (placeable(row)) filler.push(row);
+  }
+  // 駐車場には車を並べる（線路から 180m まで。空き地に見えないように）
+  {
+    const crnd = createRng(31337), CAR = [0xf2f2ef, 0x2b2d30, 0x9aa0a6, 0x6e7a86, 0xb8342c, 0x2f4f7f, 0xd9d4c4, 0x50565c];
+    let nCar = 0;
+    for (const q of polys) {
+      if (q.type !== 'lot' || nCar > 2500) continue;
+      for (let s = q.s0 + 3; s < q.s1 - 2; s += 2.8) for (let l = q.l0 + 4; l < q.l1 - 3; l += 6.5) {
+        if (crnd() < .38 || !inPolyF(q.pts, s, l) || gap(s, l) < 8 || gap(s, l) > 180 || inReserved(s - 2, s + 2, l - 3, l + 3) || nearLine(s - 2, s + 2, l - 3, l + 3) || roadNear0(s, l)) continue;
+        const p = track.at(s, l, 0), t = track.trackAt(s), b = K.chunks.at(s); b.parent = null;
+        const col = CAR[Math.floor(crnd() * CAR.length)], yaw = -t.phi; // 長さ（局所 x）を線路に直角に
+        b.add('body', P.boxB, M(p.x, ground(s) + .15, p.z, yaw, 4.3, .8, 1.7), col);
+        b.add('body', P.boxB, M(p.x, ground(s) + .95, p.z, yaw, 2.4, .55, 1.55), 0x3a4048);
+        nCar++;
+      }
+    }
+  }
+  // 開発時の確認用: ある位置に建物を置かない理由
+  if (import.meta.env?.DEV) (globalThis as any).__osmWhy = (s: number, l: number) => ({ g: gap(s, l), near: nearLine(s - 4, s + 4, l - 4, l + 4), reserved: inReserved(s - 4, s + 4, l - 4, l + 4), blocked: blocked(s - 4, s + 4, l - 4, l + 4, gap(s, l)), occ: occ.has(ck(s, l)), road: roadNear0(s, l), areas: polys.filter(q => s >= q.s0 && s <= q.s1 && l >= q.l0 && l <= q.l1 && inPolyF(q.pts, s, l)).map(q => q.type) });
   let nB = 0;
-  for (const row of [...data.buildings, ...filler]) {
+  for (const row of [...osmB, ...filler]) {
     const [s, lat, len, wid, angDeg, lv0, tc] = row;
-    if (s < S0 || s > S1) continue;
-    const type = String.fromCharCode(tc), a = angDeg * Math.PI / 180;
-    const half = Math.max(len, wid) / 2;
-    const g = gap(s, lat);
-    // 線路（本線・ホーム・分かれていく線路・入出庫線）との離隔: 建物の外形の s 方向・横方向の張り出しで測る
-    const hs = (len * Math.abs(Math.cos(a)) + wid * Math.abs(Math.sin(a))) / 2, hl = (len * Math.abs(Math.sin(a)) + wid * Math.abs(Math.cos(a))) / 2;
-    if (g < hl + 4) continue; // 本線群の帯にかかる
-    if (nearLine(s - hs, s + hs, lat - hl, lat + hl)) continue;
-    if (inReserved(s - half, s + half, lat - half, lat + half)) continue; // 専用モジュールの敷地（駅ビル・車庫・商業施設）
-    if (blocked(s - half, s + half, lat - half, lat + half, g)) continue;
+    const a = angDeg * Math.PI / 180;
+    const type = String.fromCharCode(tc), g = gap(s, lat);
     nB++;
     const lv = Math.min(45, Math.max(1, lv0));
     const sd = lat < (span(s)[0] + span(s)[1]) / 2 ? -1 : 1;
@@ -301,9 +380,15 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
   }
 
   // ================= 地面: 道路・公園・緑地・川 =================
+  // 川を渡る道路は、川の手前の地面の高さで橋にする
+  const bankY = (s: number) => {
+    const x = bridges.find(q => s > q.from - 4 && s < q.to + 4);
+    return x ? Math.max(ground(x.from - 12), ground(x.to + 12)) + .5 : null;
+  };
   const lift = (s: number) => ground(s);
-  /** s-lat の折れ線を幅 w の帯にする（20m ごとに分けて線路の曲がりに沿わせる） */
-  const ribbon = (b: GeoBatch, pts: number[], w: number, dy: number, col: number) => {
+  const liftRoad = (s: number) => bankY(s) ?? ground(s);
+  /** s-lat の折れ線を幅 w の帯にする（20m ごとに分けて線路の曲がりに沿わせる）。caps = 端と曲がり角に円盤を足してつなぎ目を埋める */
+  const ribbon = (b: GeoBatch, pts: number[], w: number, dy: number, col: number, caps = false) => {
     const P2: [number, number][] = [];
     for (let i = 0; i + 3 < pts.length; i += 2) {
       const s0 = pts[i], l0 = pts[i + 1], s1 = pts[i + 2], l1 = pts[i + 3];
@@ -311,52 +396,139 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
       for (let k = i ? 1 : 0; k <= n; k++) P2.push([s0 + (s1 - s0) * k / n, l0 + (l1 - l0) * k / n]);
     }
     const tris: number[] = [];
-    const W = (s: number, lat: number) => { const v = track.at(s, lat, 0); v.y = lift(s) + dy; return v; };
+    const W = (s: number, lat: number) => { const v = track.at(s, lat, 0); v.y = liftRoad(s) + dy; return v; };
+    const Wp = P2.map(([q, l]) => W(q, l));
     for (let i = 0; i + 1 < P2.length; i++) {
-      const [sa, la] = P2[i], [sb, lb] = P2[i + 1];
-      const A = W(sa, la), B = W(sb, lb), dx = B.x - A.x, dz = B.z - A.z, L = Math.hypot(dx, dz) || 1;
+      const A = Wp[i], B = Wp[i + 1], dx = B.x - A.x, dz = B.z - A.z, L = Math.hypot(dx, dz) || 1;
       const nx = -dz / L * w / 2, nz = dx / L * w / 2;
       const a1 = [A.x + nx, A.y, A.z + nz], a2 = [A.x - nx, A.y, A.z - nz], b1 = [B.x + nx, B.y, B.z + nz], b2 = [B.x - nx, B.y, B.z - nz];
       tris.push(...a1, ...b1, ...a2, ...a2, ...b1, ...b2);
+    }
+    if (caps) {
+      for (let i = 0; i < Wp.length; i++) {
+        let need = i === 0 || i === Wp.length - 1;
+        if (!need) {
+          const A = Wp[i - 1], B = Wp[i], C = Wp[i + 1];
+          const a1 = Math.atan2(B.z - A.z, B.x - A.x), a2 = Math.atan2(C.z - B.z, C.x - B.x);
+          let da = Math.abs(a2 - a1); if (da > Math.PI) da = 2 * Math.PI - da;
+          need = da > .2;
+        }
+        if (!need) continue;
+        const c = Wp[i], N = 8;
+        for (let k = 0; k < N; k++) {
+          const t0 = k / N * Math.PI * 2, t1 = (k + 1) / N * Math.PI * 2;
+          tris.push(c.x, c.y, c.z, c.x + Math.cos(t0) * w / 2, c.y, c.z + Math.sin(t0) * w / 2, c.x + Math.cos(t1) * w / 2, c.y, c.z + Math.sin(t1) * w / 2);
+        }
+      }
     }
     upFacing(tris);
     if (tris.length) b.addTris('road', tris, col);
   };
   let nR = 0;
+  const ROAD_COL = [0x4f5257, 0x4f5257, 0x585b60, 0x65676b];
   for (const r of data.roads) {
-    const cls = r[0] as number, w = Math.min(cls === 1 ? 22 : 14, r[1] as number), pts = r[3] as number[];
+    const cls = r[0] as number, w = Math.min(cls === 1 ? 22 : 14, Math.max(cls === 3 ? 4.5 : 6, r[1] as number)), pts = r[3] as number[];
     if (pts.length < 4) continue;
     // 高架の下を通る道路はそのまま。地上の線路を横切る所（踏切は crossings.ts）・駅前・タワーの敷地では切る
     const pieces: number[][] = []; let cur: number[] = [];
     for (let i = 0; i < pts.length; i += 2) {
       const ps = pts[i], pl = pts[i + 1], g = gap(ps, pl);
-      const bad = (!elevated(ps) && g < w / 2 + 3) || blocked(ps - 1, ps + 1, pl - 1, pl + 1, Math.max(0, g - w / 2));
+      const bad = (!elevated(ps) && g < w / 2 + 3) || blocked(ps - 1, ps + 1, pl - 1, pl + 1, Math.max(0, g - w / 2), true) || inReserved(ps - 1, ps + 1, pl - 1, pl + 1);
       if (bad) { if (cur.length >= 4) pieces.push(cur); cur = []; } else cur.push(ps, pl);
     }
     if (cur.length >= 4) pieces.push(cur);
     for (const pc of pieces) {
       const b = K.chunks.at(pc[0]); b.parent = null;
-      ribbon(b, pc, w, .03 + (cls === 3 ? 0 : .01), cls === 1 ? 0x4f5257 : cls === 2 ? 0x56595e : 0x606268);
-      if (cls <= 2 && w >= 7) for (const off of [-w / 2 + .4, w / 2 - .4]) ribbon(b, offsetLine(pc, off), .14, .05, 0xe2e2dc);
+      // 等級ごとに高さを分けて重なりのちらつきを防ぐ（広い道が上）
+      ribbon(b, pc, w, .09 + (3 - cls) * .012, ROAD_COL[cls], true);
+      if (cls <= 2 && w >= 7) for (const off of [-w / 2 + .5, w / 2 - .5]) ribbon(b, offsetLine(pc, off), .15, .14, 0xe2e2dc);
+      // 川を渡る所は橋桁と橋脚
+      for (let i = 0; i + 3 < pc.length; i += 2) {
+        const sa = pc[i], sb = pc[i + 2], y = bankY((sa + sb) / 2);
+        if (y == null) continue;
+        const A = track.at(sa, pc[i + 1], 0), B = track.at(sb, pc[i + 3], 0), L = Math.hypot(B.x - A.x, B.z - A.z);
+        if (L < .5) continue;
+        const yaw = Math.atan2(B.x - A.x, B.z - A.z), mx = (A.x + B.x) / 2, mz = (A.z + B.z) / 2, cx = Math.cos(yaw), sx = Math.sin(yaw);
+        b.add('body', P.box, M(mx, y - .55, mz, yaw, w + .6, 1.2, L + .2), 0xa5a49c);
+        for (const sd of [-1, 1]) b.add('body', P.box, M(mx + cx * sd * (w / 2 + .15), y + .55, mz - sx * sd * (w / 2 + .15), yaw, .3, 1.0, L + .2), 0xc9c8c0);
+        const gy = ground((sa + sb) / 2);
+        if (y - gy > 1.5) b.add('body', P.boxB, M(mx, gy - .5, mz, yaw, w * .6, y - gy - .6, 1.6), 0x9c9b93);
+      }
     }
     nR++;
   }
-  // 面（多角形）: 三角形分割して地面に貼る。木を植える面は本数を決めて TreeSpot に
+  // 高架の都市高速（阪神高速など）
+  const buildHighway = (w: number, pts: number[]) => {
+    const n = pts.length / 3;
+    const P3: { s: number; l: number; h: number }[] = [];
+    for (let i = 0; i < n; i++) P3.push({ s: pts[i * 3], l: pts[i * 3 + 1], h: pts[i * 3 + 2] });
+    // 細かく分ける（線路の曲がりに沿わせる）
+    const Q: { s: number; l: number; h: number; skip?: boolean }[] = [];
+    for (let i = 0; i + 1 < P3.length; i++) {
+      const a = P3[i], c = P3[i + 1], m = Math.max(1, Math.ceil(Math.hypot(c.s - a.s, c.l - a.l) / 10));
+      for (let k = i ? 1 : 0; k <= m; k++) Q.push({ s: a.s + (c.s - a.s) * k / m, l: a.l + (c.l - a.l) * k / m, h: a.h + (c.h - a.h) * k / m });
+    }
+    // 線路の上・近くは架線の上を越える高さへ上げ、前後は 6% の勾配でならす。地上へ下りるランプが線路に近い所は描かない
+    const sc = (q: number) => Math.max(route.extent.from, Math.min(route.extent.to, q));
+    for (const q of Q) {
+      if (gap(q.s, q.l) > w / 2 + 15 && !nearLine(q.s - w / 2 - 6, q.s + w / 2 + 6, q.l - w / 2 - 6, q.l + w / 2 + 6)) continue;
+      if (q.h < 4) { q.skip = true; continue; }
+      q.h = Math.max(q.h, T.trackY(sc(q.s)) - ground(q.s) + 10);
+    }
+    const dist = (a: { s: number; l: number }, b: { s: number; l: number }) => Math.hypot(a.s - b.s, a.l - b.l);
+    for (let i = 1; i < Q.length; i++) if (Q[i].h > 4) Q[i].h = Math.max(Q[i].h, Q[i - 1].h - .06 * dist(Q[i], Q[i - 1]));
+    for (let i = Q.length - 2; i >= 0; i--) if (Q[i].h > 4) Q[i].h = Math.max(Q[i].h, Q[i + 1].h - .06 * dist(Q[i], Q[i + 1]));
+    let acc = 30;
+    for (let i = 0; i + 1 < Q.length; i++) {
+      const a = Q[i], c = Q[i + 1];
+      if (a.s < S0 || a.s > S1 || a.skip || c.skip) continue;
+      const A = track.at(a.s, a.l, 0), B = track.at(c.s, c.l, 0);
+      A.y = ground(a.s) + a.h; B.y = ground(c.s) + c.h;
+      const dx = B.x - A.x, dz = B.z - A.z, dyv = B.y - A.y, L = Math.hypot(dx, dz);
+      if (L < .5) continue;
+      const yaw = Math.atan2(dx, dz), pitch = -Math.atan2(dyv, L), mx = (A.x + B.x) / 2, my = (A.y + B.y) / 2, mz = (A.z + B.z) / 2;
+      const b = K.chunks.at(a.s); b.parent = null;
+      const Ls = Math.hypot(L, dyv) + .3, cx = Math.cos(yaw), sx = Math.sin(yaw);
+      b.add('body', P.box, M(mx, my - .9, mz, yaw, w, 1.8, Ls, pitch), 0x9fa09a);           // 桁
+      b.add('body', P.box, M(mx, my + .02, mz, yaw, w - .6, .08, Ls, pitch), 0x505357);    // 舗装
+      for (const sd of [-1, 1]) b.add('body', P.box, M(mx + cx * sd * (w / 2 - .2), my + .5, mz - sx * sd * (w / 2 - .2), yaw, .4, 1.0, Ls, pitch), 0xb4b5ae); // 壁高欄
+      // 橋脚（約 30m ごと。線路・建築限界には置かない）
+      acc += L;
+      if (acc >= 30 && a.h > 3) {
+        const g = gap(a.s, a.l);
+        if (g > 4 + w * .4 && !nearLine(a.s - 2, a.s + 2, a.l - 2, a.l + 2) && !inReserved(a.s - 2, a.s + 2, a.l - 2, a.l + 2)) {
+          acc = 0;
+          const y0 = ground(a.s);
+          b.add('body', P.boxB, M(A.x, y0, A.z, yaw, 2.4, a.h - 1.8, 2.4), 0xaeada5);
+          b.add('body', P.box, M(A.x, A.y - 2.4, A.z, yaw, w * .85, 1.2, 2.6), 0xaeada5);
+        }
+      }
+    }
+  };
+  for (const hw of data.highways ?? []) buildHighway(hw[0] as number, hw[1] as number[]);
+  // 面（多角形）: s 方向 40m ごとに切って三角形分割し（線路の曲がりに沿わせる）地面に貼る。木を植える面は TreeSpot に
+  const AREA_DY: Record<string, number> = { water: .075, lot: .035, grass: .04, pitch: .045, school: .045, park: .05, grave: .055, shrine: .06, wood: .065 };
   const treeAreas: { type: string; pts: number[] }[] = [];
   for (const a of data.areas) {
     const type = a[0] as string, pts = a[1] as number[];
     const col = AREA_COL[type];
     if (!col || pts.length < 6) continue;
-    const contour = [] as THREE.Vector2[];
-    for (let i = 0; i < pts.length; i += 2) contour.push(new THREE.Vector2(pts[i], pts[i + 1]));
-    const tri = THREE.ShapeUtils.triangulateShape(contour, []);
+    const poly: [number, number][] = [];
+    let s0 = Infinity, s1 = -Infinity;
+    for (let i = 0; i < pts.length; i += 2) { poly.push([pts[i], pts[i + 1]]); s0 = Math.min(s0, pts[i]); s1 = Math.max(s1, pts[i]); }
     const b = K.chunks.at(pts[0]); b.parent = null;
     const out: number[] = [];
-    const dy = type === 'water' ? .015 : .02;
-    const V = contour.map(v => { const q = track.at(v.x, v.y, 0); q.y = lift(v.x) + dy; return q; });
-    for (const [i, j, k] of tri) out.push(V[i].x, V[i].y, V[i].z, V[j].x, V[j].y, V[j].z, V[k].x, V[k].y, V[k].z);
+    const dy = AREA_DY[type] ?? .04;
+    for (let q = Math.floor(s0 / 40) * 40; q < s1; q += 40) {
+      const piece = clipS(clipS(poly, q, 1), q + 40, -1);
+      if (piece.length < 3) continue;
+      const contour = piece.map(([x, y]) => new THREE.Vector2(x, y));
+      const tri = THREE.ShapeUtils.triangulateShape(contour, []);
+      const V = contour.map(v => { const p = track.at(v.x, v.y, 0); p.y = lift(v.x) + dy; return p; });
+      for (const [i, j, k] of tri) out.push(V[i].x, V[i].y, V[i].z, V[j].x, V[j].y, V[j].z, V[k].x, V[k].y, V[k].z);
+    }
     upFacing(out, true);
-    b.addTris('road', out, col);
+    if (out.length) b.addTris('road', out, col);
     if (type === 'wood' || type === 'park' || type === 'shrine' || type === 'grave') treeAreas.push({ type, pts });
   }
 
@@ -371,6 +543,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
     return c;
   };
   let nT = 0;
+  const TREE_MAX = Math.min(TREE_CAP, Math.round((S1 - S0) / 1000 * TREE_PER_KM));
   const roadNear = buildRoadIndex(data);
   const waters = data.areas.filter(a => a[0] === 'water').map(a => a[1] as number[]);
   const reservedAt = (s: number, l: number) => reserved.some(z => s > z.from && s < z.to && l > z.lat0 && l < z.lat1);
@@ -380,14 +553,16 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
   for (const { type, pts } of treeAreas) {
     let s0 = Infinity, s1 = -Infinity, l0 = Infinity, l1 = -Infinity;
     for (let i = 0; i < pts.length; i += 2) { s0 = Math.min(s0, pts[i]); s1 = Math.max(s1, pts[i]); l0 = Math.min(l0, pts[i + 1]); l1 = Math.max(l1, pts[i + 1]); }
-    const sp = spacing[type];
+    // 大きな公園（浜寺公園の松林など）は森に近い密度
+    const big = type === 'park' && (s1 - s0) * (l1 - l0) > 60000;
+    const sp = big ? 14 : spacing[type];
     for (let s = s0 + sp / 2; s < s1; s += sp) for (let l = l0 + sp / 2; l < l1; l += sp) {
       if (nT >= TREE_MAX) break;
       const ss = s + (rnd() - .5) * sp * .8, ll = l + (rnd() - .5) * sp * .8;
       if (!inPoly(pts, ss, ll) || gap(ss, ll) < 6 || roadNear(ss, ll) || reservedAt(ss, ll) || waters.some(w => inPoly(w, ss, ll))) continue;
-      if (type === 'park' && rnd() < .35) continue; // 公園は広場を残す
+      if (type === 'park' && rnd() < (big ? .15 : .35)) continue; // 公園は広場を残す
       const [rs, rl] = toReal(ss, ll);
-      trees.push({ s: rs, lat: rl, y: ground(ss), k: type === 'wood' || type === 'shrine' ? 1.05 + rnd() * .5 : .8 + rnd() * .4 });
+      trees.push({ s: rs, lat: rl, y: ground(ss), k: type === 'wood' || type === 'shrine' || big ? 1.05 + rnd() * .5 : .8 + rnd() * .4 });
       nT++;
     }
   }
@@ -408,6 +583,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
       }
     }
   }
+  if (import.meta.env?.DEV) console.info(`OSM 景観: 建物 ${nB}（補い ${filler.length} 候補）、道路 ${nR}、木 ${nT}/${TREE_MAX}`);
   return { roadCount: nR, buildings: nB };
 }
 
