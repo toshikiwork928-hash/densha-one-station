@@ -170,7 +170,8 @@ src/
    ├─ track-mesh.ts（待避線・分岐器・門型架線柱を含む）, terrain.ts, structures.ts, crossings.ts, signals.ts, signs.ts, stations.ts
    ├─ coastal-landmarks.ts # 南海本線の道路・路面電車跨線橋、鋼トラス、高架支線
    ├─ custom-stations.ts   # 独自配置のホームの駅（Station.layout = 'custom'）
-   ├─ namba-terminal.ts, suminoe-depot.ts, namba-landmarks.ts, koya-traffic.ts  # 堺〜なんば専用の景観
+   ├─ namba-terminal.ts, suminoe-depot.ts, namba-landmarks.ts, koya-traffic.ts, sumiyoshi-taisha.ts  # 堺〜なんば専用の景観
+   ├─ osm-town.ts          # OSM の沿線データ（src/data/osm/）から建物・道路・緑地・木を作る（堺〜なんば）
    ├─ overtaking.ts        # 待避中に通過する列車・待避線の先行普通
    ├─ town-jp.ts           # 日本の街並み（手続き生成、300m チャンク）
    ├─ scenery.ts, scenery-batch.ts, assets.ts  # 素材の読込・前処理・BatchedMesh 配置・木の LOD
@@ -188,8 +189,9 @@ deploy/pages.yml           # 公開 repo 用 GitHub Pages ワークフロー
   - [Quaternius](https://quaternius.com) Nature Pack（木・植え込み）・Buildings Pack 3（中層ビル）（ミラー `trebeljahr/quaternius-showcase`、SHA 固定）
   - 読込に失敗した素材は簡易モデル（箱・円錐）で代替
 - 車両・住宅・踏切・運転台・標識テクスチャ・音はすべてコード生成
+- 地図データ: 堺〜なんばの沿線（線路の両側 約300m の建物・道路・公園・緑地・川・社寺）は © OpenStreetMap contributors（[ODbL 1.0](https://opendatacommons.org/licenses/odbl/)）。Overpass API で取得し、`npm run osm:scenery -- --course=namba` がコースの座標へ写して簡略化した `src/data/osm/namba.json` を同梱（生データは `node_modules/.cache/osm/`、コミットしない）。描画は `world/osm-town.ts`
 - 要ネット接続（素材の CDN 取得のため）
 
 ## 公開可否
 
-可。3D素材はすべて CC0（帰属表示不要だが出典を記載）。ゲーム内の店名・塗装は架空。南海本線は泉大津〜堺、高野線は橋本〜極楽橋（一部の駅を省略）の実在の区間を参考にした概形で、公式の再現・監修ではない。調査資料に実在の駅名・事業者名を出典として記載するが、公式ロゴや実車録音は収録しない。
+可。3D素材はすべて CC0（帰属表示不要だが出典を記載）。地図データは OpenStreetMap（ODbL。出典表示が必要、上の「依存」に記載）。ゲーム内の店名・塗装は架空。南海本線は泉大津〜堺、高野線は橋本〜極楽橋（一部の駅を省略）の実在の区間を参考にした概形で、公式の再現・監修ではない。調査資料に実在の駅名・事業者名を出典として記載するが、公式ロゴや実車録音は収録しない。

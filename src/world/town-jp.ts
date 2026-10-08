@@ -13,6 +13,7 @@ import { tramBlocks } from './hankai-tram';
 import { getTerrain, hash } from './terrain';
 import { isMountain } from './mountain-terrain';
 import { buildMountainScenery } from './mountain-scenery';
+import { buildOsmTown, osmFor } from './osm-town';
 
 /** 木を置く位置（素材読込後に scenery.ts が配置） */
 export interface TreeSpot { s: number; lat: number; y: number; k: number; small?: boolean }
@@ -470,7 +471,17 @@ export function buildTown(ctx: GameContext): TownResult {
     b.addTris('road', pts, col);
   };
 
-  for (const sd of [-1, 1]) {
+  // OpenStreetMap の沿線データがあるコースは、建物・道路・緑地をデータから作る（osm-town.ts）
+  const osmDetail = new ChunkedBatch(300, new Set(['sign']));
+  const osm = osmFor(route);
+  if (osm) {
+    buildOsmTown(ctx, osm, {
+      detail: osmDetail, chunks, shadowChunks, kit: (b, r) => new Kit(b, r, atlas),
+      house: (k, w, d) => house(k as Kit, w, d), apartment: (k, w, d) => apartment(k as Kit, w, d),
+      mansion: (k, w, d, f) => mansion(k as Kit, w, d, f), shop: (k, w, d) => shop(k as Kit, w, d),
+    }, trees);
+  }
+  for (const sd of osm ? [] : [-1, 1]) {
     // ---- 線路沿いの道路・電柱・電線・柵 ----
     const roadOk = (s: number) => !tunnelNear(s, 30) && T.groundY(s) > -.3 && !platSide(sd, s, 20) && !loopNear(s, 20) && !thirdNear(sd, s, 20) && !T.nearCrossing(s, -1) && !towerNear(sd, s - 6, s + 6) && flatOk(s) && levelAt(s, latOf(sd, 13)) && levelAt(s, latOf(sd, 16.5));
     const dA = 10.5, dB = 15.5, la = latOf(sd, dA), lb = latOf(sd, dB);
@@ -618,6 +629,8 @@ export function buildTown(ctx: GameContext): TownResult {
   const group = new THREE.Group(); group.name = 'town'; scene.add(group);
   // 遠方のチャンクは距離で非表示（家屋は 1.6km 先でほぼ点、電線は 900m 先で見えない）
   for (const g of chunks.build(mats, group)) cullByDistance(ctx, g, 1600);
+  // OSM の近景の建物（窓・ベランダ・看板つき）は 550m まで
+  for (const g of osmDetail.build(mats, group)) cullByDistance(ctx, g, 550);
   for (const g of shadowChunks.build({ shadow: shadowMat }, group)) {
     g.traverse(o => { o.userData.noShadow = true; });
     cullByDistance(ctx, g, 350);

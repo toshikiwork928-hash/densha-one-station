@@ -6,6 +6,7 @@ import { fallbackBox, fallbackTree, prepareModel, type LoadedAssets, type Prepar
 import { buildSceneryBatches, type SceneryItem } from './scenery-batch';
 import { tramBlocks } from './hankai-tram';
 import { getTerrain } from './terrain';
+import { hasOsmScenery } from './osm-town';
 import { isMountain } from './mountain-terrain';
 import type { TreeSpot } from './town-jp';
 import { ChunkedBatch, M, P } from './batch';
@@ -164,10 +165,12 @@ function buildUrbanBackdrop(ctx: GameContext, from: number, to: number, at: (s: 
   let h = 7;
   const rnd = () => { h = (h * 16807) % 2147483647; return h / 2147483647; }; // 独自乱数（ctx.rng を消費しない）
   const near = new THREE.Color(0xb3b5b4), far = new THREE.Color(0xc4ccd3), c = new THREE.Color();
-  const T = getTerrain(ctx), route = ctx.route;
+  const T = getTerrain(ctx), route = ctx.route, osm = hasOsmScenery(ctx);
+  // OSM の沿線データがあるコースは、データの範囲（約320m）の外から
+  const dMin = osm ? 340 : 250;
   for (let s = from; s < to; s += 22) for (const side of [-1, 1]) {
     for (let k = 0; k < 3; k++) {
-      const d = 250 + rnd() * 1250, p = at(s + rnd() * 20, side * d, 0), t = ctx.track.trackAt(s);
+      const d = dMin + rnd() * (1500 - dMin), p = at(s + rnd() * 20, side * d, 0), t = ctx.track.trackAt(s);
       const hh = 18 + rnd() * rnd() * (d < 700 ? 90 : 140), w = 18 + rnd() * 30, dep = 18 + rnd() * 30;
       c.copy(near).lerp(far, Math.min(1, (d - 250) / 1250)).multiplyScalar(.9 + rnd() * .15);
       city.at(s).add('body', P.boxB, M(p.x, 0, p.z, -t.phi + (rnd() - .5) * .3, w, hh, dep), c.getHex());
@@ -175,7 +178,7 @@ function buildUrbanBackdrop(ctx: GameContext, from: number, to: number, at: (s: 
   }
   // 町並みの奥（線路から 68〜250m）: 中低層の街区を箱で埋める（手前2列の住宅・商店は town-jp.ts）
   const blockCols = [0xc9c2b4, 0xb9b4aa, 0xd2cfc7, 0xa9aaa6, 0xc4b9a5, 0xb3b9bd];
-  for (let s = route.extent.from; s < route.extent.to; s += 16) for (const side of [-1, 1]) {
+  for (let s = route.extent.from; s < (osm ? route.extent.from : route.extent.to); s += 16) for (const side of [-1, 1]) {
     for (let d = 68; d < 250; d += 15 + rnd() * 6) {
       if (!T.isCity(s) || rnd() < .12) continue;
       const w = 10 + rnd() * 12, dep = 9 + rnd() * 6, lat = side < 0 ? Math.min(...route.tracks) - d : Math.max(...route.tracks) + d;
@@ -221,7 +224,11 @@ export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot
   // 配置を集めて材質ごとの BatchedMesh へ（scenery-batch.ts）
   const items: SceneryItem[] = [];
   const thirds = route.stations.flatMap(st => coastalThirdTracks(route, st));
+  // OSM の沿線データがあるコースは、素材のビル（市街地・遠景）を置かない（乱数の消費順は変えない）
+  const osm = hasOsmScenery(ctx);
+  let noBuildings = false;
   const put = (model: PreparedModel, s: number, lat: number, yaw: number, k: number, y?: number) => {
+    if (noBuildings) return;
     const radius = Math.hypot(model.size.x, model.size.z) * k / 2;
     // 描画専用線も分岐端まで敷地を確保。樹冠の幅と前後方向の張り出しを含む。
     if (thirds.some(t => s > t.from - radius && s < t.to + radius && Math.abs(lat - t.lat(s)) < radius + 2.1)) return;
@@ -245,6 +252,7 @@ export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot
 
   for (const side of [-1, 1]) {
     // 市街地の奥: 商業ビル・中層ビル
+    noBuildings = osm;
     for (let s = TS0; s < TS1;) {
       if (!T.isCity(s) || blocked(s)) { s += 10; continue; }
       const mid = rnd() < .4, model = pick(mid ? M.mid : M.city), k = mid ? KIT_SCALE.mid : KIT_SCALE.city;
@@ -263,6 +271,7 @@ export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot
       if (level(s, fl)) put(fm, s, fl, rnd() * 6, KIT_SCALE.far * (1 + rnd() * .5));
       s += 12 + rnd() * 25;
     }
+    noBuildings = false;
     // 線路際の木・植え込み（柵と道路の間）
     for (let s = TS0; s < TS1; s += 5 + rnd() * 16) {
       if (rnd() < .5 || blocked(s) || T.structureAt(s, 5) || T.nearStation(s, 10) || towers.some(t => t.side === side && s > t.from && s < t.to)) continue;

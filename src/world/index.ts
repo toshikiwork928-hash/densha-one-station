@@ -23,6 +23,7 @@ import { buildKoyaPlatforms, buildKoyaTraffic } from './koya-traffic';
 import { buildNambaParked } from './namba-parked';
 import { buildNambaLandmarks } from './namba-landmarks';
 import { nambaFrame } from './namba-frame';
+import { buildSumiyoshiTaisha } from './sumiyoshi-taisha';
 import { createRunPasses } from './run-pass';
 
 export interface World {
@@ -55,6 +56,7 @@ export function buildWorld(ctx: GameContext): World {
     buildSuminoeDepot(nctx);
     buildSuminoeDepotTrains(nctx); // 留置の電車（描画のみ）
     buildNambaLandmarks(nctx);
+    buildSumiyoshiTaisha(nctx); // 住吉大社（OSM の位置）
     buildKoyaPlatforms(nctx);
     buildKoyaTraffic(nctx); // 高野線・汐見橋線の電車（描画のみ）
     buildNambaParked(nctx); // 難波の他の番線に停まっている電車（描画のみ）
