@@ -372,4 +372,5 @@ export const nambaUp: Route = reverseRoute(namba, {
 
 // 時間帯ごとの普通（route/day-patterns.ts）: 複々線の走行中の追い越し、下りは朝に堺1番線で急行を待ち合わせ（終着。到着前の放送で案内）
 setLocalPatterns(namba, { passes: { morning: [['粉浜', '岸里玉出', 'express']], evening: [['岸里玉出', '岸里玉出', 'express']] } });
-setLocalPatterns(nambaUp, { waits: { morning: [['堺', 'express']] }, passes: { morning: [['岸里玉出', '粉浜', 'express']], evening: [['岸里玉出', '粉浜', 'express']] } });
+// 下りは粉浜〜住吉大社で抜く（岸里玉出の前後は下りが1線だけで、岸里玉出から発車した普通に後続の優等列車が追いつくため）
+setLocalPatterns(nambaUp, { waits: { morning: [['堺', 'express']] }, passes: { morning: [['粉浜', '住吉大社', 'express']], evening: [['粉浜', '住吉大社', 'express']] } });
