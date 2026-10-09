@@ -6,7 +6,7 @@ import {
 import type { GameActions, GameContext } from '../core/context';
 import type { CameraMode } from '../core/events';
 import { DEFAULT_PERF, TRAIN_PERF, stepTrain } from '../sim/train';
-import { serviceOf } from '../route/service';
+import { serviceOf, selectableServices } from '../route/service';
 import { createOvertake, waitsAt } from './overtake';
 import { createMeet } from './meet';
 import { createReplay } from './replay';
@@ -280,7 +280,7 @@ export function createGame(ctx: GameContext): Game {
     const stages = stagesOf(route);
     const si = Math.max(0, stages.findIndex(s => s.id === st.sel.stageId));
     const mi = Math.max(0, MODES.indexOf(st.sel.mode));
-    const svcs = route.services ?? [];
+    const svcs = selectableServices(route);
     let service = st.sel.service, stageId = stages[(si + stageDelta + stages.length) % stages.length].id;
     if (serviceDelta && svcs.length) {
       const k = Math.max(0, svcs.findIndex(x => x.id === service));

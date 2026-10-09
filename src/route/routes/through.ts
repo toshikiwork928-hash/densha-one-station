@@ -35,7 +35,7 @@ const dnServices: ServiceSpec[] = [
   {
     id: 'express', name: '急行', cars: 6, units: [4, 2], kind: 'commuter-old',
     kindOptions: ['commuter-old', 'commuter-new', 'commuter-1000', 'commuter-9000'], formationOptions: [[4, 2], [4, 4], [4, 2, 2], [6]],
-    lineLimit: 100, stops: [0, dnIdx('羽衣'), dnIdx('泉大津'), dnIdx('春木'), 13], timetable: NT.express,
+    lineLimit: 100, stops: [0, dnIdx('羽衣'), dnIdx('泉大津'), 13], timetable: NT.express,
   },
   airportService([0, dnIdx('羽衣'), dnIdx('泉大津'), dnIdx('春木'), 13], NT.airport),
   {
@@ -62,7 +62,7 @@ const upServices: ServiceSpec[] = [
       { station: upIdx('浜寺公園'), passedBy: 'express' }, { station: upIdx('浜寺公園'), passedBy: 'airport' },
     ],
   },
-  { ...dn('express'), stops: [0, upIdx('春木'), upIdx('泉大津'), upIdx('羽衣'), 13], timetable: NT_UP.express },
+  { ...dn('express'), stops: [0, upIdx('泉大津'), upIdx('羽衣'), 13], timetable: NT_UP.express },
   { ...dn('airport'), stops: [0, upIdx('春木'), upIdx('泉大津'), upIdx('羽衣'), 13], timetable: NT_UP.airport },
   { ...dn('southern'), kind: 'commuter-old', unitKinds: ['commuter-old', 'southern-10000'], timetable: NT_UP.southern },
   { ...dn('limited'), timetable: NT_UP.limited },

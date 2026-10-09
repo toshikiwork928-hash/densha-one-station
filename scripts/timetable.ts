@@ -1,7 +1,7 @@
 // 時刻表の生成: 種別ごとに自動運転（最速走行）で各駅の到着・通過時刻を求め、+5% を 5 秒単位に切り上げる
 // 実行: npm run timetable（src/route/routes/shiokaze-timetable.ts・mountain-timetable.ts を書き換える）
 // 山岳線（単線）は先の下り勾配の分だけ計画減速度を下げる（抑速ブレーキなしで制限を守る運転）。上り勾配では車両性能で遅くなる
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { shiokaze, shiokazeUp } from '../src/route/routes/shiokaze';
 import { kishiwada, kishiwadaUp } from '../src/route/routes/kishiwada';
 import { izumisano, izumisanoUp } from '../src/route/routes/izumisano';
@@ -98,6 +98,24 @@ function tableOf(route: Route, id: ServiceId, log = false): string {
     }
     return `{ ${tt.join(', ')} }`;
   }
+}
+
+const kishiwadaThroughExpressOnly = process.argv.includes('--kishiwada-through-express-only');
+if (kishiwadaThroughExpressOnly) {
+  const replaceExpressLines = (path: string, lines: [string, string]) => {
+    const source = readFileSync(path, 'utf8');
+    let index = 0;
+    const replaced = source.replace(/^  express: .*,$/gm, () => `  express: ${lines[index++]},`);
+    if (index !== 2) throw new Error(`${path}: expected 2 express lines, found ${index}`);
+    writeFileSync(path, replaced);
+  };
+  replaceExpressLines('src/route/routes/kishiwada-timetable.ts', [
+    tableOf(kishiwada, 'express'), tableOf(kishiwadaUp, 'express'),
+  ]);
+  replaceExpressLines('src/route/routes/through-timetable.ts', [
+    tableOf(throughUp, 'express'), tableOf(through, 'express'),
+  ]);
+  process.exit(0);
 }
 
 const izumisanoOnly = process.argv.includes('--izumisano-only');

@@ -1,7 +1,7 @@
 // ゲーム状態（1プレイ分）
 import { NOTCH_INITIAL } from '../core/config';
 import type { SignalAspect } from '../core/events';
-import { applyService } from '../route/service';
+import { applyService, selectableServices } from '../route/service';
 import { applyPlayerVehicles } from '../route/player-vehicles';
 import type { Route, ServiceId, TrainKind } from '../route/types';
 import type { TrainState } from '../sim/train';
@@ -164,9 +164,11 @@ export function createState(route: Route, sel?: Selection): GameState {
 }
 
 export function resetState(st: GameState, route: Route): void {
-  const sel: Selection = st.sel ?? { stageId: '', mode: 'normal', service: route.services?.find(x => x.id === 'express')?.id ?? route.services?.[0]?.id ?? 'express', vehicles: {} };
-  // 別のコースで選んだ種別がこのコースに無い（例: 泉大津〜岸和田のサザン → 堺〜泉大津）ときは急行、無ければ先頭の種別
-  if (route.services?.length && !route.services.some(x => x.id === sel.service)) sel.service = route.services.find(x => x.id === 'express')?.id ?? route.services[0].id;
+  const services = selectableServices(route);
+  const fallback = services.find(x => x.id === 'express')?.id ?? services[0]?.id ?? 'express';
+  const sel: Selection = st.sel ?? { stageId: '', mode: 'normal', service: fallback, vehicles: {} };
+  // 保存済み種別がこのコースで選べない場合、急行または先頭の種別へ戻す。
+  if (services.length && !services.some(x => x.id === sel.service)) sel.service = fallback;
   applyPlayerVehicles(route, sel.vehicles);
   applyService(route, sel.service); // 停車駅・時刻・編成長を種別に合わせてから区間を決める
   if (!sel.stageId) sel.stageId = stagesOf(route)[0]?.id ?? 'all';

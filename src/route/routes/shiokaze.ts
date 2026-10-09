@@ -226,7 +226,9 @@ shiokazeUp.signals = shiokazeUp.signals!.filter(s => s.s < parkZone.inFrom - 110
 shiokazeUp.signals.push({ id: `entry-${park}`, s: parkZone.inFrom - 110 });
 shiokazeUp.signals!.sort((a, b) => a.s - b.s);
 // 上りの浜寺公園には堺方面の副線（ホームは外側）があり、そこに停まる対向列車は置かない。ラッシュ用の自動追加を避けるため、出現しない印の編成を置く。
-shiokazeUp.oncoming.push({ spawnAt: 1e9, startS: 0, cars: 4, carLen: 20, gap: .8, kmh: 74, lat: 4, kind: 'commuter-new', stop: { station: park, headS: 0 } });
+const parkOppPf = shiokazeUp.stations[park].platform;
+const parkOppZone = { inFrom: parkOppPf.from - 160, inTo: parkOppPf.from - 70, outFrom: parkOppPf.to + 10, outTo: parkOppPf.to + 100, lat: -4, limit: 45 };
+shiokazeUp.oncoming.push({ spawnAt: 1e9, startS: 0, cars: 4, carLen: 20, gap: .8, kmh: 74, lat: 4, kind: 'commuter-new', stop: { station: park, headS: 0, loop: true, zone: parkOppZone } });
 
 // 時間帯ごとの普通の待避（route/day-patterns.ts）。堺〜泉大津では泉大津が終着（待ち合わせは到着前の放送で案内）
 setLocalPatterns(shiokaze, { waits: within(shiokaze, NAMBA_WAITS) });

@@ -15,6 +15,7 @@ import type { CounterTrain } from '../src/world/oncoming-timetable';
   }) }),
 };
 const { createCounterTraffic, COUNTER_BLOCK_GAP, counterTimetable, makeCounterPlans } = await import('../src/world/oncoming-timetable');
+const { coastalThirdTracks } = await import('../src/world/coastal-stations');
 
 type Tod = keyof typeof START_CLOCK;
 const TODS: Tod[] = ['morning', 'noon', 'evening', 'night'];
@@ -77,6 +78,18 @@ function assertSafety(routeId: string, tod: Tod): void {
   const route = ROUTES[routeId];
   const plans = makeCounterPlans(route, tod);
   const traffic = createCounterTraffic(route, tod, consist);
+  // 対向普通の全車体・台車が通る横位置を、実描画と共有する浜寺公園の副線へ照合する。
+  for (const train of traffic.trains.filter(t => t.code === 'L')) for (const point of train.plan.points) {
+    if (!point.stop || point.station == null) continue;
+    const station = route.stations[point.station];
+    if (station.layout !== 'hamadera') continue;
+    const siding = coastalThirdTracks(route, station).find(x => x.main === train.lat);
+    verify(siding != null, `${routeId}/${tod}: 浜寺公園の対向副線がない`);
+    for (let s = siding.from - train.length; s <= siding.to + train.length; s += 2) {
+      verify(Math.abs(traffic.laneAt(train, s) - siding.lat(s)) < .001,
+        `${routeId}/${tod}/${train.id}: 浜寺公園 s=${s} 車両横位置=${traffic.laneAt(train, s)} 線路=${siding.lat(s)}`);
+    }
+  }
   // 堺で停車する対向普通は、方向に応じた1/3番線の実プロファイルを使う。
   const sakai = route.stations.findIndex(s => s.name === '堺');
   if (sakai >= 0) for (const train of traffic.trains.filter(t => t.code === 'L' && t.plan.points.some(p => p.stop && p.station === sakai))) {

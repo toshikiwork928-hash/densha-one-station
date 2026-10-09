@@ -1,5 +1,7 @@
 // 描画を伴わない運行回帰チェック。esbuild で Node 向けに束ねて実行する。
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import * as THREE from 'three';
 import { shiokaze, shiokazeUp } from '../src/route/routes/shiokaze';
 import { mountain, mountainUp } from '../src/route/routes/mountain';
@@ -8,12 +10,12 @@ import { izumisano, izumisanoUp } from '../src/route/routes/izumisano';
 import { through, throughUp } from '../src/route/routes/through';
 import { namba, nambaUp, NAMBA_TRACKS } from '../src/route/routes/namba';
 import { approachText, departText } from '../src/audio/announce-text';
-import { applyService, destOf, sameClass } from '../src/route/service';
+import { applyService, destOf, sameClass, selectableServices } from '../src/route/service';
 import { buildTrack } from '../src/route/track';
 import { loopZone, loopShape } from '../src/route/service';
 import { coastalThirdTracks } from '../src/world/coastal-stations';
 import type { Route, ServiceId } from '../src/route/types';
-import { createState, type VehicleSel } from '../src/game/state';
+import { createState, stagesOf, type VehicleSel } from '../src/game/state';
 import { createGame } from '../src/game/loop';
 import { EventBus } from '../src/core/events';
 import { createTrainEnv } from '../src/sim/train';
@@ -31,6 +33,52 @@ function context(source: Route, service: ServiceId, vehicles: VehicleSel = {}): 
     trainEnv: createTrainEnv(), scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(), renderer: null!, env: null!, rng: createRng(12345),
     assetsReady: true, envState: { timeOfDay: 'noon', weather: 'clear', intensity: 0 }, light: { night: 0, tunnel: 0 }, cameraMode: 'cab', actions: null! };
 }
+
+// タイトルボタンと同じ候補、保存復元、実際のTab/ゲームパッド用選択処理を確認。
+for (const source of [shiokaze, shiokazeUp, kishiwada, kishiwadaUp, izumisano, izumisanoUp, through, throughUp, namba, nambaUp]) {
+  const ids = selectableServices(source).map(v => v.id);
+  const izumiotsuEnd = [source.stations[0], source.stations.at(-1)!].some(s => s.name === '泉大津');
+  for (const special of ['limited', 'southern'] as const) {
+    assert.equal(ids.includes(special), !izumiotsuEnd && !!source.services?.some(v => v.id === special), `${source.id}/${special}のTOP選択`);
+    const restored = context(source, special);
+    assert.equal(restored.state.sel.service, ids.includes(special) ? special : 'express', `${source.id}/${special}の保存復元`);
+    if (ids.includes(special)) for (const stage of stagesOf(restored.route)) {
+      assert.ok(!['泉大津', '羽衣'].includes(restored.route.stations[stage.from].name), `${source.id}/${special}通過駅から開始しない`);
+      assert.ok(!['泉大津', '羽衣'].includes(restored.route.stations[stage.to].name), `${source.id}/${special}通過駅で終了しない`);
+    }
+  }
+  const ctx = context(source, 'express'), game = createGame(ctx), selected = new Set<ServiceId>();
+  for (let i = 0; i < ids.length; i++) { game.actions.selectService(1); selected.add(ctx.state.sel.service); }
+  assert.deepEqual([...selected].sort(), [...ids].sort(), `${source.id}のキーボード選択候補`);
+}
+
+// 車両モデル生成だけを代替し、実際のovertaking描画処理がtrack.atへ渡す横位置を採取。
+// 分岐計算や配置処理は本番ソースをそのまま実行する。WebGLと画像生成は不要。
+{
+  (globalThis as any).document ??= { createElement: () => ({ getContext: () => ({
+    createRadialGradient: () => ({ addColorStop() {} }), fillRect() {},
+  }) }) };
+  const source = readFileSync('src/world/overtaking.ts', 'utf8').replace(
+    "import { bogieOffset, createTrainSet, type TrainCar } from './train-models';",
+    `const bogieOffset = (length: number) => length * .35;
+     const createTrainSet = (_kind: unknown, cars: number) => Array.from({ length: cars }, () => ({ object: new THREE.Group(), length: 20.8, setDoors() {} }));
+     type TrainCar = ReturnType<typeof createTrainSet>[number];`);
+  const { build } = createRequire(import.meta.url)('esbuild');
+  const compiled = await build({ stdin: { contents: source, resolveDir: process.cwd() + '/src/world', loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['three', 'three/*'], write: false, logLevel: 'silent' });
+  const module = { exports: {} as { createOvertaking: (ctx: GameContext) => void } };
+  new Function('require', 'module', 'exports', compiled.outputFiles[0].text)(createRequire(import.meta.url), module, module.exports);
+  for (const service of ['express', 'airport'] as const) {
+    const ctx = context(shiokazeUp, service), coordinates: number[] = [], at = ctx.track.at.bind(ctx.track);
+    ctx.track.at = ((s: number, lat: number, y: number) => { coordinates.push(lat); return at(s, lat, y); }) as typeof ctx.track.at;
+    ctx.state.state = 'run'; ctx.state.train.s = ctx.route.stations.at(-1)!.stopS - 200;
+    module.exports.createOvertaking(ctx); ctx.events.emit('frame', { dt: .1 });
+    assert.ok(coordinates.length >= 8, `${service}泉大津待機普通の台車を配置`);
+    assert.ok(coordinates.every(lat => Math.abs(lat + 9.2) < .001), `${service}泉大津待機普通は1番線に配置 ${coordinates}`);
+    assert.ok(ctx.scene.children.some(group => group.visible && group.name.endsWith(':goal')), '終着待機普通を表示');
+  }
+}
+console.log('TOP種別・保存復元・入力選択・泉大津待機普通の配置を確認');
+if (process.argv.includes('--selection-only')) process.exit(0);
 
 for (const route of [shiokaze, shiokazeUp]) {
   assert.equal(route.stations.length, 10);
@@ -65,7 +113,7 @@ for (const route of [shiokaze, shiokazeUp]) {
   assert.ok(!route.terminalApproach, `${route.id}終着ATSは無効`);
   for (const distance of [1000, 600, 300, 120, 50, 0]) assert.equal(terminalSpeedLimit(route, target, stop - distance), Infinity);
   const sakai = route.id === 'shiokaze';
-  for (const service of ['local', 'express', 'airport', 'limited'] as ServiceId[]) {
+  for (const service of selectableServices(route).map(v => v.id)) {
     const ctx = context(route, service), sta = ctx.route.stations[target];
     if (sakai) {
       // 堺（上りの終着）: 普通は内側の3番線（分岐器制限45km/h）、優等は外側の4番線（直進・制限なし）
@@ -195,7 +243,7 @@ for (const route of [shiokaze, shiokazeUp]) {
 }
 
 for (const source of [shiokaze, shiokazeUp, mountain, mountainUp]) {
-  for (const service of source.theme === 'mountain' ? ['local'] as const : ['local', 'express', 'airport', 'limited'] as const) {
+  for (const service of selectableServices(source).map(v => v.id)) {
     const ctx = context(source, service), game = createGame(ctx);
     const observedWaits = new Set<number>(), observedSidings = new Set<number>();
     let heldStation = -1, zoneMax = 0;
@@ -246,7 +294,7 @@ for (const source of [shiokaze, shiokazeUp, mountain, mountainUp]) {
 console.log('運行・終着ATS・復路標高チェック成功');
 
 // 最大編成でも第3線への進入・本線通過が成立する。
-for (const service of ['local', 'express', 'airport'] as const) {
+for (const service of selectableServices(shiokazeUp).map(v => v.id).filter((v): v is 'local' | 'express' | 'airport' => v === 'local' || v === 'express' || v === 'airport')) {
   const ctx = context(shiokazeUp, service, {
     local: { kind: 'commuter-old', units: [4, 2] }, express: { kind: 'commuter-new', units: [4, 4] }, airport: { kind: 'commuter-new', units: [4, 4] },
   });
@@ -351,12 +399,17 @@ for (const [route, parts] of [[throughUp, [shiokazeUp, kishiwada]], [through, [k
     }
   }
   assert.ok(departText(...(() => { const r = structuredClone(kishiwada); return [r, 0, false, applyService(r, 'southern')] as const; })()).includes('次は、キシワダに停まります。'));
-  // 空港急行は急行と同じ停車駅（春木にも停車）
+  // 和歌山市行の急行は春木通過。空港急行のみ春木停車。
   for (const route of [shiokaze, shiokazeUp, kishiwada, kishiwadaUp, izumisano, izumisanoUp, throughUp, through]) {
     const a = route.services!.find(v => v.id === 'airport')!, e = route.services!.find(v => v.id === 'express')!;
-    assert.deepEqual(a.stops, e.stops, `${route.id}空港急行は急行と同じ停車駅`);
+    const haruki = route.stations.findIndex(s => s.name === '春木');
+    assert.deepEqual(a.stops.filter(i => i !== haruki), e.stops, `${route.id}空港急行と急行の差は春木停車のみ`);
     assert.equal(a.lineLimit, 100); assert.deepEqual(a.units, [4, 4]); assert.equal(a.kind, 'commuter-new');
-    if (route.stations.some(s => s.name === '春木')) assert.ok(a.stops.includes(route.stations.findIndex(s => s.name === '春木')), `${route.id}空港急行は春木に停車`);
+    if (haruki >= 0) {
+      assert.ok(a.stops.includes(haruki), `${route.id}空港急行は春木に停車`);
+      assert.ok(!e.stops.includes(haruki), `${route.id}急行は春木を通過`);
+      assert.equal(e.timetable?.[haruki]?.dep, undefined, `${route.id}春木通過時刻に発車時刻を置かない`);
+    }
   }
   // 普通が終着駅で待避線へ入る番線案内はそのまま（岸和田 → 泉大津の普通は4番線）
   const lu = structuredClone(kishiwadaUp), sl = applyService(lu, 'local')!;
@@ -373,7 +426,7 @@ for (const [route, parts] of [[throughUp, [shiokazeUp, kishiwada]], [through, [k
   assert.ok(!approachText(r, 1, sv).includes('待'), '待避しない駅は案内なし');
 }
 for (const source of [kishiwada, kishiwadaUp, izumisano, izumisanoUp, throughUp, through]) {
-  for (const service of ['local', 'express', 'airport', 'limited', 'southern'] as const) {
+  for (const service of selectableServices(source).map(v => v.id)) {
     const ctx = context(source, service), game = createGame(ctx);
     const finalSta = ctx.route.stations.at(-1)!, finalZone = loopZone(finalSta) ?? { inFrom: finalSta.platform.from - 160, outTo: finalSta.platform.to + 130 };
     let zoneMax = 0;
@@ -431,7 +484,7 @@ console.log('泉大津〜岸和田・堺〜岸和田（5種別×上下）・サ�
     }
   }
   const want: Record<ServiceId, number> = { local: NAMBA_TRACKS[7], express: NAMBA_TRACKS[6], airport: NAMBA_TRACKS[6], southern: NAMBA_TRACKS[5], limited: NAMBA_TRACKS[9] };
-  for (const v of route.services!) {
+    for (const v of selectableServices(route)) {
     const r = structuredClone(route), sv = applyService(r, v.id)!, tr = buildTrack(r), stop = r.stations[8].stopS;
     assert.ok(Math.abs(tr.pathLat(stop) - want[v.id]) < 1e-6, `namba/${v.id}の番線（横位置 ${tr.pathLat(stop)}）`);
     // 普通は内側の緩行線（住吉大社で 9.4、堺は3番線 9.4）、優等は外側の急行線（0、堺は4番線）
@@ -444,7 +497,7 @@ console.log('泉大津〜岸和田・堺〜岸和田（5種別×上下）・サ�
   }
   const ids = route.signals!.map(g => g.id);
   assert.equal(new Set(ids).size, ids.length, '信号 id の重複なし');
-  for (const service of ['local', 'express', 'airport', 'limited', 'southern'] as const) {
+  for (const service of selectableServices(route).map(v => v.id)) {
     const ctx = context(route, service), game = createGame(ctx);
     attachAutodrive(ctx, (sec, dt = 1 / 30, hook) => { for (let q = 0; q < sec; q += dt) { if (hook?.()) break; game.update(dt); } });
     const result = (globalThis as any).window.__qa.run(service, 'all', 3600);
@@ -471,7 +524,7 @@ console.log('泉大津〜岸和田・堺〜岸和田（5種別×上下）・サ�
     assert.equal(tr.limitAt(r.stations[n - 1].platform.from - 30), v.id === 'local' ? 45 : r.lineLimit, `namba-up/${v.id}の堺の分岐器制限`);
     assert.ok(!sv.waits?.length, '普通の待避なし');
   }
-  for (const service of ['local', 'express', 'airport', 'limited', 'southern'] as const) {
+  for (const service of selectableServices(route).map(v => v.id)) {
     const ctx = context(route, service), game = createGame(ctx);
     attachAutodrive(ctx, (sec, dt = 1 / 30, hook) => { for (let q = 0; q < sec; q += dt) { if (hook?.()) break; game.update(dt); } });
     const result = (globalThis as any).window.__qa.run(service, 'all', 3600);
@@ -490,7 +543,7 @@ console.log('泉大津〜岸和田・堺〜岸和田（5種別×上下）・サ�
   let n = 0;
   for (const route of [shiokaze, shiokazeUp, kishiwada, kishiwadaUp, izumisano, izumisanoUp, throughUp, through, namba, nambaUp]) {
     for (const tod of ['morning', 'evening', 'night'] as const) {
-      for (const service of route.services!.map(v => v.id)) {
+      for (const service of selectableServices(route).map(v => v.id)) {
         const ctx = context(route, service); ctx.envState.timeOfDay = tod;
         const game = createGame(ctx);
         assert.equal(ctx.route.timeOfDay, tod);

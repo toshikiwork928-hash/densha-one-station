@@ -106,7 +106,7 @@ export function createCounterTraffic(route: Route, tod: TimeOfDay, consist: (cod
       const profile = extra ? route.extraTracks?.find(x => x.id === extra)?.lat : undefined;
       if (profile) { paths.push({ profile, station: p.station }); continue; }
       if (local && sta.loop && sta.layout !== 'custom' && !route.oncomingLocal?.stations.includes(p.station)) {
-        const scene = route.oncoming.find(o => o.stop?.station === p.station && o.stop.loop && o.spawnAt < 1e8);
+        const scene = route.oncoming.find(o => o.stop?.station === p.station && o.stop.loop);
         const zone = scene?.stop?.zone ?? loopZone(sta);
         if (zone) paths.push({ zone, station: p.station });
       }

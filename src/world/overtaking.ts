@@ -57,7 +57,7 @@ export function createOvertaking(ctx: GameContext): void {
     // 普通の停止位置（駅の停止位置は自列車の両数のもの）と走行線
     const head = goalSta.stopS + stopOffset(me.cars, carLenOf(me.kind), route.stopBaseCars ?? BASE_CARS) - stopOffset(local.cars, carLenOf(local.kind), route.stopBaseCars ?? BASE_CARS);
     const z = loopZone(goalSta);
-    const latAt = local.lane ? (s: number) => profileLat(local.lane!, s) + stationIslandOffset(route, route.tracks[0], s)
+    const latAt = local.lane ? (s: number) => profileLat(local.lane!, s) + stationIslandOffset(route, route.tracks[0], s) + (z ? z.lat * loopShape(z, s) : 0)
       : z ? (s: number) => z.lat * loopShape(z, s) : null;
     if (!latAt) return;
     const lat = latAt(head);

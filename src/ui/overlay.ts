@@ -8,7 +8,7 @@ import { lineOfRoute } from './lines';
 import type { GameResult } from '../game/scoring';
 import { safetyDeductions } from '../game/scoring';
 import { MODE_LABEL, findStage, stagesOf, type GameMode } from '../game/state';
-import { serviceOf, unitsLabel } from '../route/service';
+import { serviceOf, selectableServices, unitsLabel } from '../route/service';
 import { playerVehicleOptions } from '../route/player-vehicles';
 import type { ServiceSpec, TrainKind } from '../route/types';
 import { createVehiclePreview } from './vehicle-preview';
@@ -98,7 +98,7 @@ export function attachOverlay(ctx: GameContext): void {
     ].filter(Boolean).join('、');
     const best = getBest(route.id, stage.id, st.sel.mode, st.sel.service);
     const svc = serviceOf(route, st.sel.service), section = sectionOf(route.id);
-    const svcs = (route.services ?? []).map(v => `<button data-service="${v.id}" class="svc-${v.id} ${v.id === svc?.id ? 'on' : ''}">${v.name}<small>${svcDesc(route, v)}</small></button>`).join('');
+    const svcs = selectableServices(route).map(v => `<button data-service="${v.id}" class="svc-${v.id} ${v.id === svc?.id ? 'on' : ''}">${v.name}<small>${svcDesc(route, v)}</small></button>`).join('');
     const wait = svc?.waits?.filter(w => w.station > stage.from && w.station < stage.to)
       .map(w => { const p = serviceOf(route, w.passedBy); return `<b>${route.stations[w.station].name}で${p?.name ?? ''}の${p?.stops.includes(w.station) ? '待ち合わせ' : '通過待ち'}</b>（出発信号が進行になってから発車）`; }).join('、') ?? '';
     const stages = stagesOf(route).map(s => `<button data-stage="${s.id}" class="${s.id === stage.id ? 'on' : ''}">${s.id === 'all' ? '全線通し' : s.label}${s.id === 'all' ? `<small>${route.stations[s.from].name} → ${route.stations[s.to].name}</small>` : ''}</button>`).join('');
@@ -147,7 +147,7 @@ export function attachOverlay(ctx: GameContext): void {
       ctx.actions.selectStage(to - cur);
     });
     card.querySelectorAll<HTMLButtonElement>('[data-service]').forEach(b => b.onclick = () => {
-      const list = route.services ?? [], cur = list.findIndex(v => v.id === st.sel.service), to = list.findIndex(v => v.id === b.dataset.service);
+      const list = selectableServices(route), cur = list.findIndex(v => v.id === st.sel.service), to = list.findIndex(v => v.id === b.dataset.service);
       ctx.actions.selectService(to - cur);
     });
     card.querySelectorAll<HTMLButtonElement>('[data-line]').forEach(b => b.onclick = () => {

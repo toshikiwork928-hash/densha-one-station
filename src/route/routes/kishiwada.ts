@@ -40,10 +40,10 @@ const approachSigns = (stopS: number): Sign[] => [
   { kind: 'stopMarker', s: stopS, cars: 8 },
 ];
 
-/** 対向（上り）列車の停車シーン（下りの駅 index）。春木は急行停車駅 */
+/** 対向（上り）列車の停車シーン（下りの駅 index）。春木は空港急行停車駅 */
 const STOP_SCENES: StopScene[] = [
   { station: 1, kind: 'commuter-new', cars: 4, kmh: 74 },
-  { station: 2, kind: 'commuter-old', cars: 6, kmh: 80, label: '急行' },
+  { station: 2, kind: 'commuter-old', cars: 8, kmh: 80, label: '空港急行' },
   { station: 3, kind: 'commuter-old', cars: 6, kmh: 74, label: '普通' },
 ];
 
@@ -124,7 +124,7 @@ export const kishiwada: Route = {
     {
       id: 'express', name: '急行', cars: 6, units: [4, 2], kind: 'commuter-old',
       kindOptions: ['commuter-old', 'commuter-new', 'commuter-1000', 'commuter-9000'], formationOptions: [[4, 2], [4, 4], [4, 2, 2], [6]],
-      lineLimit: 100, stops: [0, 2, 4], timetable: KT.express,
+      lineLimit: 100, stops: [0, 4], timetable: KT.express,
     },
     airportService([0, 2, 4], KT.airport),
     {
