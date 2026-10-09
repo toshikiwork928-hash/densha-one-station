@@ -201,12 +201,12 @@ async function main() {
   // 進行方向の角度 θ(c)（左＝反時計回りが増える向き）。60m の窓でならす
   const th: number[] = [];
   for (let i = 0; i < line.length; i++) {
-    const a = line[Math.max(0, i - 6)], b = line[Math.min(line.length - 1, i + 6)];
+    const a = line[Math.max(0, i - 12)], b = line[Math.min(line.length - 1, i + 12)];
     th.push(Math.atan2(b[1] - a[1], b[0] - a[0]));
   }
   for (let i = 1; i < th.length; i++) { while (th[i] - th[i - 1] > Math.PI) th[i] -= 2 * Math.PI; while (th[i] - th[i - 1] < -Math.PI) th[i] += 2 * Math.PI; }
   /** θ を折れ線で近似する分割点（Douglas–Peucker。値は両端の θ を結ぶ。forced の添字では必ず分ける） */
-  const MIN_GAP = 6; // 分割点どうしは 60m 以上あける（ならしたあとの細かい揺れを円弧にしない）
+  const MIN_GAP = 15; // 分割点どうしは 150m 以上あける（ならしたあとの細かい揺れを円弧にしない）
   const dpFit = (v: number[], tol: number, forced: number[]): number[] => {
     const cut = new Set<number>([0, v.length - 1, ...forced.filter(k => k > 0 && k < v.length - 1)]);
     const order = [...cut].sort((p, q) => p - q);
@@ -226,7 +226,7 @@ async function main() {
     for (let k = 0; k + 1 < br.length; k++) for (let i = br[k]; i <= br[k + 1]; i++) o[i] = v[br[k]] + (v[br[k + 1]] - v[br[k]]) * (i - br[k]) / (br[k + 1] - br[k]);
     return o;
   };
-  const TOL = .6 * Math.PI / 180;
+  const TOL = .9 * Math.PI / 180;
   const th1 = lerpFit(th, dpFit(th, TOL, []));
   // ホームの範囲（停止位置の手前180m〜先40m。ゲームの規約。余裕を足す）は直線にする。
   // 直線にして失う角度は、直後の300mで元の θ へ戻す（以降の位置ずれを残さない）

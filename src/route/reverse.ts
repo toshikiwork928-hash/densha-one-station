@@ -85,7 +85,11 @@ export function reverseRoute(down: Route, opt: {
     timetable: opt.timetable[v.id] ?? {},
   }));
   const crossings = (down.crossings ?? []).map(c => ({ ...c, id: 'u' + c.id, s: m(c.s) })).sort((a, b) => a.s - b.s);
-  const structures = (down.structures ?? []).map(st => ({ ...st, from: m(st.to), to: m(st.from) })).sort((a, b) => a.from - b.from);
+  const structures = (down.structures ?? []).map(st => ({
+    ...st, from: m(st.to), to: m(st.from),
+    // 橋脚の位置と、線路ごとの橋脚の材質（route.tracks の順）も反転する
+    ...(st.piers ? { piers: st.piers.map(m).sort((a, b) => a - b) } : {}), ...(st.pierStyle ? { pierStyle: [...st.pierStyle].reverse() } : {}),
+  })).sort((a, b) => a.from - b.from);
   // 閉そく信号: 出発信号（停止位置の 60m 先）、2面4線駅の場内信号（入口分岐器の 90m 手前）、間は約 700m ごと
   const fixed: number[] = [];
   stations.forEach((st, i) => {
@@ -145,6 +149,7 @@ export function reverseRoute(down: Route, opt: {
       ...(x.deckSpan ? { deckSpan: [-x.deckSpan[1], -x.deckSpan[0]] as [number, number] } : {}), ...(x.poleOffset != null ? { poleOffset: -x.poleOffset } : {}) })) } : {}),
     ...(down.reserved ? { reserved: down.reserved.map(z => ({ ...z, from: m(z.to), to: m(z.from), lat0: C - z.lat1, lat1: C - z.lat0 })) } : {}),
     ...(down.deckJoin ? { deckJoin: down.deckJoin.map(z => ({ from: m(z.to), to: m(z.from) })) } : {}),
+    ...(down.hiddenTracks ? { hiddenTracks: down.hiddenTracks.map(h => ({ track: C - h.track, from: m(h.to), to: m(h.from) })) } : {}),
     activeLane: undefined,
     coastalLandmarks: down.coastalLandmarks?.map(l => ({ ...l, reversed: !(l.reversed ?? down.id.endsWith('-up')), s: m(l.s), side: -(l.side ?? -1) as 1 | -1, direction: -(l.direction ?? -1) as 1 | -1 })),
   };

@@ -8,6 +8,7 @@ import { GeoBatch, M, P } from './batch';
 import { getTerrain } from './terrain';
 import { trackSpan } from '../route/service';
 import { addHallArchitecture, architectureOf, hallBounds } from './station-architecture';
+import { buildMisakiParkStation, isMisakiPark } from './misaki-park';
 
 export function buildCustomStation(ctx: GameContext, sta: Station, prev: string, next: string): void {
   const T = getTerrain(ctx), list = sta.customPlatforms ?? [];
@@ -17,9 +18,11 @@ export function buildCustomStation(ctx: GameContext, sta: Station, prev: string,
   for (const p of list) {
     if (p.external) continue;
     const st: Station = { ...sta, platform: { ...sta.platform, from: p.from ?? sta.platform.from, to: p.to ?? sta.platform.to } };
-    if (p.kind === 'island') buildIsland(ctx, st, prev, next, p.lat, p.width, { stairs: true, roof: p.roof });
+    if (p.kind === 'island') buildIsland(ctx, st, prev, next, p.lat, p.width, { stairs: p.stairs ?? true, roof: p.roof });
     else { buildStation(ctx, st, prev, next, { lat: p.lat, side: p.side, minimal: !main, elevatedDy: dy }); main = false; }
   }
+  // みさき公園: 盛土の下の地下道・駅舎2か所・ホームの階段/エスカレーター/エレベーター（world/misaki-park.ts）
+  if (isMisakiPark(sta)) { buildMisakiParkStation(ctx, sta); return; }
   const arch = architectureOf(sta.name);
   if (arch?.kind === 'hall') {
     const t = ctx.track.trackAt(sc), b = new GeoBatch();

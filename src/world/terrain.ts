@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import type { Route } from '../route/types';
 import type { Track } from '../route/track';
-import { loopZone, trackSpan } from '../route/service';
+import { loopZone, profileLat, trackSpan } from '../route/service';
 import { osmFor, osmReady, osmSceneryFor } from './osm-town';
 import { RIVER_WATER, makeRiverField, type RiverField } from './river';
 import { buildMountainTerrain, makeMountainTerrain, type MountainTerrain } from './mountain-terrain';
@@ -85,9 +85,16 @@ function makeTerrain(route: Route, track: Track): Terrain {
     for (const v of viaducts) d = Math.max(d, viaductH * smooth((s - v.from) / 120) * smooth((v.to - s) / 120));
     return d;
   };
+  // 橋の下の地面を下げる（drop を持つ橋。紀ノ川橋梁）: 橋の中では両端 120m でならして、桁と水面の間を空ける
+  const dropBridges = bridges.filter(b => b.drop);
+  const bridgeDrop = (s: number) => {
+    let d = 0;
+    for (const b of dropBridges) d = Math.max(d, b.drop! * smooth((s - b.from) / 120) * smooth((b.to - s) / 120));
+    return d;
+  };
   const dryY = (s: number) => {
     const y = trackY(s);
-    if (follow) return y - viaductDrop(s);
+    if (follow) return y - viaductDrop(s) - bridgeDrop(s);
     return y >= 0 ? y * tunnelW(s) : y;
   };
   const groundY = (s: number) => dryY(s) - riverDip(s);
@@ -314,23 +321,42 @@ export function buildTerrain(ctx: GameContext): Terrain {
   if (follow) for (let s = S0; s <= S1; s += 50) farY = Math.min(farY, T.dryY(s) - 12); // 遠方の地面は一番低い地面より下
   base.rotation.x = -Math.PI / 2; base.position.set(mid.x, farY, mid.z); base.name = 'ground-far'; scene.add(base);
 
-  // 盛土（線路が地面より高く、構造物でない区間）
+  // 盛土（線路が地面より高く、構造物でない区間）。bank 指定の追加の線路（みさき公園の番線・多奈川線）は、
+  // 本線と並ぶ（11m 以内）間は同じ盛土を線路の外まで広げ、本線から離れる区間はその線路だけの盛土を作る
   const embMat = new THREE.MeshLambertMaterial({ color: 0x748f4e, side: THREE.DoubleSide });
-  const L0 = Math.min(...route.tracks) - 2.5, L1 = Math.max(...route.tracks) + 2.5;
-  let runStart: number | null = null;
-  const flush = (a: number, b: number) => {
-    if (b - a < 4) return;
-    scene.add(gridAlong(track, a, b, 5, (s) => {
-      const y = T.trackY(s), g = T.groundY(s), dh = Math.max(0, y - g);
-      return [[L0 - 1.6 * dh - .5, g - .05], [L0, y - .02], [L1, y - .02], [L1 + 1.6 * dh + .5, g - .05]];
-    }, embMat));
+  const bankX = (route.extraTracks ?? []).filter(x => x.bank);
+  const T0 = Math.min(...route.tracks), T1 = Math.max(...route.tracks);
+  const bankSpan = (q: number): [number, number] => {
+    let lo = T0, hi = T1;
+    if (bankX.length) {
+      const lats = bankX.filter(x => q >= x.from - 1 && q <= x.to + 1).map(x => profileLat(x.lat, q)).sort((a, b) => a - b);
+      for (const l of lats) if (l > hi && l - hi < 11) hi = l;
+      for (let i = lats.length - 1; i >= 0; i--) if (lats[i] < lo && lo - lats[i] < 11) lo = lats[i];
+    }
+    return [lo, hi];
   };
-  for (let s = S0; s <= S1; s += 5) {
-    const need = T.trackY(s) - T.groundY(s) > .08 && !T.structureAt(s, -2);
-    if (need && runStart == null) runStart = s - 5;
-    if (!need && runStart != null) { flush(runStart, s); runStart = null; }
+  /** 盛土が要る区間（s0〜s1 のうち test を満たす所）に、横断が ribbon(s) = [左, 右]（線路中心）の盛土を作る */
+  const embank = (s0: number, s1: number, test: (q: number) => boolean, ribbon: (q: number) => [number, number]) => {
+    let runStart: number | null = null;
+    const flush = (a: number, b: number) => {
+      if (b - a < 4) return;
+      scene.add(gridAlong(track, a, b, 5, (q) => {
+        const y = T.trackY(q), g = T.groundY(q), dh = Math.max(0, y - g), [lo, hi] = ribbon(q);
+        return [[lo - 2.5 - 1.6 * dh - .5, g - .05], [lo - 2.5, y - .02], [hi + 2.5, y - .02], [hi + 2.5 + 1.6 * dh + .5, g - .05]];
+      }, embMat));
+    };
+    for (let q = s0; q <= s1; q += 5) {
+      const need = T.trackY(q) - T.groundY(q) > .08 && !T.structureAt(q, -2) && test(q);
+      if (need && runStart == null) runStart = q - 5;
+      if (!need && runStart != null) { flush(runStart, q); runStart = null; }
+    }
+    if (runStart != null) flush(runStart, s1);
+  };
+  embank(S0, S1, () => true, bankSpan);
+  for (const x of bankX) {
+    const lat = (q: number) => profileLat(x.lat, q);
+    embank(Math.max(S0, x.from), Math.min(S1, x.to), q => { const [lo, hi] = bankSpan(q), l = lat(q); return l < lo - .01 || l > hi + .01; }, q => [lat(q), lat(q)]);
   }
-  if (runStart != null) flush(runStart, S1);
 
   // トンネル上の山
   const hillMat = new THREE.MeshLambertMaterial({ vertexColors: true });

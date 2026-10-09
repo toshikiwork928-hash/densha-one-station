@@ -1,14 +1,19 @@
 // 南海本線 泉佐野〜みさき公園の独立コース（10駅・17.9km）。景観の作り込みとダイヤ再現の前の「走れる」版。
 // 線形・勾配は src/data/geometry/south.json（OSM の中心線と国土地理院の標高から scripts/route-geometry.ts が作った下書き）を切り出す。
 // 営業キロは南海の公式値（泉佐野起点: 羽倉崎2.1、吉見ノ里3.4、岡田浦4.8、樽井6.6、尾崎9.1、鳥取ノ荘10.6、箱作12.6、淡輪16.2、みさき公園17.9）。
-// 駅は既存の駅形で近似（尾崎の2面4線・みさき公園の島式2面は未再現）。泉佐野は岸和田〜泉佐野コースと同じ島式3面4線・駅舎。
+// 駅は既存の駅形で近似（尾崎の2面4線・みさき公園の島式2面は未再現）。泉佐野は岸和田〜泉佐野コースと同じ島式3面4線・駅舎。羽倉崎は2面3線（custom）。
+// 泉佐野の南の空港線の分岐・JR 関西空港線の橋・羽倉崎検車区は描画専用（route/routes/izumisano-airport.ts、hagurazaki-depot.ts と world/ の同名モジュール）。
 // 種別は普通と特急サザンだけ（日中の実際の運転）。対向列車・踏切・OSM の街並みは未作成。docs/spec-south-courses.md
-import type { ExtraTrack, LatProfile, Route, Segment, ServiceSpec, Sign, SpeedLimit, Station } from '../types';
+import type { ExtraTrack, LatProfile, Route, Segment, ServiceSpec, Sign, SpeedLimit, Station, StationLoop } from '../types';
 import { mirrorProfile, reverseRoute } from '../reverse';
-import { setDestinations } from '../service';
+import { loopZone, setDestinations } from '../service';
 import SOUTH from '../../data/geometry/south.json';
+import { buildTrack } from '../track';
 import { IZUMISANO_PLATFORMS } from './izumisano';
 import { SM, SM_UP } from './izumisano-misaki-timetable';
+import { addMisakiPark, setMisakiParkUp } from './misaki-park';
+import { AD_LAT, AIR_S0, AIR_S1, AU_LAT, airportGeometry, airportReserved } from './izumisano-airport';
+import { HAGURAZAKI_LEAD, HAGURAZAKI_RESERVED } from './hagurazaki-depot';
 
 /** 座標: ゲームの s = 営業キロの s（泉佐野 0）+ START。泉佐野の停止位置が 180（ホームは 0〜220） */
 const START = 180;
@@ -37,16 +42,18 @@ function sliceSegments(from: number, to: number, prepend: number): Segment[] {
 }
 const segments = sliceSegments(0, END - START, START);
 
-/** 曲線の速度制限: 半径から 2.6√R km/h（5km/h 刻みに切り下げ）、60km/h を下限、85km/h 以上は制限なし。ゲーム用の概算で、実際の制限速度ではない */
+/** 曲線の速度制限（ゲーム用）。半径 R の円弧は 3.8√R km/h（5km/h刻みに切り下げ）。線区最高速度（普通 90）に満たないものだけ置く。
+ *  south.json の円弧は実際の曲線ではない（概形）ので、実際の制限速度とは一致しない（みさき公園〜和歌山港コースと同じ式） */
 function curveLimits(): SpeedLimit[] {
   const out: SpeedLimit[] = [];
   let s = 0;
   for (const g of segments) {
+    const len = g.type === 'straight' ? g.length : g.radius * g.angle;
     if (g.type === 'arc') {
-      const kmh = Math.max(60, Math.floor(2.6 * Math.sqrt(g.radius) / 5) * 5), len = g.radius * g.angle;
-      if (kmh < 85) out.push({ from: Math.round(s - 40), to: Math.round(s + len + 20), kmh, label: '曲線制限' });
-      s += len;
-    } else s += g.length;
+      const kmh = Math.floor(3.8 * Math.sqrt(g.radius) / 5) * 5;
+      if (kmh < 90) out.push({ from: Math.round(s), to: Math.round(s + len) + 120, kmh, label: '曲線制限' });
+    }
+    s += len;
   }
   return out;
 }
@@ -57,18 +64,39 @@ function curveLimits(): SpeedLimit[] {
 const MAIN_UP: LatProfile = [[-400, 9.2], [300, 9.2], [550, 4]];
 const OUTER_DOWN: LatProfile = [[-400, -9.2], [300, -9.2], [550, 0]];
 const OUTER_UP: LatProfile = [[-400, 18.4], [300, 18.4], [550, 4]];
+// 南海空港線の分岐（泉佐野の約260m南西。描画専用）: 外側下り線(T1)の外（左）・外側上り線(T4)の外（右）へ6m振れて平行になる所までを本線の床版の延長（追加の線路）で描き、
+// その先の高架（下り線は35‰で上って本線を乗り越える）と JR 関西空港線の橋は world/izumisano-airport.ts。空港線の列車は作らない。平面形は route/routes/izumisano-airport.ts
+const AIRPORT_EXTRA: ExtraTrack[] = [
+  { id: 'airport-down', lat: [[AIR_S0, -9.2], [AIR_S0 + 100, AD_LAT], [AIR_S1, AD_LAT]], from: AIR_S0, to: AIR_S1, ownDeck: false },
+  { id: 'airport-up', lat: [[AIR_S0, 18.4], [AIR_S0 + 100, AU_LAT], [AIR_S1, AU_LAT]], from: AIR_S0, to: AIR_S1, ownDeck: false },
+];
 const EXTRA: ExtraTrack[] = [
   { id: 'izumisano-t1', lat: OUTER_DOWN, from: -400, to: 550, ownDeck: false },
   { id: 'izumisano-t4', lat: OUTER_UP, from: -400, to: 550, ownDeck: false },
+  ...AIRPORT_EXTRA,
+  HAGURAZAKI_LEAD,
 ];
+
+// 羽倉崎駅: 2面3線（島式の1・2番と単式の3番。駅舎は3番線側、連絡地下道）。1番線は左端の線（T1 -9.2）で羽倉崎検車区の引上げ線へつながる。
+// 本線2線は島式ホームの右の下り本線(0)と単式ホームの前の上り本線(4)。ゲームの自列車（下り）は下り本線の島式ホーム側（ドア左）に停まる。番線の割り当ては不明のためゲーム用
+const HAGURAZAKI_PLATFORMS: NonNullable<Station['customPlatforms']> = [
+  { kind: 'island', lat: -4.6, width: 5.8 },
+  { kind: 'side', lat: 4, side: 'R', width: 5 },
+];
+const HAGURAZAKI = 1;
+/** 尾崎: 橋上駅舎の地上駅、島式2面4線（内側の2・3番線が本線、外側の1・4番線が待避線。Wikipedia）。待避線の形は岸和田〜泉佐野の貝塚と同じ（横位置・分岐器長はゲーム用の概形） */
+const OZAKI = 5;
+const OZAKI_LOOP: StationLoop = { lat: -9.2, turnoutLength: 90, turnoutLimitKmh: 45 };
 
 const stations: Station[] = names.map(([name, kana], i) => {
   const stopS = START + KM[i];
   return {
     name, kana, stopS, platform: { from: stopS - 180, to: stopS + 40, side: 'L' },
     scheduledArrival: i * 100, dwell: i && i < LAST ? 25 : undefined, stopMarkerCars: 6,
-    elevated: i === 0, layout: i === 0 ? 'custom' : 'relative',
+    elevated: i === 0, layout: i === 0 || i === HAGURAZAKI ? 'custom' : i === OZAKI ? 'loop' : 'relative',
     ...(i === 0 ? { customPlatforms: IZUMISANO_PLATFORMS, mainTrack: '2番線' } : {}),
+    ...(i === HAGURAZAKI ? { customPlatforms: HAGURAZAKI_PLATFORMS } : {}),
+    ...(i === OZAKI ? { loop: { ...OZAKI_LOOP }, loopTrack: '1番線' } : {}),
   };
 });
 const approachSigns = (stopS: number): Sign[] => [
@@ -78,12 +106,12 @@ const approachSigns = (stopS: number): Sign[] => [
 // 信号は岸和田〜泉佐野コースと同じ作り方（相対式の駅: 場内信号と出発信号、駅間は約600mごとの閉そく）
 const signals: { id: string; s: number }[] = [];
 for (let i = 0; i < stations.length; i++) {
-  const sta = stations[i];
-  if (i > 0) signals.push({ id: `entry-${i}`, s: sta.platform.from - 150 });
+  const sta = stations[i], z = loopZone(sta);
+  if (i > 0) signals.push({ id: `entry-${i}`, s: z ? z.inFrom - 60 : sta.platform.from - 150 });
   if (i < LAST) signals.push({ id: `departure-${i}`, s: sta.stopS + 65 });
   const next = stations[i + 1];
   if (next) {
-    const from = sta.platform.to + 160, to = next.platform.from - 200;
+    const from = z ? z.outTo + 60 : sta.platform.to + 160, nz = loopZone(next), to = nz ? nz.inFrom - 100 : next.platform.from - 200;
     for (let k = 1; k <= Math.floor((to - from) / 600); k++) signals.push({ id: `block-${i}-${k}`, s: Math.round(from + (to - from) * k / (Math.floor((to - from) / 600) + 1)) });
   }
 }
@@ -98,8 +126,12 @@ const gradients = [
     .map(g => ({ from: g.from + START, to: g.to + START, permil: g.permil })),
 ];
 
+// 景観を置かない範囲: 空港線の高架の下・JR の橋の帯（道路は残す）と、羽倉崎検車区の構内。空港線・JR の平面形は線形（segments）から数値で求める
+const AIRPORT = airportGeometry(buildTrack({ segments, gradients, elevation0: 9, limits: [], stations: [] } as unknown as Route));
+const reserved = [...airportReserved(AIRPORT), ...HAGURAZAKI_RESERVED];
+
 const services: ServiceSpec[] = [
-  { id: 'local', name: '普通', cars: 4, units: [4], kind: 'commuter-new', kindOptions: ['commuter-new', 'commuter-old', 'commuter-1000'], formationOptions: [[4], [4, 2], [6]], lineLimit: 90, stops: names.map((_, i) => i), timetable: SM.local },
+  { id: 'local', name: '普通', cars: 4, units: [4], kind: 'commuter-new', kindOptions: ['commuter-new', 'commuter-old', 'commuter-1000'], formationOptions: [[4], [4, 2], [6]], lineLimit: 90, useLoop: true, stops: names.map((_, i) => i), timetable: SM.local },
   { id: 'southern', name: '特急サザン', cars: 8, units: [4, 4], kind: 'southern-10000', unitKinds: ['southern-10000', 'commuter-old'], lineLimit: 110, stops: [0, 5, 9], timetable: SM.southern },
 ];
 
@@ -115,7 +147,7 @@ export const izumisanoMisaki: Route = {
   scenery: { cityZones: [{ from: -Infinity, to: START + 11500 }, { from: START + 15500, to: Infinity }] },
   oncoming: [], signals, crossings: [],
   structures: [{ kind: 'viaduct', from: -400, to: VIADUCT_END }],
-  extraTracks: EXTRA,
+  extraTracks: EXTRA, reserved,
   terminalApproach: false,
 };
 // 下りの走行線と番線（ゲーム用の割り当て。泉佐野の割り当てと同じ）: 普通は外側下り線(T1)の1番（ドア右）、サザンは下り本線(T2)の2番（ドア左）。
@@ -127,6 +159,8 @@ for (const v of izumisanoMisaki.services!) {
   if (outer) v.laneLimits = [{ from: 300, to: 580, kmh: 45, label: '泉佐野分岐器' }];
 }
 setDestinations(izumisanoMisaki.services!, 'wakayama');
+// みさき公園（終着）: 盛土上の島式2面5線（custom 駅）。下りは普通が1番線(T1)、サザンが2番線(T2)。多奈川線(5番線・T5)と分岐も描く。定義は misaki-park.ts（みさき公園〜和歌山港と共通）
+addMisakiPark(izumisanoMisaki, LAST, true);
 
 export const izumisanoMisakiUp: Route = reverseRoute(izumisanoMisaki, { id: 'izumisano-misaki-up', name: '南海本線 みさき公園 → 泉佐野', timetable: SM_UP, signs: approachSigns });
 // 上りの走行線と番線: 普通・サザンとも上り本線(T3)の5番（ドア左）に着く
@@ -137,3 +171,7 @@ for (const v of izumisanoMisakiUp.services!) {
   v.platformSides = { [LAST]: 'L' };
 }
 setDestinations(izumisanoMisakiUp.services!, 'namba');
+// 尾崎（上り）の待避線は外側の4番線
+izumisanoMisakiUp.stations[LAST - OZAKI].loopTrack = '4番線';
+// みさき公園（上りの始発）: 上り本線(T3)の3番線から発車する（普通・サザンとも）
+setMisakiParkUp(izumisanoMisakiUp, 0);

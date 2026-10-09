@@ -6,7 +6,7 @@ import { fallbackBox, fallbackTree, prepareModel, type LoadedAssets, type Prepar
 import { buildSceneryBatches, type SceneryItem } from './scenery-batch';
 import { tramBlocks } from './hankai-tram';
 import { getTerrain } from './terrain';
-import { hasOsmScenery } from './osm-town';
+import { hasOsmScenery, osmCoastFor } from './osm-town';
 import { isMountain } from './mountain-terrain';
 import type { TreeSpot } from './town-jp';
 import { ChunkedBatch, M, P } from './batch';
@@ -49,7 +49,7 @@ export function buildBackdrop(ctx: GameContext): void {
   // 峰（位置・高さ・幅）を乱数で決めておく（rng の消費量は従来と同程度）
   const peaks: { s: number; h: number; w: number }[] = [];
   for (let s = S0; s < S1; s += 420) peaks.push({ s: s + rnd() * 300, h: 90 + rnd() * 200, w: 300 + rnd() * 400 });
-  if (route.coastalLandmarks?.length) {
+  if (route.coastalLandmarks?.length && route.coastalScenery !== false) {
     // 従来の前後稜線で使っていた82回分も消費し、後続の駅・人などの乱数列を保つ。
     for (let i = 0; i < 82; i++) rnd();
     buildCoastalBackdrop(ctx, S0, S1, at);
@@ -62,7 +62,10 @@ export function buildBackdrop(ctx: GameContext): void {
   };
   // 3 層 × 左右。各層は線路から dist の位置に、ridge の高さの帯を作る（谷側は地面より下まで）
   const layers = [{ d: 650, depth: 250 }, { d: 1000, depth: 350 }, { d: 1400, depth: 450 }];
+  // OSM の海岸線のあるコース: 海側は海の水面（coast.ts）。遠景の山は陸側だけ
+  const seaSide = osmCoastFor(route) ? seaSideOf(route) : 0;
   for (const side of [-1, 1]) layers.forEach((L, li) => {
+    if (side === seaSide) return;
     const base = pos.length / 3, cols = Math.ceil((S1 - S0) / 60) + 1;
     tmp.copy(near).lerp(far, li / 2 * .85 + .1);
     for (let k = 0; k < cols; k++) {

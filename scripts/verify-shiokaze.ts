@@ -14,7 +14,7 @@ import { misakiWakayamako, misakiWakayamakoUp } from '../src/route/routes/misaki
 import { approachText, departText } from '../src/audio/announce-text';
 import { applyService, destOf, sameClass, selectableServices } from '../src/route/service';
 import { buildTrack } from '../src/route/track';
-import { loopZone, loopShape } from '../src/route/service';
+import { loopZone, loopShape, profileLat, trackLines } from '../src/route/service';
 import { coastalThirdTracks } from '../src/world/coastal-stations';
 import type { Route, ServiceId } from '../src/route/types';
 import { createState, stagesOf, type VehicleSel } from '../src/game/state';
@@ -95,7 +95,7 @@ if (process.argv.includes('--selection-only')) process.exit(0);
     assert.equal(route.crossings?.length, 0, `${tag}は踏切を置かない`);
     assert.deepEqual(selectableServices(route).map(v => v.id), ['local', 'southern'], `${tag}のTOP種別は普通とサザン`);
     const track = buildTrack(route);
-    assert.ok(Math.abs(track.length - 15380.176) < .01, `${tag}の線形の総延長 ${track.length}`);
+    assert.ok(Math.abs(track.length - 15378.192) < .01, `${tag}の線形の総延長 ${track.length}`);
     // ホームは直線・水平（みさき公園は待避線の分岐器を含む区間も本線が直線）
     for (const st of route.stations) {
       const { from, to } = st.platform, phi = track.trackAt(from).phi, y = track.trackAt(from).y;
@@ -147,6 +147,10 @@ if (process.argv.includes('--selection-only')) process.exit(0);
     for (const v of selectableServices(route)) {
       const svc = applyService(r, v.id)!, tr = buildTrack(r);
       if (down) {
+        // 始発のみさき公園: 普通は1番線(T1・横位置-9.2・ドア右)、サザンは2番線(T2・0・ドア左)
+        assert.equal(r.stations[0].mainTrack, v.id === 'local' ? '1番線' : '2番線');
+        assert.ok(Math.abs(tr.pathLat(r.stations[0].stopS) - (v.id === 'local' ? -9.2 : 0)) < 1e-6, `${tag}/${v.id}みさき公園の発車線`);
+        assert.equal(r.stations[0].platform.side, v.id === 'local' ? 'R' : 'L');
         assert.equal(r.stations[last].mainTrack, '2番線');
         assert.ok(approachText(r, last, svc).includes('終点'), approachText(r, last, svc));
         assert.ok(Math.abs(tr.pathLat(r.stations[last].stopS) + 3.9) < 1e-6, `${tag}/${v.id}和歌山港の自線は島式ホームの左の線`);
@@ -154,11 +158,45 @@ if (process.argv.includes('--selection-only')) process.exit(0);
       } else {
         assert.equal(r.stations[0].mainTrack, '1番線');
         assert.ok(Math.abs(tr.pathLat(r.stations[0].stopS) + 3.9) < 1e-6, `${tag}/${v.id}和歌山港の発車線`);
-        assert.equal(r.stations[last].enterLoop, v.id === 'local', `${tag}/${v.id}みさき公園の待避線入線`);
+        // 上りの終着はみさき公園: 上り本線(T3)の3番線（待避線は使わない。ドア左）
+        assert.ok(!r.stations[last].enterLoop && !r.stations[last].loop, `${tag}/${v.id}みさき公園は待避線なし`);
+        assert.equal(r.stations[last].mainTrack, '3番線');
+        assert.equal(r.stations[last].platform.side, 'L');
+        assert.ok(Math.abs(tr.pathLat(r.stations[last].stopS)) < 1e-6, `${tag}/${v.id}みさき公園の自線は上り本線`);
       }
     }
   }
   console.log('みさき公園〜和歌山港（上下）の駅・線形・終着・種別チェック成功');
+}
+// みさき公園駅（盛土上の島式2面5線）: 2コース・上下で共通の定義（routes/misaki-park.ts）。線路4本（T1・T2・T3・T5）、島式2面、多奈川線の車止め
+{
+  const C = 4; // route.tracks [0, 4] の左右の和
+  for (const [route, at, down] of [[izumisanoMisaki, 9, true], [izumisanoMisakiUp, 0, false], [misakiWakayamako, 0, true], [misakiWakayamakoUp, 5, false]] as const) {
+    const sta = route.stations[at], tag = route.id, dn = (lat: number) => down ? lat : C - lat; // 下りの座標へ戻す
+    assert.equal(sta.name, 'みさき公園');
+    assert.equal(sta.layout, 'custom'); assert.ok(!sta.loop && !sta.island, `${tag}みさき公園は待避線・島式1面ではない`);
+    const mid = (sta.platform.from + sta.platform.to) / 2;
+    const lats = trackLines(route).filter(l => mid >= l.from && mid <= l.to).map(l => dn(l.lat(mid))).sort((a, b) => a - b);
+    assert.deepEqual(lats.map(v => Math.round(v * 10) / 10), [-9.2, 0, 4, 13.2], `${tag}みさき公園の線路は4本`);
+    const isl = (sta.customPlatforms ?? []).map(p => ({ lat: dn(p.lat), w: p.kind === 'island' ? p.width : 0 })).sort((a, b) => a.lat - b.lat);
+    assert.deepEqual(isl.map(p => [Math.round(p.lat * 10) / 10, p.w]), [[-4.6, 5.8], [8.6, 5.8]], `${tag}島式ホーム2面`);
+    // 5番線（多奈川線）: 車止めで終わる、本線から離れていく、ホームの先 300m から曲がる
+    const t5 = route.extraTracks!.find(x => x.id === 'misaki-t5')!;
+    assert.equal(t5.bumpers?.length, 1, `${tag}多奈川線の車止め`);
+    const far = t5.bumpers![0], dir = far > mid ? 1 : -1;
+    const sep = (d: number) => Math.abs(dn(profileLat(t5.lat, mid + dir * d)) - 4);
+    assert.ok(sep(260) < 4.5 && sep(700) > 40 && sep(700) > sep(500), `${tag}多奈川線は並んでから右（西）へ離れる ${sep(260)} ${sep(700)}`);
+    assert.ok(Math.abs(far - mid) > 700 && Math.abs(far - mid) < 1000 && (dir > 0 ? far < route.extent.to : far > route.extent.from), `${tag}車止めはコースの範囲内`);
+    // 景観を置かない範囲がホームと多奈川線を含む
+    assert.ok(route.reserved!.some(z => z.from < sta.platform.from && z.to > sta.platform.to), `${tag}駅の景観除外`);
+    // 種別ごとの番線: 下りは普通 1番線・サザン 2番線、上りは3番線
+    for (const v of route.services!) {
+      const name = v.trackNames?.[at], side = v.platformSides?.[at];
+      assert.equal(name, down ? (v.id === 'local' ? '1番線' : '2番線') : '3番線', `${tag}/${v.id}みさき公園の番線`);
+      assert.equal(side, down && v.id === 'local' ? 'R' : 'L', `${tag}/${v.id}みさき公園のドア側`);
+    }
+  }
+  console.log('みさき公園駅（島式2面5線・多奈川線の分岐）の定義チェック成功');
 }
 if (process.argv.includes('--misaki-only')) process.exit(0);
 

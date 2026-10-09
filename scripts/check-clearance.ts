@@ -26,6 +26,7 @@ import { buildTrackMesh } from '../src/world/track-mesh';
 import { buildStructures } from '../src/world/structures';
 import { buildCoastalLandmarks } from '../src/world/coastal-landmarks';
 import { buildCatenary } from '../src/world/catenary';
+import { buildCoast } from '../src/world/coast';
 import { buildBackdrop, buildEndBlock, placeScenery, prepareSceneryModels } from '../src/world/scenery';
 import { buildSigns } from '../src/world/signs';
 import { buildStations } from '../src/world/stations';
@@ -66,6 +67,7 @@ async function build(ctx: GameContext): Promise<void> {
   buildCoastalLandmarks(ctx);
   buildCatenary(ctx);
   buildBackdrop(ctx);
+  buildCoast(ctx);
   buildSigns(ctx);
   buildStations(ctx);
   buildEndBlock(ctx);
@@ -80,6 +82,14 @@ async function build(ctx: GameContext): Promise<void> {
     (await import('../src/world/suminoe-depot')).buildSuminoeDepot(nctx);
     (await import('../src/world/namba-landmarks')).buildNambaLandmarks(nctx);
     (await import('../src/world/koya-traffic')).buildKoyaPlatforms(nctx);
+  }
+  // みさき公園〜和歌山港の和歌山市駅（電車を除く）
+  (await import('../src/world/wakayamashi')).buildWakayamashi(ctx);
+  // 泉佐野〜みさき公園の専用景観（空港線の高架・JR の橋・羽倉崎検車区。電車を除く）
+  const sctx = (await import('../src/world/down-frame')).downFrame(ctx, 'izumisano-misaki');
+  if (sctx) {
+    (await import('../src/world/izumisano-airport')).buildIzumisanoAirport(sctx);
+    (await import('../src/world/hagurazaki-depot')).buildHagurazakiDepot(sctx);
   }
   releaseOsmData();
   placeScenery(ctx, prepareSceneryModels({} as any), town.trees);

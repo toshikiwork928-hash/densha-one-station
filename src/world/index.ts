@@ -8,6 +8,7 @@ import { buildSignals } from './signals';
 import { buildStations } from './stations';
 import { buildTrackMesh } from './track-mesh';
 import { buildTerrain } from './terrain';
+import { buildCoast } from './coast';
 import { buildStructures } from './structures';
 import { buildCatenary } from './catenary';
 import { buildCrossings } from './crossings';
@@ -18,6 +19,7 @@ import { createOvertaking } from './overtaking';
 import { buildCoastalLandmarks } from './coastal-landmarks';
 import { buildHagoromoTrain } from './hagoromo-train';
 import { buildNambaTerminal } from './namba-terminal';
+import { buildMisakiParkTrain } from './misaki-park-train';
 import { buildSuminoeDepot, buildSuminoeDepotTrains } from './suminoe-depot';
 import { buildKoyaPlatforms, buildKoyaTraffic } from './koya-traffic';
 import { buildNambaParked } from './namba-parked';
@@ -25,6 +27,11 @@ import { buildNambaLandmarks } from './namba-landmarks';
 import { nambaFrame } from './namba-frame';
 import { buildSumiyoshiTaisha } from './sumiyoshi-taisha';
 import { createRunPasses } from './run-pass';
+import { buildWakayamashi } from './wakayamashi';
+import { buildWakayamashiTrains } from './wakayamashi-trains';
+import { downFrame } from './down-frame';
+import { buildIzumisanoAirport } from './izumisano-airport';
+import { buildHagurazakiDepot, buildHagurazakiDepotTrains } from './hagurazaki-depot';
 
 export interface World {
   oncoming: OncomingSystem;
@@ -40,8 +47,10 @@ export function buildWorld(ctx: GameContext): World {
   buildStructures(ctx);
   buildCoastalLandmarks(ctx);
   buildHagoromoTrain(ctx); // 羽衣3番線に停車中の 2000系（描画のみ）
+  buildMisakiParkTrain(ctx); // みさき公園5番線（多奈川線）に停車中の 7100系 2両（描画のみ）
   buildCatenary(ctx); // rng 不使用
   buildBackdrop(ctx);
+  buildCoast(ctx); // OSM の海岸線のあるコースだけ（rng 不使用）
   buildSigns(ctx);
   buildStations(ctx);
   buildEndBlock(ctx);
@@ -60,6 +69,16 @@ export function buildWorld(ctx: GameContext): World {
     buildKoyaPlatforms(nctx);
     buildKoyaTraffic(nctx); // 高野線・汐見橋線の電車（描画のみ）
     buildNambaParked(nctx); // 難波の他の番線に停まっている電車（描画のみ）
+  }
+  // みさき公園〜和歌山港の和歌山市駅（構内・車庫・JR・留置の電車。上りは world/mw-frame.ts で下りの座標へ写す）。ctx.rng を消費しない
+  buildWakayamashi(ctx);
+  buildWakayamashiTrains(ctx);
+  // 泉佐野〜みさき公園専用（下り 'izumisano-misaki' と上り '-up'。座標は下りのもの、world/down-frame.ts）。ctx.rng を消費しない
+  const sctx = downFrame(ctx, 'izumisano-misaki');
+  if (sctx) {
+    buildIzumisanoAirport(sctx); // 南海空港線の分岐の高架と、その上を通る JR 関西空港線の橋
+    buildHagurazakiDepot(sctx); // 羽倉崎検車区
+    buildHagurazakiDepotTrains(sctx); // 留置の電車（描画のみ）
   }
   const player = createPlayerTrain(ctx);
   createOvertaking(ctx); // [G] 待避の通過列車・待避線の先行普通

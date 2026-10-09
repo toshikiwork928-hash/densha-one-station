@@ -22,6 +22,8 @@ import { shiokaze } from '../route/routes/shiokaze';
 import { kishiwada } from '../route/routes/kishiwada';
 import { izumisano } from '../route/routes/izumisano';
 import { misakiWakayamako } from '../route/routes/misaki-wakayamako';
+import { izumisanoMisaki } from '../route/routes/izumisano-misaki';
+import { seaMaskOf, type CoastData } from './coast-field';
 
 export interface OsmData {
   source: string;
@@ -33,6 +35,8 @@ export interface OsmData {
   areas: (string | number[])[][];
   /** 高架の都市高速 [幅, s,lat,高さ の並び] */
   highways?: (number | number[])[][];
+  /** 海岸線（海の多角形・砂浜・防波堤など。OSM の natural=coastline）。あるコースだけ */
+  coast?: CoastData;
   landmarks: (string | number)[][];
 }
 
@@ -43,7 +47,8 @@ const DATASETS: { id: string; base: Route; load: () => Promise<OsmData>; /** 水
   { id: 'izumiotsu-kishiwada', base: kishiwada, load: async () => (await import('../data/osm/izumiotsu-kishiwada.json')).default as unknown as OsmData },
   { id: 'kishiwada-izumisano', base: izumisano, load: async () => (await import('../data/osm/kishiwada-izumisano.json')).default as unknown as OsmData },
   // みさき公園〜和歌山港: OSM の水面データが無いので、紀ノ川橋梁の下の水面を手で作ったデータ（建物・道路は無い。街並みは手続き生成）
-  { id: 'misaki-wakayamako', base: misakiWakayamako, load: async () => (await import('../data/osm/misaki-wakayamako.json')).default as unknown as OsmData, waterOnly: true },
+  { id: 'misaki-wakayamako', base: misakiWakayamako, load: async () => (await import('../data/osm/misaki-wakayamako.json')).default as unknown as OsmData },
+  { id: 'izumisano-misaki', base: izumisanoMisaki, load: async () => (await import('../data/osm/izumisano-misaki.json')).default as unknown as OsmData },
 ];
 
 /** 走るコースとデータの共通の駅（駅名が一致するもの）。2つ未満ならそのデータは使わない。駅名だけで決まる（applyService の前後で変わらない） */
@@ -167,6 +172,40 @@ export function osmFor(route: Route): OsmData | null {
       const flat = poly.flatMap(([sb, l]) => [mapS(sb), mapL(l)]);
       out.areas.push([a[0], rev ? reversePairs(flat) : flat]);
     }
+    if (data.coast) {
+      const oc = out.coast ??= { sea: [], lines: [], beach: [], works: [] };
+      // 海・砂浜・防波堤の輪: 範囲の外は切り、s と横位置を写す（上りは鏡像。向きは反時計回りにそろえる）
+      const mapRing = (f: number[]): number[] | null => {
+        let poly: [number, number][] = [];
+        for (let i = 0; i < f.length; i += 2) poly.push([f[i], f[i + 1]]);
+        if (lo > -Infinity) poly = clipS(poly, lo, 1);
+        if (hi < Infinity) poly = clipS(poly, hi, -1);
+        if (poly.length < 3) return null;
+        let m = poly.map(([sb, l]) => [mapS(sb), mapL(l)] as [number, number]);
+        if (ringArea(m) < 0) m = m.reverse();
+        return m.flatMap(q => q);
+      };
+      for (const sea of data.coast.sea) {
+        const outer = mapRing(sea[0]);
+        if (!outer) continue;
+        oc.sea.push([outer, ...sea.slice(1).map(mapRing).filter((x): x is number[] => !!x)]);
+      }
+      for (const b of data.coast.beach) { const r = mapRing(b); if (r) oc.beach.push(r); }
+      for (const [kind, closed, pts] of data.coast.works) {
+        if (closed) { const r = mapRing(pts); if (r) oc.works.push([kind, 1, r]); continue; }
+        const keep: number[] = [];
+        const flush = () => { if (keep.length >= 4) oc.works.push([kind, 0, keep.slice()]); keep.length = 0; };
+        for (let i = 0; i < pts.length; i += 2) { if (inR(pts[i])) keep.push(mapS(pts[i]), mapL(pts[i + 1])); else flush(); }
+        flush();
+      }
+      // 海岸線: 点の並びの向きを保つ（s と横位置の両方が反転する上りは点対称なので、進行方向の左が海のまま）
+      for (const ln of data.coast.lines) {
+        const keep: number[] = [];
+        const flush = () => { if (keep.length >= 4) oc.lines.push(keep.slice()); keep.length = 0; };
+        for (let i = 0; i < ln.length; i += 2) { if (inR(ln[i])) keep.push(mapS(ln[i]), mapL(ln[i + 1])); else flush(); }
+        flush();
+      }
+    }
     for (const m of data.landmarks) if (inR(m[1] as number)) out.landmarks.push([m[0], mapS(m[1] as number), mapL(m[2] as number)]);
     out.source = data.source;
     any = true;
@@ -176,6 +215,11 @@ export function osmFor(route: Route): OsmData | null {
   const res = any ? out : null;
   mapped = { route, data: res, scenery };
   return res;
+}
+
+/** このコースの海岸線のデータ（走るコースの座標。上りも同じ位置）。無ければ null。区間データを読み込み済みのときだけ */
+export function osmCoastFor(route: Route): CoastData | null {
+  return osmReady(route) ? osmFor(route)?.coast ?? null : null;
 }
 
 /** osmFor のうち、街並みを OSM のデータで作るコースのもの。水面だけの手作りデータのコースは null（街並みは手続き生成） */
@@ -193,6 +237,12 @@ function clipS(poly: [number, number][], v: number, keep: 1 | -1): [number, numb
     if (ia !== ib) { const t = (v - a[0]) / (b[0] - a[0]); out.push([v, a[1] + (b[1] - a[1]) * t]); }
   }
   return out;
+}
+/** 輪の符号付き面積（s-lat 平面で反時計回りが正） */
+function ringArea(p: [number, number][]): number {
+  let a = 0;
+  for (let i = 0; i < p.length; i++) { const q = p[(i + 1) % p.length]; a += p[i][0] * q[1] - q[0] * p[i][1]; }
+  return a / 2;
 }
 function reverseTriples(f: number[]): number[] {
   const out: number[] = [];
@@ -251,7 +301,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
   const rnd = createRng(4242);
   const S0 = route.extent.from - 60, S1 = route.extent.to + 60;
   const reserved = route.reserved ?? [];
-  const inReserved = (s0: number, s1: number, l0: number, l1: number) => reserved.some(z => s0 < z.to && s1 > z.from && l0 < z.lat1 && l1 > z.lat0);
+  const inReserved = (s0: number, s1: number, l0: number, l1: number, road = false) => reserved.some(z => !(road && z.keepRoads) && s0 < z.to && s1 > z.from && l0 < z.lat1 && l1 > z.lat0);
   // 線路の端（本線と、並んで走る追加の線路）。この外へ 4m 以上離れた所だけ使う
   const spanCache = new Map<number, [number, number]>();
   const span = (s: number) => {
@@ -285,6 +335,12 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
   // 駅直結のタワー、道路の跨線橋、阪堺線・高師浜線の高架
   const towers = [...towerZones(route), ...twinTowerZones(route)];
   const overpasses = (route.coastalLandmarks ?? []).filter(l => l.kind === 'road-overpass').map(l => l.s);
+  // トンネルの上の山（terrain.ts の hill: トンネルの s 範囲 × 線路から ±170m）。地面は線路の高さのままなので、道路・建物・木は山の中に埋まる。置かない
+  const tunnelsOf = (route.structures ?? []).filter(x => x.kind === 'tunnel');
+  const underHill = (s: number, l: number) => tunnelsOf.some(t => s > t.from - 30 && s < t.to + 30 && Math.abs(l - 2) < 170);
+  // 海（OSM の海岸線の多角形。coast.ts が水面を張る）: 建物・道路・木を海の中に置かない
+  const sea = seaMaskOf(data.coast);
+  const inSea = (s: number, l: number, m = 0) => !!sea && sea.inSea(s, l, m);
   const elevated = (s: number) => T.trackY(s) - T.dryY(s) > 3;
   const blocked = (s0: number, s1: number, l0: number, l1: number, g: number, road = false) => {
     const s = (s0 + s1) / 2, [a, b] = span(s), sd = (l0 + l1) / 2 < (a + b) / 2 ? -1 : 1;
@@ -341,11 +397,12 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
   /** 置ける建物か（線路・専用モジュールの敷地・駅前・川・道路を避ける） */
   const placeable = (row: number[]) => {
     const [s, lat, len, wid, angDeg] = row;
-    if (s < S0 || s > S1) return false;
+    if (s < S0 || s > S1 || underHill(s, lat)) return false;
     const a = angDeg * Math.PI / 180, half = Math.max(len, wid) / 2, g = gap(s, lat);
     // 線路（本線・ホーム・分かれていく線路・入出庫線）との離隔: 建物の外形の s 方向・横方向の張り出しで測る
     const hs = (len * Math.abs(Math.cos(a)) + wid * Math.abs(Math.sin(a))) / 2, hl = (len * Math.abs(Math.sin(a)) + wid * Math.abs(Math.cos(a))) / 2;
     if (g < hl + 4) return false; // 本線群の帯にかかる
+    if (sea && (inSea(s, lat, 3) || inSea(s + hs, lat + hl, 3) || inSea(s - hs, lat - hl, 3) || inSea(s + hs, lat - hl, 3) || inSea(s - hs, lat + hl, 3))) return false; // 海の上
     if (nearLine(s - hs, s + hs, lat - hl, lat + hl)) return false;
     if (inReserved(s - half, s + half, lat - half, lat + half)) return false; // 専用モジュールの敷地（駅ビル・車庫・商業施設）
     if (blocked(s - half, s + half, lat - half, lat + half, g)) return false;
@@ -569,7 +626,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
     const pieces: number[][] = []; let cur: number[] = [];
     for (let i = 0; i < pts.length; i += 2) {
       const ps = pts[i], pl = pts[i + 1], g = gap(ps, pl);
-      const bad = (!elevated(ps) && g < w / 2 + 3) || blocked(ps - 1, ps + 1, pl - 1, pl + 1, Math.max(0, g - w / 2), true) || inReserved(ps - 1, ps + 1, pl - 1, pl + 1);
+      const bad = underHill(ps, pl) || inSea(ps, pl, 2) || (!elevated(ps) && g < w / 2 + 3) || blocked(ps - 1, ps + 1, pl - 1, pl + 1, Math.max(0, g - w / 2), true) || inReserved(ps - 1, ps + 1, pl - 1, pl + 1, true);
       if (bad) { if (cur.length >= 4) pieces.push(cur); cur = []; } else cur.push(ps, pl);
     }
     if (cur.length >= 4) pieces.push(cur);
@@ -649,6 +706,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
     for (let q = Math.floor(s0 / 40) * 40; q < s1; q += 40) {
       const piece = clipS(clipS(poly, q, 1), q + 40, -1);
       if (piece.length < 3) continue;
+      if (underHill(q + 20, piece.reduce((a, p) => a + p[1], 0) / piece.length)) continue;
       const contour = piece.map(([x, y]) => new THREE.Vector2(x, y));
       const tri = THREE.ShapeUtils.triangulateShape(contour, []);
       const V = contour.map(v => { const p = track.at(v.x, v.y, 0); p.y = T.terrainY(clampS(v.x), v.y) + dy; return p; });
@@ -686,7 +744,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
     for (let s = s0 + sp / 2; s < s1; s += sp) for (let l = l0 + sp / 2; l < l1; l += sp) {
       if (nT >= TREE_MAX) break;
       const ss = s + (rnd() - .5) * sp * .8, ll = l + (rnd() - .5) * sp * .8;
-      if (!inPoly(pts, ss, ll) || gap(ss, ll) < 6 || roadNear(ss, ll) || reservedAt(ss, ll) || waters.some(w => inPoly(w, ss, ll)) || T.riverNear(clampS(ss), ll, 3)) continue;
+      if (!inPoly(pts, ss, ll) || gap(ss, ll) < 9 || roadNear(ss, ll) || reservedAt(ss, ll) || waters.some(w => inPoly(w, ss, ll)) || T.riverNear(clampS(ss), ll, 3) || underHill(ss, ll) || inSea(ss, ll, 4)) continue;
       if (type === 'park' && rnd() < (big ? .15 : .35)) continue; // 公園は広場を残す
       const [rs, rl] = toReal(ss, ll);
       trees.push({ s: rs, lat: rl, y: ground(ss), k: type === 'wood' || type === 'shrine' || big ? 1.05 + rnd() * .5 : .8 + rnd() * .4 });
@@ -703,7 +761,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
         const ss = s0 + (s1 - s0) * u / L, ll = l0 + (l1 - l0) * u / L, ns = -(l1 - l0) / L, nl = (s1 - s0) / L;
         for (const side of [-1, 1]) {
           const ts = ss + ns * side * (w / 2 + 1.2), tl = ll + nl * side * (w / 2 + 1.2);
-          if (gap(ts, tl) < 40 || rnd() < .3 || T.riverNear(clampS(ts), tl, 4)) continue;
+          if (gap(ts, tl) < 40 || underHill(ts, tl) || inSea(ts, tl, 4) || rnd() < .3 || T.riverNear(clampS(ts), tl, 4)) continue;
           const [rs, rl] = toReal(ts, tl);
           trees.push({ s: rs, lat: rl, y: ground(ts), k: .7 + rnd() * .25 }); nT++;
         }

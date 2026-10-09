@@ -84,7 +84,18 @@ export function buildTrackMesh(ctx: GameContext): void {
         cuts.push([a, b, true]); q0 = b;
       }
       if (q0 < TS1) cuts.push([q0, TS1, false]);
+      // 単線区間（route.hiddenTracks）は他の線と重なっているので、その範囲は描かない
+      const shown: [number, number, boolean][] = [];
       for (const [s0, s1, f] of cuts) {
+        let from = s0;
+        for (const h of (route.hiddenTracks ?? []).filter(q => q.track === c).sort((p, q) => p.from - q.from)) {
+          if (h.to <= from || h.from >= s1) continue;
+          if (h.from > from) shown.push([from, h.from, f]);
+          from = Math.max(from, h.to);
+        }
+        if (s1 > from) shown.push([from, s1, f]);
+      }
+      for (const [s0, s1, f] of shown) {
         if (s1 - s0 < .5) continue;
         scene.add(extrudeFn(track, s => { const m = l(s); return [[m - 2.3, 0.0], [m - 1.4, 0.22], [m + 1.4, 0.22], [m + 2.3, 0.0]]; }, s0, s1, f ? 2 : 4, matBallast));
         for (const g of [-GAUGE, GAUGE])
@@ -117,6 +128,7 @@ export function buildTrackMesh(ctx: GameContext): void {
       let i = 0;
       for (let k = Math.ceil((s0 - TS0) / sp); TS0 + k * sp < s1 && i < cnt - 1; k++) for (const c of route.tracks) {
         const s = TS0 + k * sp, t = trackAt(s); q.setFromEuler(e.set(0, -t.phi, 0));
+        if (route.hiddenTracks?.some(h => h.track === c && s >= h.from && s <= h.to)) continue; // 単線区間: 重なっている線の枕木は作らない
         const lp = loops.find(o => o.base === c && s > o.z.inFrom && s < o.z.outTo);
         const d = lp ? lp.lat(s) - c : 0;
         const co = c + islandOffset(route, c, s); // 島式ホーム駅の S字

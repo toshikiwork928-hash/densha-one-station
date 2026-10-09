@@ -56,7 +56,7 @@ export interface Station {
 }
 
 export type CustomPlatform =
-  | { kind: 'island'; lat: number; width: number; from?: number; to?: number; roof?: number; /** 専用モジュールが描く（難波など） */ external?: boolean }
+  | { kind: 'island'; lat: number; width: number; from?: number; to?: number; roof?: number; /** ホーム中央の跨線橋への階段口（既定 true。みさき公園は専用の地下道の口を描くので false） */ stairs?: boolean; /** 専用モジュールが描く（難波など） */ external?: boolean }
   | { kind: 'side'; lat: number; side: 'L' | 'R'; from?: number; to?: number; width?: number; external?: boolean };
 
 /** 線路の横位置の折れ線 [s, lat][]（s は昇順）。隣り合う点の lat が違う区間は余弦の S字でつなぎ、範囲外は端の値 */
@@ -78,6 +78,8 @@ export interface ExtraTrack {
   deckSpan?: [number, number];
   /** 離れていく区間の架線柱の横位置（線路中心からの相対、既定は外側へ 2.7） */
   poleOffset?: number;
+  /** 盛土の上の線路: 線路が地面より高く構造物でない区間は、盛土を本線と並ぶ線路（11m 以内）の外まで広げ、本線から離れる区間はこの線路だけの盛土を作る（world/terrain.ts） */
+  bank?: boolean;
 }
 
 /** 2面4線の待避線。lat は自線待避線の横位置（左が負、例 -9.2）。対向側は route.tracks の対向線から鏡像に +lat 側へ */
@@ -217,7 +219,11 @@ export interface Route {
   /** 描画専用の沿岸線ランドマーク。進行反転時は位置・左右・分岐向きを反転する。 */
   coastalLandmarks?: { kind: 'road-overpass' | 'tram-overpass' | 'steel-bridge' | 'branch' | 'twin-tower'; s: number; length?: number; label?: string; side?: 1 | -1; direction?: 1 | -1;
     /** 区間データの向きが反転済み（reverseRoute で作った側）。未指定なら route.id の '-up' で判定。通しコース（route/concat.ts）は区間ごとに持ち越す */
-    reversed?: boolean }[];
+    reversed?: boolean;
+    /** steel-bridge: トラスの色（既定は bridgeStyle.color） */
+    color?: number;
+    /** steel-bridge: 曲弦トラス（下路）で、上下線が別々の橋のとき線路ごとの形式。route.tracks の横位置の小さい線（左）から並べる（向きが反転した側は reversed で自動的に逆順） */
+    trussStyles?: ('pratt' | 'warren')[] }[];
   id: string;
   name: string;
   /** 路線（線区）の識別子。同じ線区の下り・上りで共通（例 'shiokaze'、'mountain'）。メニューの路線選択に使う */
@@ -273,19 +279,27 @@ export interface Route {
   crossings?: { id: string; s: number; roadWidth?: number }[];
   /** [C] トンネル・高架などの構造物区間 */
   structures?: { kind: 'tunnel' | 'viaduct' | 'bridge'; from: number; to: number; /** 高架の壁（高欄）を低くする（壁のない高架） */ open?: boolean;
-    /** 橋梁: 上下線が別々の単線橋（線路ごとの床版・主桁・橋脚） */ split?: boolean }[];
+    /** 橋梁: 上下線が別々の単線橋（線路ごとの床版・主桁・橋脚） */ split?: boolean;
+    /** 橋梁: 橋脚の位置 s（未指定は 45m ごと） */ piers?: number[];
+    /** 橋梁: 線路ごとの橋脚の材質（route.tracks の順。split のとき） */ pierStyle?: ('brick' | 'concrete')[];
+    /** 橋梁（groundFollowsTrack のコース）: 橋の下の地面を線路面より下げる量 [m]（両端 120m でならす）。水面もこの分だけ下がり、桁と水面の間が空く */ drop?: number }[];
   /** route.tracks の線の横位置の変化（キー = tracks の値の文字列。値は絶対の横位置）。複々線で対向線が外へずれる・駅で線路が開く */
   trackProfiles?: Record<string, LatProfile>;
   /** この範囲では追加の線路をすべて本線と一続きの床版・架線柱の範囲に含める（頭端駅の扇状の構内） */
   deckJoin?: { from: number; to: number }[];
   /** 描画・景観用の追加の線路 */
   extraTracks?: ExtraTrack[];
+  /** 単線区間: route.tracks の線 track が、この範囲では他の線と同じ横位置に重なっているので、その線の線路面・枕木を描かない（trackProfiles で重ねる） */
+  hiddenTracks?: { track: number; from: number; to: number }[];
   /** 景観（住宅・ビル・道路）を置かない範囲（s・横位置の矩形）。車庫・大型施設の敷地 */
-  reserved?: { from: number; to: number; lat0: number; lat1: number; /** この範囲には高架の橋脚を立てない（下を他の線路が通る） */ noPiers?: boolean }[];
+  reserved?: { from: number; to: number; lat0: number; lat1: number; /** この範囲には高架の橋脚を立てない（下を他の線路が通る） */ noPiers?: boolean;
+    /** 建物・木・駐車場は置かないが、OSM の道路は残す（高架の下を道路が通る。空港線・JR の高架） */ keepRoads?: boolean }[];
   /** 時間帯（ダイヤのパターン）。game/loop.ts が環境の時間帯から設定。未指定は昼 */
   timeOfDay?: TimeOfDay;
   /** 種別適用後: 自列車の走行線（ServiceSpec.lane。route/service.ts が設定） */
   activeLane?: LatProfile;
+  /** false のとき、coastalLandmarks があっても遠景を沿岸（海・工業地帯）にしない。内陸のコースが鋼橋などの目印だけを使うとき */
+  coastalScenery?: false;
   /** 鋼橋の塗色と形（throughGirder = 下路プレートガーダー: 線路の両脇に桁の側板が立つ。トラス区間 steel-bridge は除く） */
   bridgeStyle?: { color: number; throughGirder?: boolean };
   /** 複々線の駅（stations）でラッシュ時に足す対向の普通の走行線の横位置（trackProfiles のキー。緩行線） */

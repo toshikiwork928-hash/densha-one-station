@@ -3,17 +3,18 @@
 // 線形・勾配・トンネル・橋は src/data/geometry/south.json（OSM の線路の中心線と国土地理院の標高から作った簡略化した下書き。実測ではない）を
 // scripts/slice-south-geometry.ts で切り出したもの（misaki-wakayamako-geometry.ts）。みさき公園の停止位置（south.json の s=17900）が s=180。
 // 駅の形は配線略図.net 南海本線 figures/011_06〜011_08 と Wikipedia に基づく概形。
-//   みさき公園: 盛土上・島式2面5線（多奈川線は描かない）→ 島式2面4線（loop）で近似。孝子・和歌山大学前・紀ノ川・和歌山市: 地上・相対式2面2線（和歌山市の2面5線は relative で近似）。
+//   みさき公園: 盛土上・島式2面5線。custom 駅（島式2面 + 1番線・5番線の追加の線路 + 多奈川線の分岐）で表す。泉佐野〜みさき公園と共通の定義（misaki-park.ts）。
+//   孝子・和歌山大学前・紀ノ川・和歌山市: 地上・相対式2面2線（和歌山市の2面5線は relative で近似）。
 //   和歌山港: 築堤上・島式1面2線、終点。ゲーム用に、下りは2番線・上りは1番線に入る。
 // 運行は普通と特急サザンだけ。景観は手続き生成のまばらな街並み（OSM の建物・道路データは作らない）、対向列車は置かない。
-import type { Route, Sign, SpeedLimit, Station, StationIsland, StationLoop } from '../types';
+import type { Route, Sign, SpeedLimit, Station, StationIsland } from '../types';
 import { reverseRoute } from '../reverse';
 import { islandZone, loopZone, setDestinations } from '../service';
 import { MWT, MWT_UP } from './misaki-wakayamako-timetable';
 import { MW_DISTANCES, MW_GRADIENTS, MW_SEGMENTS, MW_STRUCTURES } from './misaki-wakayamako-geometry';
+import { addMisakiPark, setMisakiParkUp } from './misaki-park';
+import { applyWakayama, applyWakayamaUp } from './misaki-wakayamako-wakayama';
 
-/** みさき公園の待避線は岸和田〜泉佐野（izumisano.ts）と同じ形 */
-const LOOP: StationLoop = { lat: -9.2, turnoutLength: 90, turnoutLimitKmh: 45 };
 /** 和歌山港の島式ホーム: 線路が左右へ 3.9m ずつ開き（線間 4+7.8=11.8m）、幅 8.4m のホーム。ホームの先で車止め（終点）。分岐器は両開き 60m。
  *  実際のホームの幅・線間は不明（ゲーム用の概形） */
 const ISLAND: StationIsland = { spread: 3.9, length: 60 };
@@ -28,7 +29,6 @@ const stations: Station[] = names.map(([name, kana], i) => {
     name, kana, stopS, platform: { from: stopS - 180, to: stopS + 40, side: 'L' },
     scheduledArrival: i * 100, dwell: i && i < LAST ? 25 : undefined, stopMarkerCars: 6,
     ...(i === LAST ? { elevated: true, island: { ...ISLAND }, headEnd: true } : {}),
-    ...(i === 0 ? { layout: 'loop' as const, loop: { ...LOOP } } : {}),
     ...(i > 0 && i < LAST ? { layout: 'relative' as const } : {}),
   };
 });
@@ -82,7 +82,7 @@ export const misakiWakayamako: Route = {
   limits,
   stations,
   services: [
-    { id: 'local', name: '普通', cars: 4, units: [4], kind: 'commuter-new', kindOptions: ['commuter-new', 'commuter-old', 'commuter-1000'], formationOptions: [[4], [4, 2], [6]], lineLimit: 90, useLoop: true, stops: [0, 1, 2, 3, 4, 5], timetable: MWT.local, trackNames: { 5: '2番線' } },
+    { id: 'local', name: '普通', cars: 4, units: [4], kind: 'commuter-new', kindOptions: ['commuter-new', 'commuter-old', 'commuter-1000'], formationOptions: [[4], [4, 2], [6]], lineLimit: 90, stops: [0, 1, 2, 3, 4, 5], timetable: MWT.local, trackNames: { 5: '2番線' } },
     { id: 'southern', name: '特急サザン', cars: 8, units: [4, 4], kind: 'southern-10000', unitKinds: ['southern-10000', 'commuter-old'], lineLimit: 110, stops: [0, 2, 4, 5], timetable: MWT.southern, trackNames: { 5: '2番線' } },
   ],
   // 途中に待避駅が無いので、先行の普通はサザンに追いつかれない間隔で先に出す
@@ -104,14 +104,21 @@ export const misakiWakayamako: Route = {
   terminalApproach: true,
 };
 for (const v of misakiWakayamako.services!) { v.destination = '和歌山港'; v.destinationKana = 'わかやまこう'; }
+// みさき公園（始発）: 盛土上の島式2面5線（custom 駅）。下りは普通が1番線(T1)、サザンが2番線(T2)から発車する。多奈川線(5番線・T5)と分岐も描く。定義は misaki-park.ts（泉佐野〜みさき公園と共通）
+addMisakiPark(misakiWakayamako, 0, false);
+// 和歌山側の景観・配線（紀ノ川橋梁・加太線の分岐・和歌山市駅・和歌山港線の単線）。reverseRoute より前に足す
+applyWakayama(misakiWakayamako);
 
 export const misakiWakayamakoUp: Route = reverseRoute(misakiWakayamako, {
   id: 'misaki-wakayamako-up', name: '南海本線 和歌山港 → みさき公園', timetable: MWT_UP, signs: approachSigns,
 });
-misakiWakayamakoUp.terminalApproach = false; // みさき公園は本線の途中駅（終着 ATS は無効）
+misakiWakayamakoUp.terminalApproach = false; // みさき公園は終着だが頭端式でない（終着 ATS は無効）
 for (const v of misakiWakayamakoUp.services!) {
   // 和歌山港は上りの始発。島式の線のうち、ゲームの自線（進行方向の左）は物理的に下りの反対側の1番線
   v.trackNames = { 0: '1番線' };
   if (v.id === 'southern') { v.kind = 'commuter-old'; v.unitKinds = ['commuter-old', 'southern-10000']; }
 }
 setDestinations(misakiWakayamakoUp.services!, 'namba');
+// みさき公園（上りの終着）: 上り本線(T3)の3番線に着く（普通・サザンとも）
+setMisakiParkUp(misakiWakayamakoUp, misakiWakayamakoUp.stations.length - 1);
+applyWakayamaUp(misakiWakayamakoUp);

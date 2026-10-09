@@ -112,7 +112,7 @@ export function buildStructures(ctx: GameContext): void {
       const decks: ((s: number) => [number, number])[] = st.split
         ? route.tracks.map(c => (s: number): [number, number] => { const l = c + islandOffset(route, c, s); return [l - 2.6, l + 2.6]; })
         : [bounds];
-      for (const bounds of decks) {
+      for (const [di, bounds] of decks.entries()) {
       // 床版・地覆・高欄
       const [L0, L1] = bounds((st.from + st.to) / 2);
       scene.add(extrudeFn(track, s => { const [a, b] = bounds(s); return [[a, .02], [a, -1.1], [b, -1.1], [b, .02]]; }, st.from, st.to, 2, concrete));
@@ -175,8 +175,9 @@ export function buildStructures(ctx: GameContext): void {
           const t = track.trackAt(s), p = track.at(s, l, .55);
           batch.add('steel', P.box, M(p.x, p.y + .3, p.z, -t.phi, .06, .6, .06), 0xffffff);
         }
-        // 橋脚（川の中は小判形）
-        for (let s = st.from + 40; s < st.to - 20; s += 45) pier(batch, ctx, s, 2.9, true, bounds(s));
+        // 橋脚（川の中は小判形）。piers があれば、その位置に線路ごとの小判形の橋脚（材質は pierStyle。川底から立てる）
+        if (st.piers) for (const s of st.piers) slimPier(batch, ctx, s, bounds(s), st.pierStyle?.[di] ?? 'concrete');
+        else for (let s = st.from + 40; s < st.to - 20; s += 45) pier(batch, ctx, s, 2.9, true, bounds(s));
       }
       }
       // 橋の川面は地形側（terrain.ts）。橋の下の溝と OSM の水面の形に沿って作る
@@ -185,7 +186,7 @@ export function buildStructures(ctx: GameContext): void {
       }
     }
   }
-  batch.build({ concrete, steel: new THREE.MeshLambertMaterial({ color: 0x5f7488 }), mbody: new THREE.MeshLambertMaterial({ vertexColors: true }) }, scene);
+  batch.build({ concrete, brick: new THREE.MeshLambertMaterial({ color: 0x9c5a44 }), steel: new THREE.MeshLambertMaterial({ color: 0x5f7488 }), mbody: new THREE.MeshLambertMaterial({ vertexColors: true }) }, scene);
   if (lamps.length) {
     const im = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lampMat, lamps.length);
     lamps.forEach((m, i) => im.setMatrixAt(i, m)); im.computeBoundingSphere(); im.userData.noShadow = true; scene.add(im);
@@ -236,6 +237,15 @@ function buildExtraDecks(ctx: GameContext, bounds: (s: number) => [number, numbe
     }
   }
   batch.build({ concrete }, scene);
+}
+
+/** 単線の橋（split）の橋脚: 小判形の胴（煉瓦積み 'brick' または 'concrete'）と笠石。胴は川底（OSM の水面の溝を含む地面）から桁の下まで */
+function slimPier(b: GeoBatch, ctx: GameContext, s: number, edges: [number, number], style: 'brick' | 'concrete'): void {
+  const T = getTerrain(ctx), t = ctx.track.trackAt(s), c = (edges[0] + edges[1]) / 2, p = ctx.track.at(s, c, 0);
+  const g = Math.min(T.groundY(s), T.terrainY(s, c)) - .5, top = T.trackY(s) - 2.9, h = top - g;
+  if (h <= .2) return;
+  b.add(style, P.cyl, M(p.x, g + h / 2, p.z, -t.phi, 4.2, h, 1.7), 0xffffff);
+  b.add('concrete', P.box, M(p.x, top - .15, p.z, -t.phi, 4.8, .3, 2.2), 0xffffff);
 }
 
 /** 橋脚（高架はラーメン、橋梁は小判形） */

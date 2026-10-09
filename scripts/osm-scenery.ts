@@ -13,6 +13,8 @@ import { namba } from '../src/route/routes/namba';
 import { shiokaze } from '../src/route/routes/shiokaze';
 import { kishiwada } from '../src/route/routes/kishiwada';
 import { izumisano } from '../src/route/routes/izumisano';
+import { izumisanoMisaki } from '../src/route/routes/izumisano-misaki';
+import { misakiWakayamako } from '../src/route/routes/misaki-wakayamako';
 import { profileLat } from '../src/route/service';
 import type { Route } from '../src/route/types';
 
@@ -26,6 +28,10 @@ interface Course {
   stations: string[];
   /** 本線群の横位置（ゲーム側）を作る追加の線路の id */
   mainExtras: string[];
+  /** 曲がりの大きい区間: 中心線を2回に分けて作る（駅どうしの直線から離れた線路の点も拾う）。route-geometry.ts と同じ方法 */
+  twoPass?: boolean;
+  /** 海岸線（natural=coastline）・砂浜・防波堤・桟橋も取り、海の多角形（data.coast）を作る。右側（進行方向）が海のコース */
+  coast?: boolean;
 }
 
 const COURSES: Record<string, Course> = {
@@ -59,6 +65,22 @@ const COURSES: Record<string, Course> = {
     railName: '南海本線',
     stations: ['岸和田', '蛸地蔵', '貝塚', '二色浜', '鶴原', '井原里', '泉佐野'],
     mainExtras: [],
+  },
+  // 泉佐野〜みさき公園（データの座標は 'izumisano-misaki' = 泉佐野 → みさき公園）
+  'izumisano-misaki': {
+    route: izumisanoMisaki,
+    bbox: [34.30, 135.14, 34.43, 135.34],
+    railName: '南海本線',
+    stations: ['泉佐野', '羽倉崎', '吉見ノ里', '岡田浦', '樽井', '尾崎', '鳥取ノ荘', '箱作', '淡輪', 'みさき公園'],
+    mainExtras: [], twoPass: true, coast: true,
+  },
+  // みさき公園〜和歌山港（データの座標は 'misaki-wakayamako' = みさき公園 → 和歌山港）。和歌山港線は railName の正規表現で含める
+  'misaki-wakayamako': {
+    route: misakiWakayamako,
+    bbox: [34.19, 135.10, 34.34, 135.20],
+    railName: '南海本線|和歌山港線',
+    stations: ['みさき公園', '孝子', '和歌山大学前', '紀ノ川', '和歌山市', '和歌山港'],
+    mainExtras: [], twoPass: true,
   },
 };
 
@@ -114,11 +136,92 @@ out geom;
   return json.elements;
 }
 
+/** 海岸線・砂浜・防波堤・桟橋の取得。コースの bbox より北・西へ広げる（海側の海岸線を取りこぼさない）。建物などの生データとは別のキャッシュ */
+async function fetchCoast(): Promise<OsmEl[]> {
+  const cacheDir = 'node_modules/.cache/osm', cache = `${cacheDir}/${courseId}.coast.raw.json`;
+  if (args.has('offline') || (existsSync(cache) && !args.has('refresh'))) {
+    console.log(`キャッシュを使う: ${cache}`);
+    return JSON.parse(readFileSync(cache, 'utf8')).elements;
+  }
+  const bb = `${C.bbox[0] - 0.03},${C.bbox[1] - 0.03},${C.bbox[2] + 0.04},${C.bbox[3] + 0.03}`;
+  const q = `[out:json][timeout:180];
+(
+  way["natural"="coastline"](${bb});
+  way["natural"="beach"](${bb});
+  relation["natural"="beach"](${bb});
+  way["man_made"~"^(breakwater|groyne|pier)$"](${bb});
+);
+out geom;`;
+  const endpoints = args.has('endpoint') ? [args.get('endpoint')!] : ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
+  let last = '';
+  for (let round = 0; round < 3; round++) for (const url of endpoints) {
+    try {
+      console.log(`Overpass へ問い合わせ（海岸線）: ${url}`);
+      const res = await fetch(url, { method: 'POST', body: new URLSearchParams({ data: q }), headers: { 'User-Agent': 'densha-one-station scenery builder (personal, non-commercial)' } });
+      if (!res.ok) throw new Error(`Overpass ${res.status}: ${(await res.text()).slice(0, 120)}`);
+      const json = await res.json() as { elements: OsmEl[] };
+      mkdirSync(cacheDir, { recursive: true });
+      writeFileSync(cache, JSON.stringify(json));
+      console.log(`取得 ${json.elements.length} 要素 → ${cache}`);
+      return json.elements;
+    } catch (e) { last = String(e); console.log(`失敗: ${last}`); await new Promise(r => setTimeout(r, 8000)); }
+  }
+  throw new Error(`海岸線を取得できなかった: ${last}`);
+}
+
 // ---------------- 平面座標（中心付近の等距離近似, m） ----------------
 type V = [number, number];
 const LAT0 = (C.bbox[0] + C.bbox[2]) / 2, LON0 = (C.bbox[1] + C.bbox[3]) / 2;
 const KX = 111320 * Math.cos(LAT0 * Math.PI / 180), KY = 110574;
 const xy = (lat: number, lon: number): V => [(lon - LON0) * KX, (lat - LAT0) * KY];
+
+/** 基準の折れ線 ref に沿った距離で 10m ごとに点を平均する（ref から corridor [m] 以内の点だけ） */
+function rebin(ref: V[], pts: V[], corridor: number): V[] {
+  const cum = [0];
+  for (let i = 1; i < ref.length; i++) cum.push(cum[i - 1] + Math.hypot(ref[i][0] - ref[i - 1][0], ref[i][1] - ref[i - 1][1]));
+  const G = 100, grid = new Map<string, number[]>();
+  for (let i = 0; i + 1 < ref.length; i++) {
+    const [x0, y0] = ref[i], [x1, y1] = ref[i + 1], n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / (G / 2)) + 1;
+    for (let k = 0; k <= n; k++) { const kk = `${Math.floor((x0 + (x1 - x0) * k / n) / G)},${Math.floor((y0 + (y1 - y0) * k / n) / G)}`; const a = grid.get(kk) ?? []; if (a[a.length - 1] !== i) a.push(i); grid.set(kk, a); }
+  }
+  const R = Math.ceil(corridor / G) + 1, bins = new Map<number, [number, number, number]>();
+  for (const p of pts) {
+    const gx = Math.floor(p[0] / G), gy = Math.floor(p[1] / G);
+    let best = Infinity, bc = 0; const seen = new Set<number>();
+    for (let ix = gx - R; ix <= gx + R; ix++) for (let iy = gy - R; iy <= gy + R; iy++) for (const i of grid.get(`${ix},${iy}`) ?? []) {
+      if (seen.has(i)) continue; seen.add(i);
+      const [x0, y0] = ref[i], [x1, y1] = ref[i + 1], dx = x1 - x0, dy = y1 - y0, L2 = dx * dx + dy * dy || 1;
+      const t = Math.max(0, Math.min(1, ((p[0] - x0) * dx + (p[1] - y0) * dy) / L2)), d = Math.hypot(p[0] - (x0 + dx * t), p[1] - (y0 + dy * t));
+      if (d < best) { best = d; bc = cum[i] + t * Math.sqrt(L2); }
+    }
+    if (best > corridor) continue;
+    const k = Math.floor(bc / 10), v = bins.get(k) ?? [0, 0, 0];
+    v[0] += p[0]; v[1] += p[1]; v[2]++; bins.set(k, v);
+  }
+  const out: V[] = [ref[0]];
+  for (const k of [...bins.keys()].sort((a, b) => a - b)) { const v = bins.get(k)!; out.push([v[0] / v[2], v[1] / v[2]]); }
+  out.push(ref[ref.length - 1]);
+  return out;
+}
+const smoothPts = (pts: V[], w: number): V[] => pts.map((_, i) => {
+  if (i === 0 || i === pts.length - 1) return pts[i];
+  let x = 0, y = 0, n = 0;
+  for (let j = Math.max(0, i - w); j <= Math.min(pts.length - 1, i + w); j++) { x += pts[j][0]; y += pts[j][1]; n++; }
+  return [x / n, y / n] as V;
+});
+/** 等間隔（step m）に取り直す */
+function resamplePts(pts: V[], step: number): V[] {
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const len = cum[cum.length - 1], out: V[] = [];
+  let j = 0;
+  for (let c = 0; c <= len + 1e-6; c += step) {
+    while (j + 1 < cum.length - 1 && cum[j + 1] < c) j++;
+    const t = (c - cum[j]) / ((cum[j + 1] - cum[j]) || 1);
+    out.push([pts[j][0] + (pts[j + 1][0] - pts[j][0]) * t, pts[j][1] + (pts[j + 1][1] - pts[j][1]) * t]);
+  }
+  return out;
+}
 
 /** 線路の中心線（駅順に並べ、10m ごとに上下線の点を平均してならす） */
 function centerline(rails: OsmEl[], stationPts: V[]): V[] {
@@ -325,10 +428,125 @@ const roadClass = (t: Record<string, string>) => /^motorway/.test(t.highway) ? 0
 /** 都市高速（阪神高速など）は高架として別に描く */
 const isElevated = (t: Record<string, string>) => /^motorway/.test(t.highway ?? '');
 
+// ---------------- 海岸線 → 海の多角形 ----------------
+/** OSM の海岸線は進行方向の右が海。向きは変えずに（逆向きにせず）端点でつなぐ */
+function chainForward(parts: G[][]): G[][] {
+  const k = (g: G) => `${g.lat},${g.lon}`;
+  const byStart = new Map<string, number[]>(), isEnd = new Set<string>();
+  parts.forEach((p, i) => { const a = byStart.get(k(p[0])) ?? []; a.push(i); byStart.set(k(p[0]), a); isEnd.add(k(p[p.length - 1])); });
+  const used = new Uint8Array(parts.length), out: G[][] = [];
+  const follow = (i: number): G[] => {
+    let line = parts[i].slice(); used[i] = 1;
+    for (;;) {
+      const tail = line[line.length - 1];
+      if (same(line[0], tail) && line.length > 2) break;
+      const nx = (byStart.get(k(tail)) ?? []).find(j => !used[j]);
+      if (nx === undefined) break;
+      used[nx] = 1; line = line.concat(parts[nx].slice(1));
+    }
+    return line;
+  };
+  parts.forEach((p, i) => { if (!used[i] && !isEnd.has(k(p[0]))) out.push(follow(i)); });
+  parts.forEach((_, i) => { if (!used[i]) out.push(follow(i)); });
+  return out;
+}
+
+interface Rect { x0: number; x1: number; y0: number; y1: number }
+/** 折れ線を長方形で切る（Liang–Barsky）。長方形の中に入る部分ごとの折れ線を返す */
+function clipLine(line: V[], r: Rect): V[][] {
+  const out: V[][] = []; let cur: V[] = [];
+  const flush = () => { if (cur.length > 1) out.push(cur); cur = []; };
+  for (let i = 0; i + 1 < line.length; i++) {
+    const a = line[i], b = line[i + 1], dx = b[0] - a[0], dy = b[1] - a[1];
+    const p = [-dx, dx, -dy, dy], q = [a[0] - r.x0, r.x1 - a[0], a[1] - r.y0, r.y1 - a[1]];
+    let t0 = 0, t1 = 1, ok = true;
+    for (let k = 0; k < 4 && ok; k++) {
+      if (p[k] === 0) { if (q[k] < 0) ok = false; continue; }
+      const t = q[k] / p[k];
+      if (p[k] < 0) { if (t > t1) ok = false; else if (t > t0) t0 = t; } else { if (t < t0) ok = false; else if (t < t1) t1 = t; }
+    }
+    if (!ok) { flush(); continue; }
+    if (cur.length === 0 || t0 > 0) { flush(); cur.push([a[0] + dx * t0, a[1] + dy * t0]); }
+    cur.push([a[0] + dx * t1, a[1] + dy * t1]);
+    if (t1 < 1) flush();
+  }
+  flush();
+  return out;
+}
+const insideRect = (r: Rect, p: V) => p[0] >= r.x0 && p[0] <= r.x1 && p[1] >= r.y0 && p[1] <= r.y1;
+/** 長方形の周を反時計回り（x 軸 → y 軸の向きに内側が左）にたどった位置 */
+function perimPos(r: Rect, p: V): number {
+  const W = r.x1 - r.x0, H = r.y1 - r.y0;
+  const d = [Math.abs(p[1] - r.y0), Math.abs(p[0] - r.x1), Math.abs(p[1] - r.y1), Math.abs(p[0] - r.x0)];
+  const e = d.indexOf(Math.min(...d));
+  return e === 0 ? p[0] - r.x0 : e === 1 ? W + (p[1] - r.y0) : e === 2 ? W + H + (r.x1 - p[0]) : 2 * W + H + (r.y1 - p[1]);
+}
+const onRectEdge = (r: Rect, p: V) => Math.min(Math.abs(p[0] - r.x0), Math.abs(p[0] - r.x1), Math.abs(p[1] - r.y0), Math.abs(p[1] - r.y1)) < 1e-4;
+/** 点 from から向き dir へ進んで長方形の縁に着く点 */
+function toRectEdge(r: Rect, from: V, dir: V): V {
+  const tx = dir[0] > 0 ? (r.x1 - from[0]) / dir[0] : dir[0] < 0 ? (r.x0 - from[0]) / dir[0] : Infinity;
+  const ty = dir[1] > 0 ? (r.y1 - from[1]) / dir[1] : dir[1] < 0 ? (r.y0 - from[1]) / dir[1] : Infinity;
+  const t = Math.min(tx, ty);
+  return [from[0] + dir[0] * t, from[1] + dir[1] * t];
+}
+/**
+ * 海岸線の線（左が海）と輪から、海の多角形（反時計回り）と島の穴を作る。
+ * 線は窓（長方形）の縁から縁へ。線の終点から窓の縁を反時計回りにたどり、次の線の始点へつなぐ（osmcoastline と同じ考え方）
+ */
+function polygonize(lines: V[][], rings: V[][], r: Rect): { outer: V[]; holes: V[][] }[] {
+  const W = r.x1 - r.x0, H = r.y1 - r.y0, P = 2 * (W + H);
+  const corners: [number, V][] = [[0, [r.x0, r.y0]], [W, [r.x1, r.y0]], [W + H, [r.x1, r.y1]], [2 * W + H, [r.x0, r.y1]]];
+  const ts = lines.map(l => perimPos(r, l[0])), te = lines.map(l => perimPos(r, l[l.length - 1]));
+  const used = new Uint8Array(lines.length), polys: { outer: V[]; holes: V[][] }[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (used[i]) continue;
+    used[i] = 1;
+    const poly: V[] = lines[i].slice();
+    let cur = i;
+    for (let guard = 0; guard < lines.length + 2; guard++) {
+      let best = -1, bd = Infinity;
+      for (let j = 0; j < lines.length; j++) {
+        if (used[j] && j !== i) continue;
+        const d = (((ts[j] - te[cur]) % P) + P) % P;
+        if (d < bd) { bd = d; best = j; }
+      }
+      if (best < 0) break;
+      const between = corners.map(([t, p]) => ({ d: (((t - te[cur]) % P) + P) % P, p })).filter(c => c.d > 1e-6 && c.d < bd - 1e-6).sort((a, b) => a.d - b.d);
+      for (const c of between) poly.push(c.p);
+      if (best === i) break;
+      used[best] = 1; poly.push(...lines[best]); cur = best;
+    }
+    if (area(poly) > 0) polys.push({ outer: poly, holes: [] });
+  }
+  // 窓の中で閉じた輪: 反時計回り = 海（湖）、時計回り = 島（穴）
+  for (const ring of rings) { if (area(ring) > 0) polys.push({ outer: ring, holes: [] }); }
+  for (const ring of rings) {
+    if (area(ring) > 0) continue;
+    const host = polys.find(p => ptInPoly(ring[0], p.outer));
+    if (host) host.holes.push(ring.slice().reverse());
+  }
+  return polys;
+}
+/** 閉じた輪（最後の点 = 最初の点）の簡略化。始点と終点が同じだと Douglas–Peucker が潰れるので、半分ずつに分ける */
+function simplifyClosed(ring: V[], tol: number): V[] {
+  const open = ring.slice(0, -1);
+  if (open.length < 6) return ring;
+  const h = Math.floor(open.length / 2), a = simplify(open.slice(0, h + 1), tol), b = simplify([...open.slice(h), open[0]], tol);
+  return [...a.slice(0, -1), ...b];
+}
+function ptInPoly(p: V, poly: V[]): boolean {
+  let c = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j];
+    if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) c = !c;
+  }
+  return c;
+}
+
 async function main() {
   const els = await fetchOsm();
   const route = C.route;
-  const rails = els.filter(e => e.type === 'way' && e.tags?.railway === 'rail' && (e.tags.name ?? '').includes(C.railName));
+  const rails = els.filter(e => e.type === 'way' && e.tags?.railway === 'rail' && new RegExp(C.railName).test(e.tags.name ?? ''));
   const stNodes = els.filter(e => e.type === 'node' && e.tags?.railway === 'station');
   // 駅の位置（同名が複数ある場合は線路に最も近いもの）
   const railPts = rails.flatMap(w => (w.geometry ?? []).map(g => xy(g.lat, g.lon)));
@@ -338,7 +556,13 @@ async function main() {
     if (!cand.length) throw new Error(`駅が見つからない: ${names}`);
     return cand.sort((a, b) => nearRail(a) - nearRail(b))[0];
   });
-  const line = centerline(rails, stationPts), proj = projector(line);
+  let line: V[];
+  if (C.twoPass) {
+    const pts = rails.flatMap(w => (w.geometry ?? []).map(g => xy(g.lat, g.lon)));
+    const pass1 = resamplePts(smoothPts(rebin(stationPts, pts, 1200), 3), 10);
+    line = smoothPts(smoothPts(rebin(pass1, pts, 60), 3), 3);
+  } else line = centerline(rails, stationPts);
+  const proj = projector(line);
   // 駅の中心の位置 → ゲームの s（ホームの中心）
   const cSt = stationPts.map(p => proj(p)!.c);
   const sSt = route.stations.map(st => (st.platform.from + st.platform.to) / 2);
@@ -368,6 +592,89 @@ async function main() {
   };
   const S0 = route.extent.from - 100, S1 = route.extent.to + 100;
   console.log(`中心線 ${line.length} 点、駅 OSM ${cSt.map(c => (c / 1000).toFixed(2)).join(' / ')} km → ゲーム ${sSt.map(s => (s / 1000).toFixed(2)).join(' / ')} km`);
+
+  // ---- 海岸線（data.coast）: 海の多角形・護岸の線・砂浜・防波堤/桟橋。範囲は線路の始点の前 500m・終点の後 200m、横は -1500〜3200m（霧の遠さまで）----
+  const makeCoast = async () => {
+    const cels = await fetchCoast();
+    const win: Rect = { x0: route.extent.from - 500, x1: route.extent.to + 200, y0: -1500, y1: 3200 };
+    // 中心線の始点の近くには小さな折れ（駅の位置に引かれた点）があり、延長線の向きが狂う。海岸線の写しでは始点側の 6 点を使わない（c はその分ずらす）
+    const K0 = 6; let c0 = 0; for (let i = 1; i <= K0; i++) c0 += Math.hypot(line[i][0] - line[i - 1][0], line[i][1] - line[i - 1][1]);
+    const projC = projector(line.slice(K0));
+    // 中心線から 4.5km より遠い点は写さない（その点で線を分ける。窓の外に出る部分で、写すと遅い）
+    const lineSamp = line.filter((_, i) => i % 2 === 0);
+    const farOut = (p: V) => { let m = Infinity; for (const q of lineSamp) { const d = Math.hypot(q[0] - p[0], q[1] - p[1]); if (d < m) m = d; } return m > 4500; };
+    /** 写した折れ線（遠い点で分かれた部分ごと）。whole = 分かれず全部写せた */
+    const map = (g: G[], step: number): { segs: V[][]; whole: boolean } => {
+      const segs: V[][] = []; let cur: V[] = [], whole = true;
+      for (const q of densify(g, step)) {
+        const w = xy(q.lat, q.lon), r = farOut(w) ? null : projC(w, 6000);
+        if (!r) { whole = false; if (cur.length > 1) segs.push(cur); cur = []; continue; }
+        const s = toS(r.c + c0); cur.push([s, r.d + center(s)]);
+      }
+      if (cur.length > 1) segs.push(cur);
+      return { segs, whole };
+    };
+    // 海岸線: 同じ向きにつないで写し、窓で切る。窓の中に端がある線（取得範囲の外で切れた海岸線）は端の向きに延ばして縁へ
+    const chains = chainForward(cels.filter(e => e.type === 'way' && e.tags?.natural === 'coastline' && e.geometry && e.geometry.length > 1).map(e => e.geometry!));
+    const pieces: V[][] = [], rings: V[][] = [];
+    let dangling = 0;
+    for (const ch of chains) {
+      const closed = same(ch[0], ch[ch.length - 1]) && ch.length > 3;
+      const m = map(ch, 25);
+      for (const seg of m.segs) {
+        const isRing = closed && m.whole;
+        let pts = isRing ? simplifyClosed(seg, 4) : simplify(seg, 4);
+        if (pts.length < 2) continue;
+        if (isRing) {
+          const k = pts.findIndex(p => !insideRect(win, p));
+          if (k < 0) { rings.push(pts.slice(0, -1)); continue; }
+          pts = [...pts.slice(k, -1), ...pts.slice(0, k + 1)]; // 窓の外の点から始める（つなぎ目をまたがない）
+        }
+        const clipped = clipLine(pts, win);
+        clipped.forEach((pc, i) => {
+          // 元の線の端（窓の中）で終わる部分は、端の向きに延ばして縁へ
+          if (!isRing && i === 0 && !onRectEdge(win, pc[0])) { dangling++; pc.unshift(toRectEdge(win, pc[0], [pc[0][0] - pc[1][0], pc[0][1] - pc[1][1]])); }
+          if (!isRing && i === clipped.length - 1 && !onRectEdge(win, pc[pc.length - 1])) { dangling++; const n = pc.length; pc.push(toRectEdge(win, pc[n - 1], [pc[n - 1][0] - pc[n - 2][0], pc[n - 1][1] - pc[n - 2][1]])); }
+          if (onRectEdge(win, pc[0]) && onRectEdge(win, pc[pc.length - 1])) pieces.push(pc);
+        });
+      }
+    }
+    const polys = polygonize(pieces, rings, win).filter(p => area(p.outer) > 3000); // 窓の縁の細い切れ端を除く
+    // 窓を使い切る海（海岸線が窓に入らない）は無し。海が見つからない時は警告
+    if (!polys.length) console.warn('海の多角形ができなかった');
+    const flat1 = (p: V[]) => p.flatMap(([s, l]) => [r1(s), r1(l)]);
+    const sea = polys.map(p => [flat1(p.outer), ...p.holes.map(flat1)]);
+    // 護岸の帯に使う海岸線の線（窓の縁に沿う部分は含めない）
+    const lines = pieces.map(flat1);
+    // 砂浜
+    const beach: number[][] = [];
+    for (const el of cels) {
+      if (el.tags?.natural !== 'beach') continue;
+      for (const ring of rings0(el)) {
+        let p = simplify(map(ring, 10).segs.flat().slice(0, -1), 2);
+        if (p.length < 3) continue;
+        if (!p.some(q => insideRect(win, q))) continue;
+        if (area(p) < 0) p = p.reverse();
+        beach.push(flat1(p));
+      }
+    }
+    // 防波堤・桟橋（OSM にあるものだけ。実在の確認は未実施）
+    const works: [string, number, number[]][] = [];
+    for (const el of cels) {
+      const mm = el.tags?.man_made;
+      if (el.type !== 'way' || !el.geometry || el.geometry.length < 2 || !mm || !/^(breakwater|groyne|pier)$/.test(mm)) continue;
+      const closed = same(el.geometry[0], el.geometry[el.geometry.length - 1]) && el.geometry.length > 3;
+      let p = closed ? simplifyClosed(map(el.geometry, 8).segs.flat(), 1.5) : simplify(map(el.geometry, 8).segs.flat(), 1.5);
+      if (closed) { p = p.slice(0, -1); if (p.length < 3) continue; if (area(p) < 0) p = p.reverse(); } else if (p.length < 2) continue;
+      if (!p.some(q => insideRect(win, q))) continue;
+      works.push([mm === 'pier' ? 'p' : 'b', closed ? 1 : 0, flat1(p)] as [string, number, number[]]);
+    }
+    const nv = sea.reduce((a, p) => a + p.reduce((b, r) => b + r.length / 2, 0), 0);
+    console.log(`海岸線: 線 ${chains.length} 本 → 窓の中 ${pieces.length} 本（端の延長 ${dangling}）、輪 ${rings.length}、海の多角形 ${polys.length}（頂点 ${nv}、穴 ${polys.reduce((a, p) => a + p.holes.length, 0)}）、砂浜 ${beach.length}、防波堤・桟橋 ${works.length}`);
+    return { sea, lines, beach, works };
+  };
+  const rings0 = (el: OsmEl): G[][] => el.type === 'way' ? (el.geometry && same(el.geometry[0], el.geometry[el.geometry.length - 1]) ? [el.geometry] : []) : rings(el);
+  const coast = C.coast ? await makeCoast() : undefined;
 
   const B: number[][] = [], roads: [number, number, string, number[]][] = [], green: [string, number[]][] = [], landmarks: [string, number, number][] = [];
   const counts: Record<string, number> = {};
@@ -467,6 +774,9 @@ async function main() {
     areas: green,
     /** 名前のある主な施設: [名前, s, lat] */
     landmarks,
+    /** 海岸線（C.coast のコースだけ）: sea = 海の多角形 [[外周 s,lat の並び（反時計回り）, 島の穴…], …]、lines = 海岸線 [s,lat の並び]（進行方向に対し海は左 = lat の大きい側）、
+     *  beach = 砂浜の多角形、works = 防波堤(b)・桟橋(p) [種類, 閉じた輪か, s,lat の並び] */
+    ...(coast ? { coast } : {}),
   };
   mkdirSync('src/data/osm', { recursive: true });
   const file = `src/data/osm/${courseId}.json`, text = JSON.stringify(out);

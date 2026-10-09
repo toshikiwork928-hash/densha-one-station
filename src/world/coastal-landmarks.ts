@@ -18,6 +18,8 @@ type Landmark = {
   side?: 1 | -1;
   direction?: 1 | -1;
   reversed?: boolean;
+  color?: number;
+  trussStyles?: ('pratt' | 'warren')[];
 };
 const UP = new THREE.Vector3(0, 1, 0);
 const COLOR = { concrete: 0xb8b7ad, steel: 0x647773, road: 0x51565a, line: 0xe5e3cd, rail: 0x9caaa9, ballast: 0x7c786d };
@@ -83,17 +85,48 @@ function crossing(ctx: GameContext, b: GeoBatch, st: Landmark): void {
 }
 
 /** 既存 buildStructures の川面・橋脚・床版に、上部鋼トラスだけを追加。 */
-function truss(ctx: GameContext, b: GeoBatch, st: Landmark, edges?: [number, number]): void {
-  const steel = ctx.route.bridgeStyle?.color ?? COLOR.steel;
-  if (edges) { trussSpan(ctx, b, st, edges[0], edges[1], steel); return; }
+function truss(ctx: GameContext, b: GeoBatch, st: Landmark, edges?: [number, number], style?: 'pratt' | 'warren'): void {
+  const steel = st.color ?? ctx.route.bridgeStyle?.color ?? COLOR.steel;
+  if (edges) { if (style) curvedTruss(ctx, b, st, edges[0], edges[1], steel, style); else trussSpan(ctx, b, st, edges[0], edges[1], steel); return; }
   // 線路の横位置（route.trackProfiles）。上下線が 7m 以上離れる所は単線のトラスを線路ごとに
   const lats = ctx.route.tracks.map(c => c + islandOffset(ctx.route, c, st.s)).sort((a, z) => a - z);
   if (lats[lats.length - 1] - lats[0] > 7) {
-    for (const l of lats) truss(ctx, b, { ...st, kind: 'steel-bridge' }, [l - 2.7, l + 2.7]);
+    // 線路ごとの形式（trussStyles は route.tracks の横位置の小さい線から。向きが反転した側は逆順）
+    const rev = st.reversed ?? ctx.route.id.endsWith('-up'), styles = st.trussStyles && (rev ? [...st.trussStyles].reverse() : st.trussStyles);
+    lats.forEach((l, i) => truss(ctx, b, { ...st, kind: 'steel-bridge' }, [l - 2.7, l + 2.7], styles?.[i]));
     return;
   }
   const left = lats[0] - 3.4, right = lats[lats.length - 1] + 3.4;
   trussSpan(ctx, b, st, left, right, steel);
+}
+
+/** 下路曲弦トラス1連（紀ノ川橋梁）。上弦は放物線状に端から中央へ高くなる（端 7.6m・中央 10.6m）、下弦は水平。
+ *  pratt = 全部の格点に垂直材、斜材は中央へ向かって下がる（引張材）。warren = 斜材が交互に上下する（垂直材は端柱だけ）。
+ *  上弦の横構（各格点の横材と対角材）。寸法・パネル数は実測ではなくゲーム用の概形 */
+function curvedTruss(ctx: GameContext, b: GeoBatch, st: Landmark, left: number, right: number, steel: number, style: 'pratt' | 'warren'): void {
+  const length = st.length ?? 62, from = st.s - length / 2, n = 10, H0 = 7.6, H1 = 10.6, BOT = .8;
+  const top = (i: number) => H0 + (H1 - H0) * (1 - (2 * i / n - 1) ** 2);
+  const pt = (i: number, lat: number, y: number) => ctx.track.at(from + length * i / n, lat, y);
+  for (const side of [left, right]) {
+    for (let i = 0; i < n; i++) {
+      beam(b, pt(i, side, BOT), pt(i + 1, side, BOT), .5, steel, .5);
+      beam(b, pt(i, side, top(i)), pt(i + 1, side, top(i + 1)), .55, steel, .6);
+    }
+    for (let i = 0; i <= n; i++) if (style === 'pratt' || i === 0 || i === n) beam(b, pt(i, side, BOT), pt(i, side, top(i)), i === 0 || i === n ? .55 : .34, steel, .4);
+    for (let i = 0; i < n; i++) {
+      let a: THREE.Vector3, z: THREE.Vector3;
+      if (style === 'pratt') {
+        // 左半分は上弦の外側の格点から下弦の内側の格点へ、右半分は対称
+        [a, z] = i < n / 2 ? [pt(i, side, top(i)), pt(i + 1, side, BOT)] : [pt(i + 1, side, top(i + 1)), pt(i, side, BOT)];
+      } else {
+        [a, z] = i % 2 === 0 ? [pt(i, side, BOT), pt(i + 1, side, top(i + 1))] : [pt(i, side, top(i)), pt(i + 1, side, BOT)];
+      }
+      beam(b, a, z, .3, steel, .36);
+    }
+  }
+  // 上弦の横構: 各格点の横材（端は門構え）と、パネルごとの対角材
+  for (let i = 0; i <= n; i++) beam(b, pt(i, left, top(i)), pt(i, right, top(i)), i === 0 || i === n ? .4 : .28, steel, .3);
+  for (let i = 1; i < n - 1; i++) beam(b, pt(i, i % 2 ? left : right, top(i)), pt(i + 1, i % 2 ? right : left, top(i + 1)), .16, steel, .16);
 }
 
 /** 鋼トラス1連（left / right = 両側の主構の横位置） */

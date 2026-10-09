@@ -366,7 +366,7 @@ export function buildTown(ctx: GameContext): TownResult {
   const latOf = (sd: number, d: number) => sd < 0 ? L0 - d : L1 + d;
   // 山岳線: 町並み・田畑・道路は平地（川沿いの町・平野）で、地面が線路と同じ高さの所だけ
   const MT = isMountain(T) ? T : null;
-  const coastal = !!route.coastalLandmarks?.length && !MT;
+  const coastal = !!route.coastalLandmarks?.length && route.coastalScenery !== false && !MT;
   const parkSide = seaSideOf(route);
   const parkAt = (sd: number, s: number) => coastal && sd === parkSide && !T.isCity(s);
   const overpasses = (route.coastalLandmarks ?? []).filter(l => l.kind === 'road-overpass');
