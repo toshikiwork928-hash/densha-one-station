@@ -134,7 +134,8 @@ export function buildTrackMesh(ctx: GameContext): void {
   }
   buildLoopTracks(ctx, matBallast, matRail);
   if (route.singleTrack) buildSingleTrackExtras(ctx, matBallast, matRail, matSleeper);
-  else if (route.extraTracks?.length) buildExtraTracks(ctx, matBallast, matRail, matSleeper);
+  // 追加の線路が無くても、頭端駅の route.tracks の終端には車止めを作る（みさき公園〜和歌山港の和歌山港）
+  else if (route.extraTracks?.length || trackLines(route).some(l => l.bumpers.length)) buildExtraTracks(ctx, matBallast, matRail, matSleeper);
   // 地面は terrain.ts
   // 架線柱・架線は catenary.ts
 }

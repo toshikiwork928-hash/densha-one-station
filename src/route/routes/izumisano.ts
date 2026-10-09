@@ -17,22 +17,27 @@ const names = [
   ['鶴原', 'つるはら'], ['井原里', 'いはらのさと'], ['泉佐野', 'いずみさの'],
 ];
 const LAST = names.length - 1;
-// 泉佐野は南海公式構内図・配線略図の3面5線を、既存のcustomPlatforms/extraTracksで表現する。
-// 1・2番、3・4番、5・6番の島式3面。4・5番は同じ線路の両側にホームがある。
-// 下り本線=2番、空港方面=3番、上り本線=4/5番。横位置・分岐器長はゲーム用。
-const IZUMISANO_PLATFORMS: NonNullable<Station['customPlatforms']> = [
+// 泉佐野は南海公式構内図・配線略図の島式3面4線を、既存のcustomPlatforms/extraTracksで表現する。
+// 線路は上（下りの進行方向左・山側）から 外側下り線(T1)・下り本線(T2)・上り本線(T3)・外側上り線(T4)。
+// 島式ホームは線路の間: P1=T1〜T2（1・2番）、P2=T2〜T3（3・4番）、P3=T3〜T4（5・6番）。
+// T2・T3 は両側にホームがあり両側のドアを開けられる。横位置・分岐器長は写真・図面からの実測ではなくゲーム用の概形:
+// 線路間隔 9.2m、島式の幅 5.8m（線路中心からホーム端 1.7m）。実寸は不明。
+// 空港線は外側下り線(T1)の泉佐野南端から分かれて本線2本をまたぎ、上りは外側上り線(T4)へ入る。
+// 南へ続く本線は T2・T3 の2本で、T1・T4 は泉佐野構内の待避・空港線専用として扱う（コースは泉佐野で終わるので南の分岐は描かない）。
+export const IZUMISANO_PLATFORMS: NonNullable<Station['customPlatforms']> = [
   { kind: 'island', lat: -4.6, width: 5.8 },
-  { kind: 'island', lat: 8.6, width: 5.8 },
-  { kind: 'island', lat: 17.8, width: 5.8 },
+  { kind: 'island', lat: 4.6, width: 5.8 },
+  { kind: 'island', lat: 13.8, width: 5.8 },
 ];
-const MAIN_UP: LatProfile = [[7700, 4], [7950, 13.2], [8600, 13.2]];
-const LOCAL_DOWN: LatProfile = [[7700, 0], [7950, -9.2], [8600, -9.2]];
-const AIRPORT_DOWN: LatProfile = [[7700, 0], [7950, 4], [8600, 4]];
-const AIRPORT_UP: LatProfile = [[7650, 4], [7950, 22.4], [8600, 22.4]];
+/** 上り本線(T3)。route.tracks の対向線(4)が駅の手前から 9.2 へ開く */
+const MAIN_UP: LatProfile = [[7700, 4], [7950, 9.2], [8600, 9.2]];
+/** 外側下り線(T1)。下り本線(0)から分かれる */
+const OUTER_DOWN: LatProfile = [[7700, 0], [7950, -9.2], [8600, -9.2]];
+/** 外側上り線(T4)。上り本線(4)の位置から分かれ、上り本線(T3)の外側へ入る */
+const OUTER_UP: LatProfile = [[7650, 4], [7950, 18.4], [8600, 18.4]];
 const IZUMISANO_EXTRA: ExtraTrack[] = [
-  { id: 'izumisano-platform1', lat: LOCAL_DOWN, from: 7700, to: 8600, ownDeck: false },
-  { id: 'izumisano-platform3', lat: AIRPORT_DOWN, from: 7700, to: 8600, ownDeck: false },
-  { id: 'izumisano-platform6', lat: AIRPORT_UP, from: 7650, to: 8600, ownDeck: false },
+  { id: 'izumisano-t1', lat: OUTER_DOWN, from: 7700, to: 8600, ownDeck: false },
+  { id: 'izumisano-t4', lat: OUTER_UP, from: 7650, to: 8600, ownDeck: false },
 ];
 const stations: Station[] = names.map(([name, kana], i) => {
   const stopS = 180 + DISTANCES[i];
@@ -94,11 +99,11 @@ export const izumisano: Route = {
   limits: [{ from: 1250, to: 1670, kmh: 85, label: '曲線制限' }, { from: 6950, to: 7270, kmh: 85, label: '曲線制限' }],
   stations,
   services: [
-    { id: 'local', name: '普通', cars: 4, units: [4], kind: 'commuter-new', kindOptions: ['commuter-new', 'commuter-old', 'commuter-1000'], formationOptions: [[4], [4, 2], [6]], lineLimit: 90, useLoop: true, stops: [0, 1, 2, 3, 4, 5, 6], timetable: IT.local, trackNames: { 6: '2番線' }, platformSides: { 6: 'L' } },
-    { id: 'express', name: '急行', cars: 6, units: [4, 2], kind: 'commuter-old', kindOptions: ['commuter-old', 'commuter-new', 'commuter-1000', 'commuter-9000'], formationOptions: [[4, 2], [4, 4], [6]], lineLimit: 100, stops: [0, 2, 6], timetable: IT.express, trackNames: { 6: '1番線' }, platformSides: { 6: 'R' } },
-    { ...airportService([0, 2, 6], IT.airport), trackNames: { 6: '4番線' }, platformSides: { 6: 'L' } },
-    { id: 'southern', name: '特急サザン', cars: 8, units: [4, 4], kind: 'southern-10000', unitKinds: ['southern-10000', 'commuter-old'], lineLimit: 110, stops: [0, 6], timetable: IT.southern, trackNames: { 6: '1番線' }, platformSides: { 6: 'R' } },
-    { id: 'limited', name: '特急ラピートβ', cars: 6, units: [6], kind: 'limited', lineLimit: 110, stops: [0, 6], timetable: IT.limited, trackNames: { 6: '4番線' }, platformSides: { 6: 'L' } },
+    { id: 'local', name: '普通', cars: 4, units: [4], kind: 'commuter-new', kindOptions: ['commuter-new', 'commuter-old', 'commuter-1000'], formationOptions: [[4], [4, 2], [6]], lineLimit: 90, useLoop: true, stops: [0, 1, 2, 3, 4, 5, 6], timetable: IT.local },
+    { id: 'express', name: '急行', cars: 6, units: [4, 2], kind: 'commuter-old', kindOptions: ['commuter-old', 'commuter-new', 'commuter-1000', 'commuter-9000'], formationOptions: [[4, 2], [4, 4], [6]], lineLimit: 100, stops: [0, 2, 6], timetable: IT.express },
+    airportService([0, 2, 6], IT.airport),
+    { id: 'southern', name: '特急サザン', cars: 8, units: [4, 4], kind: 'southern-10000', unitKinds: ['southern-10000', 'commuter-old'], lineLimit: 110, stops: [0, 6], timetable: IT.southern },
+    { id: 'limited', name: '特急ラピートβ', cars: 6, units: [6], kind: 'limited', lineLimit: 110, stops: [0, 6], timetable: IT.limited },
   ],
   precedingHeadway: { express: 240, airport: 240, limited: 330, southern: 330 },
   prevName: '和泉大宮', nextName: '羽倉崎', signs: stations.slice(1).flatMap(st => approachSigns(st.stopS)),
@@ -106,25 +111,33 @@ export const izumisano: Route = {
   deckJoin: [{ from: 7650, to: 8600 }],
   scenery: { cityZones: [{ from: -Infinity, to: 650 }, { from: 1150, to: Infinity }] },
   oncoming: stopScenes(stations, STOP_SCENES), signals, crossings,
-  structures: [{ kind: 'viaduct', from: -400, to: 860 }, { kind: 'viaduct', from: 7160, to: 8600 }],
+  // 橋2か所は OSM の水面が線路を横切る所（汎用の桁橋。川の名前（1700 の方）・橋の構造・高さ・長さは不明）。
+  // 範囲は OSM の水面が線路上で占める s（1697〜1717、5062〜5080）に前後 20m 強を足した
+  structures: [{ kind: 'viaduct', from: -400, to: 860 }, { kind: 'bridge', from: 1675, to: 1740 }, { kind: 'bridge', from: 5040, to: 5100 }, { kind: 'viaduct', from: 7160, to: 8600 }],
   extraTracks: IZUMISANO_EXTRA,
   terminalApproach: false,
 };
+// 下りの走行線と番線（ゲーム用の割り当て。出典で種別ごとの番線は確定できない）。
+// 空港線系統（空港急行・ラピートβ）は外側下り線(T1)・1番。普通は現行どおり外側下り線(T1)・1番（待避設定は無いまま）。
+// 急行・サザンは下り本線(T2)の2番（乗降側＝P1側）。T1 は P1 の右側、T2 は P1 の左側にホームがある。
 for (const v of izumisano.services!) {
-  const airport = v.id === 'airport' || v.id === 'limited';
-  v.lane = v.id === 'local' ? LOCAL_DOWN : airport ? AIRPORT_DOWN : [[0, 0]];
-  v.trackNames = { 6: v.id === 'local' ? '1番線' : airport ? '3番線' : '2番線' };
-  v.platformSides = { 6: v.id === 'local' || airport ? 'R' : 'L' };
-  if (v.id === 'local' || airport) v.laneLimits = [{ from: 7700, to: 8000, kmh: 45, label: '泉佐野分岐器' }];
+  const outer = v.id === 'local' || v.id === 'airport' || v.id === 'limited';
+  v.lane = outer ? OUTER_DOWN : [[0, 0]];
+  v.trackNames = { 6: outer ? '1番線' : '2番線' };
+  v.platformSides = { 6: outer ? 'R' : 'L' };
+  if (outer) v.laneLimits = [{ from: 7700, to: 8000, kmh: 45, label: '泉佐野分岐器' }];
+  // 空港系統は普通と同じ外側下り線に入る。旧配線では普通と別の線（空港下り線）だったので、先行の普通は従来どおり別の番線として扱う
+  if (v.id === 'airport' || v.id === 'limited') v.precedingLocalApart = true;
 }
 setDestinations(izumisano.services!, 'wakayama');
 
 export const izumisanoUp: Route = reverseRoute(izumisano, { id: 'izumisano-up', name: '南海本線 泉佐野 → 岸和田', timetable: IT_UP, oncomingStops: STOP_SCENES, signs: approachSigns });
 izumisanoUp.stations[LAST].loopTrack = '4番線'; izumisanoUp.stations[4].loopTrack = '4番線';
 for (const v of izumisanoUp.services!) if (v.id === 'southern') { v.kind = 'commuter-old'; v.unitKinds = ['commuter-old', 'southern-10000']; }
+// 上りの走行線と番線。空港線系統は外側上り線(T4)・6番（P3の右側）、本線系統は上り本線(T3)・5番（P3の左側）。
 for (const v of izumisanoUp.services!) {
   const airport = v.id === 'airport' || v.id === 'limited';
-  v.lane = mirrorProfile(izumisano, airport ? AIRPORT_UP : MAIN_UP);
+  v.lane = mirrorProfile(izumisano, airport ? OUTER_UP : MAIN_UP);
   v.trackNames = { 0: airport ? '6番線' : '5番線' };
   v.platformSides = { 0: airport ? 'R' : 'L' };
   if (airport) {

@@ -25,11 +25,12 @@ export function buildCustomStation(ctx: GameContext, sta: Station, prev: string,
     const t = ctx.track.trackAt(sc), b = new GeoBatch();
     const grp = new THREE.Group(); grp.position.copy(ctx.track.at(sc, 0, 0)); grp.rotation.y = -t.phi; ctx.scene.add(grp);
     const hb = hallBounds(ctx.route, sta);
-    addHallArchitecture(b, { ...hb, from: hb.from - sc, to: hb.to - sc }, arch);
+    addHallArchitecture(b, { ...hb, from: hb.from - sc, to: hb.to - sc }, arch, dy);
     grp.name = `station-hall-${sta.name}`;
     b.build({ body: new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x454545, emissiveIntensity: .25 }) }, grp);
   }
-  if (!sta.elevated || !main || list.every(p => p.external)) return;
+  // 泉佐野の分割屋根の駅舎は東西の出入口と改札階を自前で持つので、下の簡易な箱は置かない（二重にしない）
+  if (!sta.elevated || !main || list.every(p => p.external) || (arch?.kind === 'hall' && arch.style === 'split-roof')) return;
   // 片面ホームが無い（島式だけの）高架駅: 高架下の改札・駅舎（線路の範囲の左外）
   const [lo] = trackSpan(ctx.route, sc), t = ctx.track.trackAt(sc), b = new GeoBatch();
   const grp = new THREE.Group(); grp.position.copy(ctx.track.at(sc, 0, 0)); grp.rotation.y = -t.phi; ctx.scene.add(grp);

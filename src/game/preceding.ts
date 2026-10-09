@@ -81,7 +81,7 @@ export function buildPrecedingKeys(route: Route, service?: ServiceId): Preceding
   const lastSta = route.stations[route.stations.length - 1];
   // 終着駅で自列車と別の番線（普通の進路 lane が分かれる）に入る普通は、着いたら本線の閉そくから外す
   const ownLane = (v?: ServiceSpec) => v?.lane ? profileLat(v.lane, lastSta.stopS) : 0;
-  const apart = !!lastSta && !!local && !!player && Math.abs(ownLane(local) - ownLane(player)) > 1;
+  const apart = !!lastSta && !!local && !!player && (Math.abs(ownLane(local) - ownLane(player)) > 1 || !!player.precedingLocalApart);
   if (local?.useLoop && lastSta?.loop && !lastSta.loopPriority) keys.push({ t: 1e6, s: last.s });
   else if (apart) keys.push({ t: last.t + 1, s: last.s + 1e5 }, { t: 1e6, s: last.s + 1e5 });
   else keys.push({ t: last.t + 140, s: last.s + 2500 }, { t: 1e6, s: last.s + 2500 });

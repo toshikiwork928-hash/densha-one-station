@@ -10,6 +10,7 @@ import { createRng } from '../core/rng';
 import { ChunkedBatch, GeoBatch, M, P } from './batch';
 import { loopShape, loopZones, trackLines, trackSpan } from '../route/service';
 import { getTerrain, hash } from './terrain';
+import { areaKey } from './river';
 import { tramBlocks } from './hankai-tram';
 import { towerZones } from './coastal-tower';
 import { coastalThirdTracks } from './coastal-stations';
@@ -20,10 +21,7 @@ import { namba } from '../route/routes/namba';
 import { shiokaze } from '../route/routes/shiokaze';
 import { kishiwada } from '../route/routes/kishiwada';
 import { izumisano } from '../route/routes/izumisano';
-import nambaData from '../data/osm/namba.json';
-import sakaiIzumiotsuData from '../data/osm/sakai-izumiotsu.json';
-import izumiotsuKishiwadaData from '../data/osm/izumiotsu-kishiwada.json';
-import kishiwadaIzumisanoData from '../data/osm/kishiwada-izumisano.json';
+import { misakiWakayamako } from '../route/routes/misaki-wakayamako';
 
 export interface OsmData {
   source: string;
@@ -38,29 +36,100 @@ export interface OsmData {
   landmarks: (string | number)[][];
 }
 
-/** データと、その座標のもとになったコース */
-const DATASETS: { id: string; base: Route; data: OsmData }[] = [
-  { id: 'namba', base: namba, data: nambaData as unknown as OsmData },
-  { id: 'sakai-izumiotsu', base: shiokaze, data: sakaiIzumiotsuData as unknown as OsmData },
-  { id: 'izumiotsu-kishiwada', base: kishiwada, data: izumiotsuKishiwadaData as unknown as OsmData },
-  { id: 'kishiwada-izumisano', base: izumisano, data: kishiwadaIzumisanoData as unknown as OsmData },
+/** データと、その座標のもとになったコース。データ本体は選んだコースが必要とする区間だけ dynamic import で読む（loadOsmFor） */
+const DATASETS: { id: string; base: Route; load: () => Promise<OsmData>; /** 水面だけの手作りデータ（建物・道路なし）。街並みは作らず、川の溝（橋の下）にだけ使う */ waterOnly?: boolean }[] = [
+  { id: 'namba', base: namba, load: async () => (await import('../data/osm/namba.json')).default as unknown as OsmData },
+  { id: 'sakai-izumiotsu', base: shiokaze, load: async () => (await import('../data/osm/sakai-izumiotsu.json')).default as unknown as OsmData },
+  { id: 'izumiotsu-kishiwada', base: kishiwada, load: async () => (await import('../data/osm/izumiotsu-kishiwada.json')).default as unknown as OsmData },
+  { id: 'kishiwada-izumisano', base: izumisano, load: async () => (await import('../data/osm/kishiwada-izumisano.json')).default as unknown as OsmData },
+  // みさき公園〜和歌山港: OSM の水面データが無いので、紀ノ川橋梁の下の水面を手で作ったデータ（建物・道路は無い。街並みは手続き生成）
+  { id: 'misaki-wakayamako', base: misakiWakayamako, load: async () => (await import('../data/osm/misaki-wakayamako.json')).default as unknown as OsmData, waterOnly: true },
 ];
 
-const cache = new WeakMap<Route, OsmData | null>();
+/** 走るコースとデータの共通の駅（駅名が一致するもの）。2つ未満ならそのデータは使わない。駅名だけで決まる（applyService の前後で変わらない） */
+function sharedStations(ds: { base: Route }, route: Route) {
+  const pairs = ds.base.stations.map((st, i) => ({ st, j: route.stations.findIndex(x => x.name === st.name), i })).filter(p => p.j >= 0);
+  return pairs.length >= 2 ? pairs : null;
+}
+
+/** このコースが使う区間データの id（上下は同じ区間を共有。堺〜岸和田の通しは堺〜泉大津と泉大津〜岸和田の2区間）。無ければ空 */
+export function osmSectionsFor(route: Route): string[] {
+  return DATASETS.filter(ds => sharedStations(ds, route)).map(ds => ds.id);
+}
+
+/** 読込済みの区間データ。選んだコースの分だけを持つ（別のコースを読むと入れ替える） */
+const loaded = new Map<string, OsmData>();
+/** 読込中の区間（同じ区間の二重取得を避ける。失敗したら捨てて再試行できるようにする） */
+const pending = new Map<string, Promise<OsmData>>();
+/** 走るコースの座標へ写した結果。直近の1コース分だけ持つ */
+let mapped: { route: Route; data: OsmData | null; /** 街並みを作るデータ（水面だけの手作りデータ以外）が含まれるか */ scenery: boolean } | null = null;
+/** 読込の世代。コースが変わったら古い読込の結果を捨てる */
+let loadGeneration = 0;
+
+export class OsmLoadSuperseded extends Error {
+  constructor() { super('別のコースの読み込みが始まったため、この読み込みの結果は使わない'); this.name = 'OsmLoadSuperseded'; }
+}
+export class OsmLoadError extends Error {
+  constructor(readonly section: string, cause: unknown) {
+    super(`沿線データ ${section} を読み込めなかった: ${cause instanceof Error ? cause.message : String(cause)}`);
+    this.name = 'OsmLoadError';
+  }
+}
+
+/**
+ * このコースに必要な区間データだけを非同期で読む。完了後に osmFor を使える。
+ * 他のコースの区間データは捨てる。読込中に別のコースの読み込みが始まった場合は OsmLoadSuperseded で終わる（何も配置しない）。
+ * 失敗は OsmLoadError。もう一度呼べば、失敗した区間だけ取り直す
+ */
+export async function loadOsmFor(route: Route): Promise<void> {
+  const gen = ++loadGeneration;
+  const need = osmSectionsFor(route);
+  for (const id of [...loaded.keys()]) if (!need.includes(id)) loaded.delete(id);
+  mapped = null;
+  await Promise.all(need.map(async id => {
+    if (loaded.has(id)) return;
+    let p = pending.get(id);
+    if (!p) {
+      const ds = DATASETS.find(d => d.id === id)!;
+      p = ds.load();
+      pending.set(id, p);
+      p.then(() => { if (pending.get(id) === p) pending.delete(id); }, () => { if (pending.get(id) === p) pending.delete(id); });
+    }
+    let data: OsmData;
+    try { data = await p; } catch (e) { if (gen !== loadGeneration) throw new OsmLoadSuperseded(); throw new OsmLoadError(id, e); }
+    if (gen !== loadGeneration) throw new OsmLoadSuperseded();
+    loaded.set(id, data);
+  }));
+  if (gen !== loadGeneration) throw new OsmLoadSuperseded();
+}
+
+/** このコースの沿線データが使える状態か（区間データが不要なコースも true）。osmFor を呼んでよいかの判定に使う */
+export function osmReady(route: Route): boolean {
+  return mapped?.route === route || osmSectionsFor(route).every(id => loaded.has(id));
+}
+
+/** 読込済みの区間データと写した結果を手放す（ワールドの生成後に呼ぶ。景観のオブジェクトは別に保持される） */
+export function releaseOsmData(): void {
+  loaded.clear(); pending.clear(); mapped = null;
+  loadGeneration++;
+}
 
 /**
  * 走るコースの座標へ写したデータ（共通の駅が2つ以上あるデータを合わせる）。無ければ null。
- * 区間データをつないだ通しコースでは、つなぎ目の駅の中心で各データを切って重ならないようにする
+ * 区間データをつないだ通しコースでは、つなぎ目の駅の中心で各データを切って重ならないようにする。
+ * 必要な区間は loadOsmFor で読み込み済みであること
  */
 export function osmFor(route: Route): OsmData | null {
-  if (cache.has(route)) return cache.get(route)!;
+  if (mapped?.route === route) return mapped.data;
   const out: OsmData = { source: '', buildings: [], roads: [], areas: [], landmarks: [], highways: [] };
-  let any = false;
+  let any = false, scenery = false;
   const center = (st: Route['stations'][number]) => (st.platform.from + st.platform.to) / 2;
   for (const ds of DATASETS) {
-    const pairs = ds.base.stations.map((st, i) => ({ b: center(st), j: route.stations.findIndex(x => x.name === st.name), i }))
-      .filter(p => p.j >= 0);
-    if (pairs.length < 2) continue;
+    const shared = sharedStations(ds, route);
+    if (!shared) continue;
+    const data = loaded.get(ds.id);
+    if (!data) throw new Error(`沿線データ ${ds.id} が未読込（loadOsmFor を待つ）`);
+    const pairs = shared.map(p => ({ b: center(p.st), j: p.j, i: p.i }));
     const rev = pairs[1].j < pairs[0].j;
     const B = pairs.map(p => p.b), Tt = pairs.map(p => center(route.stations[p.j]));
     const last = route.stations.length - 1;
@@ -75,20 +144,20 @@ export function osmFor(route: Route): OsmData | null {
     const C = Math.min(...ds.base.tracks) + Math.max(...ds.base.tracks);
     const mapL = (l: number) => rev ? C - l : l;
     const inR = (sb: number) => sb >= lo && sb <= hi;
-    for (const b of ds.data.buildings) if (inR(b[0])) out.buildings.push([mapS(b[0]), mapL(b[1]), ...b.slice(2)]);
-    for (const r of ds.data.roads) {
+    for (const b of data.buildings) if (inR(b[0])) out.buildings.push([mapS(b[0]), mapL(b[1]), ...b.slice(2)]);
+    for (const r of data.roads) {
       const pts = r[3] as number[], keep: number[] = [];
       const flush = () => { if (keep.length >= 4) out.roads.push([r[0], r[1], r[2], keep.slice()]); keep.length = 0; };
       for (let i = 0; i < pts.length; i += 2) { if (inR(pts[i])) keep.push(mapS(pts[i]), mapL(pts[i + 1])); else flush(); }
       flush();
     }
-    for (const h of ds.data.highways ?? []) {
+    for (const h of data.highways ?? []) {
       const pts = h[1] as number[], keep: number[] = [];
       const flush = () => { if (keep.length >= 6) out.highways!.push([h[0], rev ? reverseTriples(keep) : keep.slice()]); keep.length = 0; };
       for (let i = 0; i < pts.length; i += 3) { if (inR(pts[i])) keep.push(mapS(pts[i]), mapL(pts[i + 1]), pts[i + 2]); else flush(); }
       flush();
     }
-    for (const a of ds.data.areas) {
+    for (const a of data.areas) {
       let poly: [number, number][] = [];
       const pts = a[1] as number[];
       for (let i = 0; i < pts.length; i += 2) poly.push([pts[i], pts[i + 1]]);
@@ -98,14 +167,21 @@ export function osmFor(route: Route): OsmData | null {
       const flat = poly.flatMap(([sb, l]) => [mapS(sb), mapL(l)]);
       out.areas.push([a[0], rev ? reversePairs(flat) : flat]);
     }
-    for (const m of ds.data.landmarks) if (inR(m[1] as number)) out.landmarks.push([m[0], mapS(m[1] as number), mapL(m[2] as number)]);
-    out.source = ds.data.source;
+    for (const m of data.landmarks) if (inR(m[1] as number)) out.landmarks.push([m[0], mapS(m[1] as number), mapL(m[2] as number)]);
+    out.source = data.source;
     any = true;
+    if (!ds.waterOnly) scenery = true;
   }
   out.buildings.sort((a, b) => a[0] - b[0]);
   const res = any ? out : null;
-  cache.set(route, res);
+  mapped = { route, data: res, scenery };
   return res;
+}
+
+/** osmFor のうち、街並みを OSM のデータで作るコースのもの。水面だけの手作りデータのコースは null（街並みは手続き生成） */
+export function osmSceneryFor(route: Route): OsmData | null {
+  const data = osmFor(route);
+  return data && mapped?.scenery ? data : null;
 }
 
 /** 多角形を s = v で切る（keep = 1: v 以上を残す、-1: v 以下） */
@@ -132,7 +208,7 @@ function reversePairs(f: number[]): number[] {
 
 /** このコースの景観を OSM データで作るか */
 export function hasOsmScenery(ctx: GameContext): boolean {
-  return !!osmFor(ctx.route);
+  return osmSectionsFor(ctx.route).some(id => !DATASETS.find(d => d.id === id)?.waterOnly);
 }
 
 /** 部品の作り手（town-jp.ts から渡す） */
@@ -209,7 +285,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
   // 駅直結のタワー、道路の跨線橋、阪堺線・高師浜線の高架
   const towers = [...towerZones(route), ...twinTowerZones(route)];
   const overpasses = (route.coastalLandmarks ?? []).filter(l => l.kind === 'road-overpass').map(l => l.s);
-  const elevated = (s: number) => T.trackY(s) - T.groundY(s) > 3;
+  const elevated = (s: number) => T.trackY(s) - T.dryY(s) > 3;
   const blocked = (s0: number, s1: number, l0: number, l1: number, g: number, road = false) => {
     const s = (s0 + s1) / 2, [a, b] = span(s), sd = (l0 + l1) / 2 < (a + b) / 2 ? -1 : 1;
     if (towers.some(t => t.side === sd && s0 < t.to && s1 > t.from)) return true;
@@ -227,11 +303,17 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
     const t = track.trackAt(s), fx = Math.sin(t.phi), fz = -Math.cos(t.phi);
     return { x: Math.cos(a) * fx + Math.sin(a) * t.rx, z: Math.cos(a) * fz + Math.sin(a) * t.rz };
   };
-  const ground = (s: number) => T.groundY(Math.max(route.extent.from, Math.min(route.extent.to, s)));
+  const clampS = (s: number) => Math.max(route.extent.from, Math.min(route.extent.to, s));
+  /** 川の溝を除いた地面の標高（建物・道路・木は川の溝の外に置くので、これが地面の高さ） */
+  const ground = (s: number) => T.dryY(clampS(s));
 
-  // 川（route.structures の橋の下は地面が下がって水面がある）と OSM の水面: 建物を置かない
-  const bridges = (route.structures ?? []).filter(x => x.kind === 'bridge');
-  const inRiver = (s: number, m = 0) => bridges.some(x => s > x.from - m && s < x.to + m);
+  // 川（橋の下の溝と、OSM の水面に沿った溝。terrain.ts / river.ts）と OSM の水面: 建物・木を置かない
+  const smooth01 = (x: number) => { const u = Math.min(1, Math.max(0, x)); return u * u * (3 - 2 * u); };
+  /** 外接矩形（半幅 hs, hl）の周りが川の溝・水面から 3m 以内か */
+  const nearRiver = (s: number, lat: number, hs: number, hl: number) => {
+    for (const ds of [-hs, 0, hs]) for (const dl of [-hl, 0, hl]) if (T.riverNear(clampS(s + ds), lat + dl, 3)) return true;
+    return false;
+  };
   const inPolyF = (pts: number[], ps: number, pl: number) => {
     let c = false;
     for (let i = 0, j = pts.length - 2; i < pts.length; j = i, i += 2) {
@@ -267,7 +349,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
     if (nearLine(s - hs, s + hs, lat - hl, lat + hl)) return false;
     if (inReserved(s - half, s + half, lat - half, lat + half)) return false; // 専用モジュールの敷地（駅ビル・車庫・商業施設）
     if (blocked(s - half, s + half, lat - half, lat + half, g)) return false;
-    if (inRiver(s - hs, 6) || inRiver(s + hs, 6) || inArea(s, lat, WATER)) return false; // 川・池の上
+    if (nearRiver(s, lat, hs, hl) || inArea(s, lat, WATER)) return false; // 川・池の上
     if (half < 12 && roadNear0(s, lat)) return false; // 写し方のずれで道路に載った小さな建物
     return true;
   };
@@ -383,24 +465,48 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
   }
 
   // ================= 地面: 道路・公園・緑地・川 =================
-  // 川を渡る道路は、川の手前の地面の高さで橋にする
-  const bankY = (s: number) => {
-    const x = bridges.find(q => s > q.from - 4 && s < q.to + 4);
-    return x ? Math.max(ground(x.from - 12), ground(x.to + 12)) + .5 : null;
-  };
-  const lift = (s: number) => ground(s);
-  const liftRoad = (s: number) => bankY(s) ?? ground(s);
-  /** s-lat の折れ線を幅 w の帯にする（20m ごとに分けて線路の曲がりに沿わせる）。caps = 端と曲がり角に円盤を足してつなぎ目を埋める */
-  const ribbon = (b: GeoBatch, pts: number[], w: number, dy: number, col: number, caps = false) => {
-    const P2: [number, number][] = [];
-    for (let i = 0; i + 3 < pts.length; i += 2) {
-      const s0 = pts[i], l0 = pts[i + 1], s1 = pts[i + 2], l1 = pts[i + 3];
-      const n = Math.max(1, Math.ceil(Math.hypot(s1 - s0, l1 - l0) / 20));
-      for (let k = i ? 1 : 0; k <= n; k++) P2.push([s0 + (s1 - s0) * k / n, l0 + (l1 - l0) * k / n]);
+  // 道路が川の溝（水面の多角形の内側と、橋の下の溝）にかかる所は橋にする: 溝の深さ 0 → 1.5m で路面を地面から 0.5m 持ち上げ、
+  // 持ち上げた所に橋桁・高欄、桁の下と地面の間に橋台（隙間が 2m 以下）または橋脚を作る。多角形の外では地面の高さに戻る
+  const DECK = .5, GIRDER = 1.15;
+  /** 路面の持ち上げ（0..1）: 道路の中心と両縁の川の溝の深さの最大から。dir = 道路の向き（s-lat 平面の単位ベクトル） */
+  const riseAt = (s: number, l: number, ds: number, dl: number, w: number) => {
+    let d = T.riverDepth(clampS(s), l);
+    if (d < 6) {
+      const hs = -dl * w / 2, hl = ds * w / 2;
+      d = Math.max(d, T.riverDepth(clampS(s + hs), l + hl), T.riverDepth(clampS(s - hs), l - hl));
     }
+    // 地上の線路（高架でない）の近くは橋の溝の上でも路面を持ち上げない（線路の帯と、その両側 w/2+4m まで平ら。w/2+10m で全部）
+    const near = elevated(clampS(s)) ? 1 : smooth01((gap(clampS(s), l) - (w / 2 + 4)) / 6);
+    return smooth01(d / 1.5) * near;
+  };
+  /** s-lat の折れ線を細かく分ける位置（頂点の番号 i と区間内の割合 t）。川の近くは 4m ごと、ほかは 20m ごとで線路の曲がりに沿わせる */
+  const resample = (pts: number[], w: number) => {
+    const out: { i: number; t: number }[] = [];
+    for (let i = 0; i + 3 < pts.length; i += 2) {
+      const s0 = pts[i], l0 = pts[i + 1], s1 = pts[i + 2], l1 = pts[i + 3], len = Math.hypot(s1 - s0, l1 - l0);
+      const step = T.riverNear(clampS((s0 + s1) / 2), (l0 + l1) / 2, w / 2 + len / 2 + 8) ? 4 : 20;
+      const n = Math.max(1, Math.ceil(len / step));
+      for (let k = i ? 1 : 0; k <= n; k++) out.push({ i, t: k / n });
+    }
+    return out;
+  };
+  const pointAt = (pts: number[], k: { i: number; t: number }): [number, number] =>
+    [pts[k.i] + (pts[k.i + 2] - pts[k.i]) * k.t, pts[k.i + 1] + (pts[k.i + 3] - pts[k.i + 1]) * k.t];
+  const dirOf = (P2: [number, number][], i: number): [number, number] => {
+    const a = P2[Math.max(0, i - 1)], c = P2[Math.min(P2.length - 1, i + 1)], ds = c[0] - a[0], dl = c[1] - a[1], L = Math.hypot(ds, dl) || 1;
+    return [ds / L, dl / L];
+  };
+  /**
+   * s-lat の折れ線 pts を幅 w の帯にする。caps = 端と曲がり角に円盤を足してつなぎ目を埋める。
+   * 路面の持ち上げは道路の中心線 center（幅 cw）で決める（中央線・端線は pts を center からずらした線で、路面と同じ高さにそろえる）
+   */
+  const ribbon = (b: GeoBatch, pts: number[], w: number, dy: number, col: number, caps = false, center = pts, cw = w) => {
+    const ks = resample(center, cw), P2 = ks.map(k => pointAt(pts, k)), C2 = ks.map(k => pointAt(center, k));
     const tris: number[] = [];
-    const W = (s: number, lat: number) => { const v = track.at(s, lat, 0); v.y = liftRoad(s) + dy; return v; };
-    const Wp = P2.map(([q, l]) => W(q, l));
+    const Wp = P2.map(([q, l], i) => {
+      const [ds, dl] = dirOf(C2, i), v = track.at(q, l, 0);
+      v.y = ground(q) + DECK * riseAt(C2[i][0], C2[i][1], ds, dl, cw) + dy; return v;
+    });
     for (let i = 0; i + 1 < P2.length; i++) {
       const A = Wp[i], B = Wp[i + 1], dx = B.x - A.x, dz = B.z - A.z, L = Math.hypot(dx, dz) || 1;
       const nx = -dz / L * w / 2, nz = dx / L * w / 2;
@@ -427,6 +533,33 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
     upFacing(tris);
     if (tris.length) b.addTris('road', tris, col);
   };
+  /** 川の溝にかかる道路の橋桁・高欄・橋台・橋脚（路面は ribbon が持ち上げている） */
+  const roadBridge = (b: GeoBatch, pc: number[], w: number) => {
+    const P2 = resample(pc, w).map(k => pointAt(pc, k));
+    let acc = 12;
+    for (let i = 0; i + 1 < P2.length; i++) {
+      const [sa, la] = P2[i], [sb, lb] = P2[i + 1], len = Math.hypot(sb - sa, lb - la), ds = (sb - sa) / (len || 1), dl = (lb - la) / (len || 1);
+      const rA = riseAt(sa, la, ds, dl, w), rB = riseAt(sb, lb, ds, dl, w), r = (rA + rB) / 2;
+      if (r < .02) { acc = 12; continue; }
+      const A = track.at(sa, la, 0), B = track.at(sb, lb, 0), L = Math.hypot(B.x - A.x, B.z - A.z);
+      if (L < .5) continue;
+      const yA = ground(sa) + DECK * rA, yB = ground(sb) + DECK * rB, y = (yA + yB) / 2;
+      const yaw = Math.atan2(B.x - A.x, B.z - A.z), mx = (A.x + B.x) / 2, mz = (A.z + B.z) / 2, cx = Math.cos(yaw), sx = Math.sin(yaw);
+      const pitch = -Math.atan2(yB - yA, L), Ls = Math.hypot(L, yB - yA) + .2;
+      b.add('body', P.box, M(mx, y - .55, mz, yaw, w + .6, 1.2, Ls, pitch), 0xa5a49c); // 桁
+      if (r > .3) for (const sd of [-1, 1]) b.add('body', P.box, M(mx + cx * sd * (w / 2 + .15), y + .55, mz - sx * sd * (w / 2 + .15), yaw, .3, 1.0, Ls, pitch), 0xc9c8c0); // 高欄
+      // 桁の下の地面（路面の幅と両端の最も低い所）
+      let low = Infinity;
+      for (const [q, l] of [[sa, la], [(sa + sb) / 2, (la + lb) / 2], [sb, lb]]) for (const o of [-w / 2, 0, w / 2]) low = Math.min(low, T.terrainY(clampS(q - dl * o), l + ds * o));
+      const bottom = Math.max(yA, yB) - GIRDER, gap = bottom - low;
+      if (gap <= .05) continue;
+      if (gap <= 2) b.add('body', P.boxB, M(mx, low - .2, mz, yaw, w * .96, gap + .25, L + .1), 0x9c9b93); // 橋台（地面との隙間が小さい所は埋める）
+      else {
+        acc += L;
+        if (acc >= 12) { acc = 0; b.add('body', P.boxB, M(mx, low - .5, mz, yaw, w * .6, gap + .5, 1.6), 0x9c9b93); } // 橋脚
+      }
+    }
+  };
   let nR = 0;
   const ROAD_COL = [0x4f5257, 0x4f5257, 0x585b60, 0x65676b];
   for (const r of data.roads) {
@@ -444,19 +577,8 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
       const b = K.chunks.at(pc[0]); b.parent = null;
       // 等級ごとに高さを分けて重なりのちらつきを防ぐ（広い道が上）
       ribbon(b, pc, w, .09 + (3 - cls) * .012, ROAD_COL[cls], true);
-      if (cls <= 2 && w >= 7) for (const off of [-w / 2 + .5, w / 2 - .5]) ribbon(b, offsetLine(pc, off), .15, .14, 0xe2e2dc);
-      // 川を渡る所は橋桁と橋脚
-      for (let i = 0; i + 3 < pc.length; i += 2) {
-        const sa = pc[i], sb = pc[i + 2], y = bankY((sa + sb) / 2);
-        if (y == null) continue;
-        const A = track.at(sa, pc[i + 1], 0), B = track.at(sb, pc[i + 3], 0), L = Math.hypot(B.x - A.x, B.z - A.z);
-        if (L < .5) continue;
-        const yaw = Math.atan2(B.x - A.x, B.z - A.z), mx = (A.x + B.x) / 2, mz = (A.z + B.z) / 2, cx = Math.cos(yaw), sx = Math.sin(yaw);
-        b.add('body', P.box, M(mx, y - .55, mz, yaw, w + .6, 1.2, L + .2), 0xa5a49c);
-        for (const sd of [-1, 1]) b.add('body', P.box, M(mx + cx * sd * (w / 2 + .15), y + .55, mz - sx * sd * (w / 2 + .15), yaw, .3, 1.0, L + .2), 0xc9c8c0);
-        const gy = ground((sa + sb) / 2);
-        if (y - gy > 1.5) b.add('body', P.boxB, M(mx, gy - .5, mz, yaw, w * .6, y - gy - .6, 1.6), 0x9c9b93);
-      }
+      if (cls <= 2 && w >= 7) for (const off of [-w / 2 + .5, w / 2 - .5]) ribbon(b, offsetLine(pc, off), .15, .14, 0xe2e2dc, false, pc, w);
+      roadBridge(b, pc, w);
     }
     nR++;
   }
@@ -501,8 +623,8 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
         const g = gap(a.s, a.l);
         if (g > 4 + w * .4 && !nearLine(a.s - 2, a.s + 2, a.l - 2, a.l + 2) && !inReserved(a.s - 2, a.s + 2, a.l - 2, a.l + 2)) {
           acc = 0;
-          const y0 = ground(a.s);
-          b.add('body', P.boxB, M(A.x, y0, A.z, yaw, 2.4, a.h - 1.8, 2.4), 0xaeada5);
+          const y0 = T.terrainY(clampS(a.s), a.l); // 川の中は川底から立てる
+          b.add('body', P.boxB, M(A.x, y0, A.z, yaw, 2.4, ground(a.s) + a.h - 1.8 - y0, 2.4), 0xaeada5);
           b.add('body', P.box, M(A.x, A.y - 2.4, A.z, yaw, w * .85, 1.2, 2.6), 0xaeada5);
         }
       }
@@ -510,12 +632,14 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
   };
   for (const hw of data.highways ?? []) buildHighway(hw[0] as number, hw[1] as number[]);
   // 面（多角形）: s 方向 40m ごとに切って三角形分割し（線路の曲がりに沿わせる）地面に貼る。木を植える面は TreeSpot に
+  const riverKeys = T.riverAreaKeys;
   const AREA_DY: Record<string, number> = { water: .075, lot: .035, grass: .04, pitch: .045, school: .045, park: .05, grave: .055, shrine: .06, wood: .065 };
   const treeAreas: { type: string; pts: number[] }[] = [];
   for (const a of data.areas) {
     const type = a[0] as string, pts = a[1] as number[];
     const col = AREA_COL[type];
     if (!col || pts.length < 6) continue;
+    if (type === 'water' && riverKeys.has(areaKey(pts))) continue; // 川の水面は地形側（terrain.ts）で、溝の形に沿って作る
     const poly: [number, number][] = [];
     let s0 = Infinity, s1 = -Infinity;
     for (let i = 0; i < pts.length; i += 2) { poly.push([pts[i], pts[i + 1]]); s0 = Math.min(s0, pts[i]); s1 = Math.max(s1, pts[i]); }
@@ -527,7 +651,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
       if (piece.length < 3) continue;
       const contour = piece.map(([x, y]) => new THREE.Vector2(x, y));
       const tri = THREE.ShapeUtils.triangulateShape(contour, []);
-      const V = contour.map(v => { const p = track.at(v.x, v.y, 0); p.y = lift(v.x) + dy; return p; });
+      const V = contour.map(v => { const p = track.at(v.x, v.y, 0); p.y = T.terrainY(clampS(v.x), v.y) + dy; return p; });
       for (const [i, j, k] of tri) out.push(V[i].x, V[i].y, V[i].z, V[j].x, V[j].y, V[j].z, V[k].x, V[k].y, V[k].z);
     }
     upFacing(out, true);
@@ -562,7 +686,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
     for (let s = s0 + sp / 2; s < s1; s += sp) for (let l = l0 + sp / 2; l < l1; l += sp) {
       if (nT >= TREE_MAX) break;
       const ss = s + (rnd() - .5) * sp * .8, ll = l + (rnd() - .5) * sp * .8;
-      if (!inPoly(pts, ss, ll) || gap(ss, ll) < 6 || roadNear(ss, ll) || reservedAt(ss, ll) || waters.some(w => inPoly(w, ss, ll))) continue;
+      if (!inPoly(pts, ss, ll) || gap(ss, ll) < 6 || roadNear(ss, ll) || reservedAt(ss, ll) || waters.some(w => inPoly(w, ss, ll)) || T.riverNear(clampS(ss), ll, 3)) continue;
       if (type === 'park' && rnd() < (big ? .15 : .35)) continue; // 公園は広場を残す
       const [rs, rl] = toReal(ss, ll);
       trees.push({ s: rs, lat: rl, y: ground(ss), k: type === 'wood' || type === 'shrine' || big ? 1.05 + rnd() * .5 : .8 + rnd() * .4 });
@@ -579,7 +703,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
         const ss = s0 + (s1 - s0) * u / L, ll = l0 + (l1 - l0) * u / L, ns = -(l1 - l0) / L, nl = (s1 - s0) / L;
         for (const side of [-1, 1]) {
           const ts = ss + ns * side * (w / 2 + 1.2), tl = ll + nl * side * (w / 2 + 1.2);
-          if (gap(ts, tl) < 40 || rnd() < .3) continue;
+          if (gap(ts, tl) < 40 || rnd() < .3 || T.riverNear(clampS(ts), tl, 4)) continue;
           const [rs, rl] = toReal(ts, tl);
           trees.push({ s: rs, lat: rl, y: ground(ts), k: .7 + rnd() * .25 }); nT++;
         }

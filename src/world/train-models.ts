@@ -94,6 +94,24 @@ const shared = {
 const ledMats = new Map<string, THREE.MeshBasicMaterial>();
 let night = 0;
 
+/**
+ * 描画の見た目の切替（render/illustrated.ts）へ、車両の生成を知らせる登録口。
+ * 見た目の切替はこれで新しい車両・材質を知るので、シーン全体を定期的に走査しなくてよい。登録が無い間（標準）は何もしない
+ */
+export interface TrainLookListener {
+  /** 車両が1両生成された（外板・塗装・窓などを子に持つグループ） */
+  car(object: THREE.Object3D): void;
+  /** 種別ごとの共有材質のうち、あとから作られるもの（ドア開放の外板）が生成された */
+  material(mat: THREE.Material): void;
+}
+const lookListeners = new Set<TrainLookListener>();
+/** 登録する。すでにあるドア開放の外板はすぐ渡す。戻り値で登録を解除する */
+export function addTrainLookListener(l: TrainLookListener): () => void {
+  lookListeners.add(l);
+  for (const k of kindKits.values()) for (const m of k.openMats) l.material(m);
+  return () => { lookListeners.delete(l); };
+}
+
 function sheetMat(m: SheetMaps, env: THREE.Texture, physical: boolean, envI: number): THREE.MeshStandardMaterial {
   const p = {
     map: m.map, roughnessMap: m.rm, metalnessMap: m.rm, emissiveMap: m.emissive, emissive: 0xfff1d6, emissiveIntensity: 0,
@@ -186,7 +204,10 @@ function openMat(k: KindKit, head: boolean, make: () => THREE.MeshStandardMateri
   let c = openCache.get(k);
   if (!c) { c = {}; openCache.set(k, c); }
   const key = head ? 'head' : 'mid';
-  if (!c[key]) { c[key] = make(); c[key]!.userData.doorsOpen = true; k.openMats.push(c[key]!); applyNight(k); }
+  if (!c[key]) {
+    c[key] = make(); c[key]!.userData.doorsOpen = true; k.openMats.push(c[key]!); applyNight(k);
+    for (const l of lookListeners) l.material(c[key]!);
+  }
   return c[key]!;
 }
 
@@ -284,6 +305,7 @@ export const createTrainSet: CreateTrainSet = (kind, cars, renderer, opts = {}) 
       out.push({ object: c.car, length: len, setDoors: c.setDoors });
     });
   });
+  for (const l of lookListeners) for (const c of out) l.car(c.object);
   return out;
 };
 

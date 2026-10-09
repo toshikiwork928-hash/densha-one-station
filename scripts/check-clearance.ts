@@ -9,8 +9,10 @@ import { shiokaze, shiokazeUp } from '../src/route/routes/shiokaze';
 import { mountain, mountainUp } from '../src/route/routes/mountain';
 import { kishiwada, kishiwadaUp } from '../src/route/routes/kishiwada';
 import { izumisano, izumisanoUp } from '../src/route/routes/izumisano';
+import { izumisanoMisaki, izumisanoMisakiUp } from '../src/route/routes/izumisano-misaki';
 import { through, throughUp } from '../src/route/routes/through';
 import { namba, nambaUp } from '../src/route/routes/namba';
+import { misakiWakayamako, misakiWakayamakoUp } from '../src/route/routes/misaki-wakayamako';
 import { buildTrack } from '../src/route/track';
 import { applyService } from '../src/route/service';
 import type { Route, ServiceId } from '../src/route/types';
@@ -28,6 +30,7 @@ import { buildBackdrop, buildEndBlock, placeScenery, prepareSceneryModels } from
 import { buildSigns } from '../src/world/signs';
 import { buildStations } from '../src/world/stations';
 import { buildTown } from '../src/world/town-jp';
+import { loadOsmFor, releaseOsmData } from '../src/world/osm-town';
 import { buildSignals } from '../src/world/signals';
 import { buildCrossings } from '../src/world/crossings';
 import type { OncomingSystem } from '../src/world/oncoming';
@@ -56,6 +59,7 @@ function context(source: Route): GameContext {
 
 const fakeOncoming = { activeSpans: () => [] } as unknown as OncomingSystem;
 async function build(ctx: GameContext): Promise<void> {
+  await loadOsmFor(ctx.route); // 沿線データは区間ごとの非同期読込
   buildTerrain(ctx);
   buildTrackMesh(ctx);
   buildStructures(ctx);
@@ -77,6 +81,7 @@ async function build(ctx: GameContext): Promise<void> {
     (await import('../src/world/namba-landmarks')).buildNambaLandmarks(nctx);
     (await import('../src/world/koya-traffic')).buildKoyaPlatforms(nctx);
   }
+  releaseOsmData();
   placeScenery(ctx, prepareSceneryModels({} as any), town.trees);
 }
 
@@ -87,7 +92,9 @@ const cases: [Route, ServiceId[]][] = [[shiokaze, ['local', 'express', 'airport'
   [kishiwada, ['local', 'express', 'airport', 'southern']], [kishiwadaUp, ['local', 'express', 'airport', 'southern']],
   [izumisano, ['local', 'express', 'airport', 'southern', 'limited']], [izumisanoUp, ['local', 'express', 'airport', 'southern', 'limited']],
   [throughUp, ['local', 'airport', 'southern']], [through, ['local', 'airport', 'southern']],
-  [namba, ['local', 'express', 'southern', 'limited']], [nambaUp, ['local', 'express', 'southern', 'limited']]];
+  [namba, ['local', 'express', 'southern', 'limited']], [nambaUp, ['local', 'express', 'southern', 'limited']],
+  [izumisanoMisaki, ['local', 'southern']], [izumisanoMisakiUp, ['local', 'southern']],
+  [misakiWakayamako, ['local', 'southern']], [misakiWakayamakoUp, ['local', 'southern']]];
 let total = 0;
 let checked = 0;
 for (const [src, services] of cases) {

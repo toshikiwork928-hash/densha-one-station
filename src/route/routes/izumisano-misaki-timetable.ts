@@ -1,0 +1,6 @@
+// 南海本線 泉佐野〜みさき公園の時刻表（scripts/timetable.ts が生成。手で直さない）
+import type { ServiceSpec } from '../types';
+
+type Id = 'local' | 'southern';
+export const SM: Record<Id, ServiceSpec['timetable']> = { local: { 0: { arr: 0, dep: 0 }, 1: { arr: 145, dep: 170 }, 2: { arr: 265, dep: 290 }, 3: { arr: 390, dep: 415 }, 4: { arr: 540, dep: 565 }, 5: { arr: 730, dep: 755 }, 6: { arr: 865, dep: 890 }, 7: { arr: 1015, dep: 1040 }, 8: { arr: 1270, dep: 1295 }, 9: { arr: 1410 } }, southern: { 0: { arr: 0, dep: 0 }, 1: { arr: 115 }, 2: { arr: 165 }, 3: { arr: 230 }, 4: { arr: 325 }, 5: { arr: 480, dep: 505 }, 6: { arr: 610 }, 7: { arr: 705 }, 8: { arr: 915 }, 9: { arr: 1020 } } };
+export const SM_UP: Record<Id, ServiceSpec['timetable']> = { local: { 0: { arr: 0, dep: 0 }, 1: { arr: 115, dep: 140 }, 2: { arr: 370, dep: 395 }, 3: { arr: 520, dep: 545 }, 4: { arr: 655, dep: 680 }, 5: { arr: 845, dep: 870 }, 6: { arr: 995, dep: 1020 }, 7: { arr: 1120, dep: 1145 }, 8: { arr: 1240, dep: 1265 }, 9: { arr: 1400 } }, southern: { 0: { arr: 0, dep: 0 }, 1: { arr: 105 }, 2: { arr: 315 }, 3: { arr: 410 }, 4: { arr: 515, dep: 540 }, 5: { arr: 700 }, 6: { arr: 795 }, 7: { arr: 860 }, 8: { arr: 915 }, 9: { arr: 1025 } } };

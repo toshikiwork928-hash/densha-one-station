@@ -5,8 +5,10 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { shiokaze, shiokazeUp } from '../src/route/routes/shiokaze';
 import { kishiwada, kishiwadaUp } from '../src/route/routes/kishiwada';
 import { izumisano, izumisanoUp } from '../src/route/routes/izumisano';
+import { izumisanoMisaki, izumisanoMisakiUp } from '../src/route/routes/izumisano-misaki';
 import { through, throughUp } from '../src/route/routes/through';
 import { namba, nambaUp } from '../src/route/routes/namba';
+import { misakiWakayamako, misakiWakayamakoUp } from '../src/route/routes/misaki-wakayamako';
 import { mountain, mountainUp } from '../src/route/routes/mountain';
 import { meetDwell } from '../src/game/meet';
 import { waitDwell, waitsAt } from '../src/game/overtake';
@@ -117,6 +119,35 @@ if (kishiwadaThroughExpressOnly) {
   ]);
   process.exit(0);
 }
+
+// --south-only は泉佐野以南のコースだけ更新
+if (process.argv.includes('--south-only')) {
+  const dn = table(izumisanoMisaki), up = table(izumisanoMisakiUp);
+  const body = (r: Record<string, string>) => `{ local: ${r.local}, southern: ${r.southern} }`;
+  writeFileSync('src/route/routes/izumisano-misaki-timetable.ts', `// 南海本線 泉佐野〜みさき公園の時刻表（scripts/timetable.ts が生成。手で直さない）
+import type { ServiceSpec } from '../types';
+
+type Id = 'local' | 'southern';
+export const SM: Record<Id, ServiceSpec['timetable']> = ${body(dn)};
+export const SM_UP: Record<Id, ServiceSpec['timetable']> = ${body(up)};
+`);
+  process.exit(0);
+}
+/** 南海本線 みさき公園〜和歌山港（普通・特急サザン）。ほかのコースの時刻表には触らない */
+function writeMisakiWakayamako(): void {
+  const dn = table(misakiWakayamako), up = table(misakiWakayamakoUp);
+  const body = (r: Record<string, string>) => `{ local: ${r.local}, southern: ${r.southern} }`;
+  writeFileSync('src/route/routes/misaki-wakayamako-timetable.ts', `// 南海本線 みさき公園〜和歌山港の時刻表（scripts/timetable.ts が生成。手で直さない）
+import type { ServiceSpec } from '../types';
+
+type Id = 'local' | 'southern';
+/** 下り（みさき公園 → 和歌山港） */
+export const MWT: Record<Id, ServiceSpec['timetable']> = ${body(dn)};
+/** 上り（和歌山港 → みさき公園） */
+export const MWT_UP: Record<Id, ServiceSpec['timetable']> = ${body(up)};
+`);
+}
+if (process.argv.includes('--misaki-wakayamako-only')) { writeMisakiWakayamako(); process.exit(0); }
 
 const izumisanoOnly = process.argv.includes('--izumisano-only');
 if (izumisanoOnly) {
@@ -235,6 +266,9 @@ type Id = 'local' | 'express' | 'airport' | 'limited' | 'southern';
 export const IT: Record<Id, ServiceSpec['timetable']> = ${iBody(iDn)};
 export const IT_UP: Record<Id, ServiceSpec['timetable']> = ${iBody(iUp)};
 `);
+
+// 南海本線 みさき公園〜和歌山港
+writeMisakiWakayamako();
 
 // 南海本線 堺〜岸和田（通し）。下り = 堺 → 岸和田（throughUp）、上り = 岸和田 → 堺（through）
 const nDn = table(throughUp), nUp = table(through);

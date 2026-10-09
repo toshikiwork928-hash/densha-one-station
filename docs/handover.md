@@ -25,7 +25,7 @@ src/
     types.ts         路線データの型（Route / Station / ServiceSpec / OncomingSpec …）
     track.ts         線形 → trackAt(s)・at(s, lat, y)
     service.ts       種別の適用（applyService）・待避線・島式の S字・ホームの側 など
-    routes/*.ts      各コースのデータ（shiokaze = 泉大津→堺、kishiwada = 泉大津→岸和田、namba = 堺→なんば、mountain = 高野線 …）
+    routes/*.ts      各コースのデータ（shiokaze = 泉大津→堺、kishiwada = 泉大津→岸和田、namba = 堺→なんば、misaki-wakayamako = みさき公園→和歌山港、mountain = 高野線 …）
     reverse.ts       逆向きのコースを自動生成（'-up'）
     concat.ts        2区間をつないだ通しコース（through.ts）
     day-patterns.ts  時間帯ごとの普通の待避・走行中の追い越し
@@ -64,7 +64,7 @@ scripts/           検証・データ生成（Node で esbuild して実行）
 - **チャンクと距離カリング**（`world/cull.ts`）: 街並み・架線などは約300m のチャンクに分け、カメラからの距離で丸ごと非表示。`cullByDistance(ctx, obj, maxDist)` に登録したものは visible をここが管理する（他から visible を触らない）
 - **LOD**: 木は距離で簡易形状に切り替え（`npm run verify:scenery` が検査）
 - **夜の明かり**: `onLight(ctx, (night, tunnel) => …)` で窓明かり・灯具を切り替える。光源そのものは `env/night-lights.ts`
-- **描画の雰囲気**: `render/illustrated.ts`（イラスト風の切り替え）、`env/look.ts`
+- **描画の雰囲気**: `render/look-switch.ts`（標準 / イラストの切替ボタンと `?look=`）、`render/illustrated.ts`（イラスト専用の処理。イラストを選んだ時だけ読み込んで有効にし、標準へ戻すと元に戻す。新しい車両は `train-models.ts` の `addTrainLookListener` で受け取る）、`env/look.ts`
 - **車両**（`world/train-models.ts`・`world/trains/*`）: 1両 = 材質別に結合した数個のメッシュ。形状・材質は車種ごとに共有し、行先 LED（canvas テクスチャ、`trains/common.ts`）だけ編成ごと。ドアは `TrainCar.setDoors(open, side)`（side は進行方向に対する L/R）。車体長は `carLenOf()`（20m、2000系・2300系・30000系は 18m）
 - **負荷の目安**: 中画質で描画コール約 110〜180。測るときは dev サーバーで `window.__densha.renderer.info.render`（triangles・calls）を見る。建物が多い区間（堺の近く）は三角形が増えやすい
 
@@ -80,7 +80,8 @@ scripts/           検証・データ生成（Node で esbuild して実行）
 ### 地図データ（OpenStreetMap）からの配置
 - 手順の詳細は [docs/osm-scenery.md](./osm-scenery.md)
 - `scripts/osm-scenery.ts` が Overpass API から線路の両側約300m の建物・道路・緑地・川を取り、**コースの座標（s, lat）へ写して**簡略化し、`src/data/osm/<区間>.json` に書く。写し方は、路線データと同じく「駅間ごとに営業キロへ伸縮」
-- `world/osm-town.ts` がそのデータで建物・道路・緑地を置く。同じ区間を含むコース（上下・通し）でも同じ位置に出る
+- OSM のデータが無いコース（みさき公園〜和歌山港）: 街並みは手続き生成（`town-jp.ts`・`scenery.ts`）。橋の下の川だけ、水面1枚の手作りデータ `src/data/osm/misaki-wakayamako.json` を `loadOsmFor` の区間として読む（`osm-town.ts` の `DATASETS` で `waterOnly: true`。`osmSceneryFor` と `hasOsmScenery` は水面だけのデータを街並みのデータとして扱わない）。標高が正の山あいは `Route.groundFollowsTrack`（地面が線路の高さに沿う。`terrain.ts`）
+- `world/osm-town.ts` がそのデータで建物・道路・緑地を置く。同じ区間を含むコース（上下・通し）でも同じ位置に出る。データは選んだコースの区間だけ dynamic import で読む（`loadOsmFor`。`main.ts` が `buildWorld` の前に待つ。詳細は [osm-scenery.md](./osm-scenery.md) の「読み込み」）
 - 実行: `npm run osm:scenery -- --course=namba`（`sakai-izumiotsu`・`izumiotsu-kishiwada`）。**クラウド環境からは Overpass につながらない**ので、取得はローカルで行う。Overpass は混むと 504 を返すので間をおいて再試行。`npm ci` は `node_modules/.cache/osm` の一時保存を消す
 - 出典の表示: 「© OpenStreetMap contributors（ODbL）」を README に書く
 - Google マップ・ストリートビュー・航空写真は **見るだけ**（位置・雰囲気の確認）。画像や形をデータに写さない
@@ -100,7 +101,7 @@ scripts/           検証・データ生成（Node で esbuild して実行）
   - 南海本線の全10方向・全4時間帯は `src/data/oncoming-timetable.json` と `world/oncoming-timetable.ts` の共通処理。列車番号、種別、停車駅、0時からの発車秒を保持し、`route.startClock + state.t` で運行する。プレイヤーの位置・種別で対向列車の発車や本数を変えない。描画範囲外の列車も運行し、近い車両モデルだけ再利用して表示する。
   - 生成: `npm run oncoming:meets -- --timetable`。鉄道運用Hub（https://unyohub.2pd.jp/railroad_nankai/）の平日時刻表（2024-12-21改正）を利用。原時刻表は `node_modules/.cache/unyohub` のみ。各開始時刻の10分前から、その時間帯の最長コース所要時間＋10分までに区間を横切る列車を収録する。ダイヤ改正・駅位置変更時は再生成する。旧 `oncoming-meets.json` は比較用に残す。
   - 原データは分単位の発車時刻で、到着時刻・実信号位置は含まない。同区間・同種別の短い所要時間と加減速から到着時刻を推定し、余分な時間は駅での待避へ割り当てる。加減速・戸扱いが収まらない場合は早発せず遅らせる。秒単位の実運行を再現するものではない。
-  - 普通は待避線・複々線の緩行線を使用。堺の上り普通は3番線、下り普通は1番線。空港急行は泉佐野の空港側線路。ゲーム用の進路占有を調べ、同じ線の先行列車の最後尾から300m以上を確保し、停車ホームが空くまで後続を駅手前に保持する。実閉そくの位置ではない。
+  - 普通は待避線・複々線の緩行線を使用。堺の上り普通は3番線、下り普通は1番線。空港急行は泉佐野の外側線（下りは外側下り線、上りは外側上り線）。ゲーム用の進路占有を調べ、同じ線の先行列車の最後尾から300m以上を確保し、停車ホームが空くまで後続を駅手前に保持する。実閉そくの位置ではない。
   - 浜寺公園は上下で副線の距離が異なる。堺→泉大津・岸和田の対向普通は堺方面副線（本線から4m、横位置8m）を使用し、泉大津方面の副線9.2mを流用しない。泉大津終着の同方向待機普通は、堺構内用の進路に終着駅の待避線移動を加えて1番線（横位置−9.2m）へ置く。
   - 単線の高野線は `game/meet.ts` の交換駅・出発信号・構内進入完了までの占有を維持する。桜ヶ丘は従来の1編成。両者も `verify:oncoming` の検証対象。
   - 開発用: `window.__oncomingDebug()` で列車番号・種別・横位置・停車駅・安全上の遅れ秒を確認できる。一時停止中は時計を進めず、再開始では運行と車両表示を初期化する。
@@ -115,6 +116,7 @@ scripts/           検証・データ生成（Node で esbuild して実行）
 | `npm run verify:oncoming` | 全コースの対向列車（本数・停車・進路占有・線路位置・途中開始・単線交換） | 実行環境による |
 | `npm run verify:routes` | 選択可能な全コース・全種別の自動運転（停止位置・定時・待避・放送・時間帯）、TOPの種別制限・春木通過・泉大津待機普通の位置 | 約10分 |
 | `npm run verify:scenery` | 木の LOD | 数秒 |
+| `npm run verify:izumisano` | 泉佐野の配線（線路4本・島式3面・ホーム端1.7m・種別別の走行線・番線・ドア側・分岐器制限） | 数秒 |
 | `npm run verify:clearance` | 建築限界（全コース・全種別で線路の周りに物がかからないか） | 40〜60分。裏で流す |
 
 dev サーバー（`npm run dev`、または `.claude/launch.json` の `densha`）での確認に使う開発用のフック:
@@ -159,10 +161,11 @@ dev サーバー（`npm run dev`、または `.claude/launch.json` の `densha`�
 | 1 | **景観の作り直し（全区間）** | ローカルのセッションで作業中（ブランチ `claude/awesome-raman-0eee6f`）。PR が出たらマージ・公開 |
 | 2 | **駅舎の構造を全駅で実物に寄せる** | 既存27駅を写真照合。新今宮・天下茶屋の大屋根、羽衣・石津川・松ノ浜などの上屋と背面壁、駅ごとの支材・屋根形をローカルで反映。未公開。出典・維持した形・工事中や写真に写らない部分は `docs/station-architecture-reference.md`。今回は配線・停止位置を変更していない |
 | 3 | **遊べる車両を増やす**（1000系・9000系・12000系） | Codex で作業中（ブランチ `codex/densha-playable-trains`） |
-| 4 | **岸和田〜泉佐野の新コース** | ローカルで上下7駅・8.0km、5種別、泉佐野3面5線、OSM景観、対向ダイヤを追加。未公開。仕様・再生成・未確認箇所は `docs/spec-kishiwada-izumisano.md`。駅舎の個別外観・踏切の現地照合は未完了 |
+| 4 | **岸和田〜泉佐野の新コース** | ローカルで上下7駅・8.0km、5種別、泉佐野島式3面4線、OSM景観、対向ダイヤを追加。未公開。仕様・再生成・未確認箇所は `docs/spec-kishiwada-izumisano.md`。泉佐野の駅舎（分割屋根・東西の駅舎）は実装済み（`docs/izumisano-station-reference.md` 6章）。ほかの駅舎の個別外観・踏切の現地照合は未完了 |
 | 5 | **高野線 なんば〜堺東の新設** + 泉北線の車両 | 規模が最大。なんば〜岸里玉出の高野線は描画だけある（`koya-traffic.ts`）。本線より最高速度が低く曲線が多い・本数が多い。運用Hub に高野線系統のデータもある（railroad_id は別） |
 | 6 | **Autoモード（見るだけ）** | 自動運転（`debug/autodrive.ts` の hook）をゲームのモードにし、視点（運転台・俯瞰・前方斜め・全景）を自動で切り替える |
 | 7 | **なんば駅探索モード** | なんば到着後だけ、自由に動かせるカメラで構内を歩く。コンコース・階段などの作り込みが別に必要 |
 | 8 | **負荷測定とスマホの画質自動調整** | ROADMAP の残り。景観の作り直しで三角形が増えた区間がある |
 | 9 | 対向列車の小さな課題 | 前の列車がまだ走路にいると、出現の機会を逃して1本見送ることがある（例: 堺→なんばの朝の特急で、天下茶屋に停車中の普通の後ろのラピートα）。ユーザー報告「住吉大社あたりで普通とすれ違った直後に七道でも普通」（実ダイヤどおりなら問題なし） |
 | 10 | なんば〜岸和田の通し | 保留（ユーザー判断）。作るなら景観の区間ごとの読み込みが必要 |
+| 11 | **泉佐野以南のコース** | みさき公園〜和歌山港（6駅・15.1km、上下、普通・特急サザン）を追加。ローカルで画面確認・Pages 公開前（ブランチ `claude/south-misaki-wakayamako`）。景観（OSM・駅舎・橋）・実ダイヤ・対向列車・踏切は後日。泉佐野〜みさき公園（10駅・17.9km）は泉佐野駅の作り直し後。仕様・仮値・不明な点は `docs/spec-south-courses.md` §7 |

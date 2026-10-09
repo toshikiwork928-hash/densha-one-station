@@ -7,8 +7,10 @@ import { shiokaze, shiokazeUp } from '../src/route/routes/shiokaze';
 import { mountain, mountainUp } from '../src/route/routes/mountain';
 import { kishiwada, kishiwadaUp } from '../src/route/routes/kishiwada';
 import { izumisano, izumisanoUp } from '../src/route/routes/izumisano';
+import { izumisanoMisaki, izumisanoMisakiUp } from '../src/route/routes/izumisano-misaki';
 import { through, throughUp } from '../src/route/routes/through';
 import { namba, nambaUp, NAMBA_TRACKS } from '../src/route/routes/namba';
+import { misakiWakayamako, misakiWakayamakoUp } from '../src/route/routes/misaki-wakayamako';
 import { approachText, departText } from '../src/audio/announce-text';
 import { applyService, destOf, sameClass, selectableServices } from '../src/route/service';
 import { buildTrack } from '../src/route/track';
@@ -35,13 +37,15 @@ function context(source: Route, service: ServiceId, vehicles: VehicleSel = {}): 
 }
 
 // タイトルボタンと同じ候補、保存復元、実際のTab/ゲームパッド用選択処理を確認。
-for (const source of [shiokaze, shiokazeUp, kishiwada, kishiwadaUp, izumisano, izumisanoUp, through, throughUp, namba, nambaUp]) {
+for (const source of [shiokaze, shiokazeUp, kishiwada, kishiwadaUp, izumisano, izumisanoUp, through, throughUp, namba, nambaUp, izumisanoMisaki, izumisanoMisakiUp, misakiWakayamako, misakiWakayamakoUp]) {
   const ids = selectableServices(source).map(v => v.id);
+  // 急行のあるコースは、選べない保存済み種別から急行へ戻る。急行の無いコース（みさき公園〜和歌山港）は先頭の種別（普通）へ戻る
+  const fallback = ids.includes('express') ? 'express' : ids[0];
   const izumiotsuEnd = [source.stations[0], source.stations.at(-1)!].some(s => s.name === '泉大津');
   for (const special of ['limited', 'southern'] as const) {
     assert.equal(ids.includes(special), !izumiotsuEnd && !!source.services?.some(v => v.id === special), `${source.id}/${special}のTOP選択`);
     const restored = context(source, special);
-    assert.equal(restored.state.sel.service, ids.includes(special) ? special : 'express', `${source.id}/${special}の保存復元`);
+    assert.equal(restored.state.sel.service, ids.includes(special) ? special : fallback, `${source.id}/${special}の保存復元`);
     if (ids.includes(special)) for (const stage of stagesOf(restored.route)) {
       assert.ok(!['泉大津', '羽衣'].includes(restored.route.stations[stage.from].name), `${source.id}/${special}通過駅から開始しない`);
       assert.ok(!['泉大津', '羽衣'].includes(restored.route.stations[stage.to].name), `${source.id}/${special}通過駅で終了しない`);
@@ -79,6 +83,84 @@ for (const source of [shiokaze, shiokazeUp, kishiwada, kishiwadaUp, izumisano, i
 }
 console.log('TOP種別・保存復元・入力選択・泉大津待機普通の配置を確認');
 if (process.argv.includes('--selection-only')) process.exit(0);
+
+// 南海本線 みさき公園〜和歌山港（下り・上り）: 駅・線形・終着・種別・景観データの構造（完走は後の共通ループが全種別・全時間帯で検査する）
+{
+  const names = ['みさき公園', '孝子', '和歌山大学前', '紀ノ川', '和歌山市', '和歌山港'];
+  for (const route of [misakiWakayamako, misakiWakayamakoUp]) {
+    const down = route === misakiWakayamako, n = route.stations.length, last = n - 1, tag = route.id;
+    assert.deepEqual(route.stations.map(s => s.name), down ? names : [...names].reverse(), `${tag}の駅`);
+    assert.equal(Math.abs(route.stations[last].stopS - route.stations[0].stopS), 15100, `${tag}みさき公園〜和歌山港 15.1km`);
+    assert.equal(route.oncoming.length, 0, `${tag}は対向列車を置かない`);
+    assert.equal(route.crossings?.length, 0, `${tag}は踏切を置かない`);
+    assert.deepEqual(selectableServices(route).map(v => v.id), ['local', 'southern'], `${tag}のTOP種別は普通とサザン`);
+    const track = buildTrack(route);
+    assert.ok(Math.abs(track.length - 15380.176) < .01, `${tag}の線形の総延長 ${track.length}`);
+    // ホームは直線・水平（みさき公園は待避線の分岐器を含む区間も本線が直線）
+    for (const st of route.stations) {
+      const { from, to } = st.platform, phi = track.trackAt(from).phi, y = track.trackAt(from).y;
+      for (let q = from; q <= to; q += 5) {
+        assert.ok(Math.abs(track.trackAt(q).phi - phi) < 1e-9, `${tag}/${st.name}ホーム全体が直線`);
+        assert.ok(Math.abs(track.trackAt(q).y - y) < 1e-6, `${tag}/${st.name}ホームが水平`);
+      }
+      // 待避線の入口の分岐器からホームの端まで本線が直線（和歌山港の島式は、線形がホームの手前 15032〜15090 の R168 の曲線で、線路を開く S字区間はこの曲線に重なる）
+      // （上りのみさき公園は、逆向きの入口の分岐器が出口側の R4977 以上の緩い曲線にかかるので、ホームの範囲だけ検査する）
+      for (const z of [down ? loopZone(st) : null]) if (z) {
+        const ap = track.trackAt(z.inFrom).phi;
+        for (let q = z.inFrom; q <= st.platform.to; q += 5) assert.ok(Math.abs(track.trackAt(q).phi - ap) < 1e-9, `${tag}/${st.name}入口の分岐器からホームの端まで本線が直線`);
+      }
+    }
+    // 勾配は ±25‰ 以内、トンネル・橋・高架はホームの範囲に重ならない（和歌山港の築堤だけホームを含む）
+    for (const g of route.gradients ?? []) assert.ok(Math.abs(g.permil) <= 25, `${tag}の勾配 ${g.permil}‰`);
+    for (const st of route.stations) for (const x of route.structures ?? []) {
+      if (x.kind === 'viaduct' && st.name === '和歌山港') continue;
+      assert.ok(st.platform.to <= x.from || st.platform.from >= x.to, `${tag}/${st.name}ホームと${x.kind}が重ならない`);
+    }
+    assert.deepEqual((route.structures ?? []).map(x => x.kind).sort(), ['bridge', 'bridge', 'tunnel', 'tunnel', 'tunnel', 'viaduct'], `${tag}の構造物`);
+    const bridges = (route.structures ?? []).filter(x => x.kind === 'bridge').sort((a, b) => a.from - b.from);
+    assert.ok(bridges.some(b => Math.abs((b.to - b.from) - 650) < .5), `${tag}の紀ノ川橋梁 650m`);
+    // 終点は和歌山港（頭端・島式・築堤上）。下りは終着 ATS（低速進入）有効、上りは無効（みさき公園は途中駅）
+    const term = down ? route.stations[last] : route.stations[0];
+    assert.ok(term.headEnd && term.island && term.elevated, `${tag}の和歌山港は頭端・島式・築堤上`);
+    assert.equal(!!route.terminalApproach, down, `${tag}の終着ATS`);
+    assert.equal(route.groundFollowsTrack, true);
+    // 和歌山港線（和歌山市の先）は 80km/h の仮値
+    const sec = down ? [route.stations[4].platform.to + 10, route.stations[5].platform.from - 100] : [route.stations[0].platform.to + 100, route.stations[1].platform.from - 10];
+    let maxLim = 0;
+    for (let q = sec[0]; q <= sec[1]; q += 10) { const k = track.limitAt(q); assert.ok(k <= 80, `${tag}の和歌山港線は80km/h以下 s=${q} ${k}`); maxLim = Math.max(maxLim, k); }
+    assert.equal(maxLim, 80, `${tag}の和歌山港線の制限（曲線のない所は80km/h）`);
+    // 信号の id は重複せず、s の範囲内
+    const ids = route.signals!.map(g => g.id);
+    assert.equal(new Set(ids).size, ids.length, `${tag}信号 id の重複なし`);
+    for (const g of route.signals!) assert.ok(g.s > route.extent.from && g.s < route.extent.to, `${tag}信号 ${g.id} が範囲内`);
+    // サザンは みさき公園・和歌山大学前・和歌山市・和歌山港に停車し、孝子・紀ノ川は通過（上りは反転）
+    const sv = route.services!.find(v => v.id === 'southern')!, lv = route.services!.find(v => v.id === 'local')!;
+    const idx = (nm: string) => route.stations.findIndex(s => s.name === nm);
+    assert.deepEqual(sv.stops, ['みさき公園', '和歌山大学前', '和歌山市', '和歌山港'].map(idx).sort((a, b) => a - b), `${tag}サザンの停車駅`);
+    assert.deepEqual(lv.stops, [0, 1, 2, 3, 4, 5], `${tag}普通の停車駅`);
+    assert.equal(sv.lineLimit, 110); assert.equal(lv.lineLimit, 90);
+    assert.deepEqual(sv.units, [4, 4]); assert.deepEqual(sv.unitKinds, down ? ['southern-10000', 'commuter-old'] : ['commuter-old', 'southern-10000']);
+    assert.ok(!lv.waits?.length && !lv.waitsByTime, `${tag}の普通は待避しない`);
+    for (const v of route.services!) for (const [k, tt] of Object.entries(v.timetable)) assert.ok(tt.arr >= 0 && (+k === 0 || tt.arr > 0), `${tag}/${v.id}時刻表`);
+    // 終着の案内（下りは終点・2番線）と番線
+    const r = structuredClone(route);
+    for (const v of selectableServices(route)) {
+      const svc = applyService(r, v.id)!, tr = buildTrack(r);
+      if (down) {
+        assert.equal(r.stations[last].mainTrack, '2番線');
+        assert.ok(approachText(r, last, svc).includes('終点'), approachText(r, last, svc));
+        assert.ok(Math.abs(tr.pathLat(r.stations[last].stopS) + 3.9) < 1e-6, `${tag}/${v.id}和歌山港の自線は島式ホームの左の線`);
+        assert.equal(r.stations[last].platform.side, 'R');
+      } else {
+        assert.equal(r.stations[0].mainTrack, '1番線');
+        assert.ok(Math.abs(tr.pathLat(r.stations[0].stopS) + 3.9) < 1e-6, `${tag}/${v.id}和歌山港の発車線`);
+        assert.equal(r.stations[last].enterLoop, v.id === 'local', `${tag}/${v.id}みさき公園の待避線入線`);
+      }
+    }
+  }
+  console.log('みさき公園〜和歌山港（上下）の駅・線形・終着・種別チェック成功');
+}
+if (process.argv.includes('--misaki-only')) process.exit(0);
 
 for (const route of [shiokaze, shiokazeUp]) {
   assert.equal(route.stations.length, 10);
@@ -145,9 +227,9 @@ for (const route of [izumisano, izumisanoUp]) {
     : ['泉佐野', '井原里', '鶴原', '二色浜', '貝塚', '蛸地蔵', '岸和田']);
   assert.equal(route.services?.length, 5, `${route.id}種別数`);
   const terminal = route.stations[route.id === 'izumisano' ? 6 : 0];
-  assert.equal(terminal.layout, 'custom', `${route.id}/泉佐野3面5線カスタム駅`);
+  assert.equal(terminal.layout, 'custom', `${route.id}/泉佐野3面4線カスタム駅`);
   assert.equal(terminal.customPlatforms?.length, 3, `${route.id}/泉佐野ホーム面数`);
-  assert.equal(route.extraTracks?.length, 3, `${route.id}/泉佐野追加線`);
+  assert.equal(route.extraTracks?.length, 2, `${route.id}/泉佐野追加線（外側2本）`);
   const geometry = buildTrack(route);
   for (const station of route.stations) {
     const phi = geometry.trackAt(station.platform.from).phi;
@@ -168,7 +250,9 @@ for (const route of [izumisano, izumisanoUp]) {
     const r = structuredClone(route); applyService(r, service.id);
     const at = route.id === 'izumisano' ? 6 : 0, sta = r.stations[at], track = buildTrack(r);
     const airport = service.id === 'airport' || service.id === 'limited';
-    const want = route.id === 'izumisano' ? (service.id === 'local' ? -9.2 : airport ? 4 : 0) : (airport ? 4 - 22.4 : 4 - 13.2);
+    // 下り: 普通・空港系統は外側下り線T1(-9.2)、急行・サザンは下り本線T2(0)。上り（横位置は 4 − 元の値）: 空港系統は外側上り線T4(18.4)、本線系統は上り本線T3(9.2)
+    const outerDown = service.id === 'local' || airport;
+    const want = route.id === 'izumisano' ? (outerDown ? -9.2 : 0) : (airport ? 4 - 18.4 : 4 - 9.2);
     assert.ok(Math.abs(track.pathLat(sta.stopS) - want) < 1e-6, `${route.id}/${service.id}泉佐野番線の横位置`);
     const p = sta.customPlatforms!.find(p => p.kind === 'island' && Math.abs(p.lat - want) < p.width! / 2 + 2 && (p.lat < want ? 'L' : 'R') === sta.platform.side);
     assert.ok(p, `${route.id}/${service.id}走行線に接するホームがある`);
@@ -425,7 +509,7 @@ for (const [route, parts] of [[throughUp, [shiokazeUp, kishiwada]], [through, [k
   assert.ok(!approachText(r, 5, sv).includes('待'), '昼の浜寺公園は待避なし');
   assert.ok(!approachText(r, 1, sv).includes('待'), '待避しない駅は案内なし');
 }
-for (const source of [kishiwada, kishiwadaUp, izumisano, izumisanoUp, throughUp, through]) {
+for (const source of [kishiwada, kishiwadaUp, izumisano, izumisanoUp, throughUp, through, misakiWakayamako, misakiWakayamakoUp]) {
   for (const service of selectableServices(source).map(v => v.id)) {
     const ctx = context(source, service), game = createGame(ctx);
     const finalSta = ctx.route.stations.at(-1)!, finalZone = loopZone(finalSta) ?? { inFrom: finalSta.platform.from - 160, outTo: finalSta.platform.to + 130 };
@@ -464,7 +548,7 @@ for (const source of [kishiwada, kishiwadaUp, izumisano, izumisanoUp, throughUp,
     }
   }
 }
-console.log('泉大津〜岸和田・堺〜岸和田（5種別×上下）・サザンの放送チェック成功');
+console.log('泉大津〜岸和田・堺〜岸和田・みさき公園〜和歌山港（上下）の完走・サザンの放送チェック成功');
 
 // 南海本線 堺〜難波（上りのみ・頭端式の難波）: 駅・線形・番線、5種別の完走
 {
@@ -541,7 +625,7 @@ console.log('泉大津〜岸和田・堺〜岸和田（5種別×上下）・サ�
 // 時間帯ごとのダイヤ（朝・夕・夜）: 全コース・全種別で完走、ATS非常制動なし、速度超過なし、普通は時間帯の待避駅で待つ
 {
   let n = 0;
-  for (const route of [shiokaze, shiokazeUp, kishiwada, kishiwadaUp, izumisano, izumisanoUp, throughUp, through, namba, nambaUp]) {
+  for (const route of [shiokaze, shiokazeUp, kishiwada, kishiwadaUp, izumisano, izumisanoUp, throughUp, through, namba, nambaUp, izumisanoMisaki, izumisanoMisakiUp, misakiWakayamako, misakiWakayamakoUp]) {
     for (const tod of ['morning', 'evening', 'night'] as const) {
       for (const service of selectableServices(route).map(v => v.id)) {
         const ctx = context(route, service); ctx.envState.timeOfDay = tod;

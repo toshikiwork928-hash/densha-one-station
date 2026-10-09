@@ -13,11 +13,13 @@ import { loadSelection } from './game/ranking';
 import { createGame } from './game/loop';
 import { createRenderCore } from './render/renderer';
 import { installRenderRecovery } from './render/recovery';
-import { attachIllustratedLook } from './render/illustrated';
+import { attachLookSwitch, preloadLook } from './render/look-switch';
 import { createCabCamera } from './render/camera';
 import { createEnvironment } from './env/environment';
 import { attachEnvSystem } from './env';
 import { buildWorld } from './world';
+import { releaseOsmData } from './world/osm-town';
+import { loadCourseData } from './ui/course-loading';
 import { attachSfx } from './audio/sfx';
 import { attachHud } from './ui/hud';
 import { attachOverlay } from './ui/overlay';
@@ -34,6 +36,8 @@ const inspectionRoute = import.meta.env.DEV && new URLSearchParams(location.sear
   ? new URLSearchParams(location.search).get('route') : null;
 const route = resolveRoute(inspectionRoute ?? saved?.routeId);
 document.title = `${lineOfRoute(route.id).name} 運転シミュレーター`;
+preloadLook(); // 最初がイラストなら加工コードの取得だけ先に始める（待たない）
+await loadCourseData(route); // 選んだコースの沿線データ（区間ごとの別ファイル）。準備できてから世界を作る
 const { renderer, scene, camera } = createRenderCore(renderCanvas);
 renderer.debug.onShaderError = () => recovery.fail('描画プログラムをGPUで実行できなかった。');
 const env = createEnvironment(scene);
@@ -55,10 +59,11 @@ const ctx: GameContext = {
 ctx.state.sel.routeId = route.id; // 選択の保存（路線ごと）に使う
 
 const world = buildWorld(ctx);
+releaseOsmData(); // 生成済みの景観は残る。読込済みの元データだけ手放す
 const game = createGame(ctx);
 const cab = createCabCamera(ctx);
 attachEnvSystem(ctx); // [B] 空・時間帯・天候・影・夜間照明
-attachIllustratedLook(ctx);
+attachLookSwitch(ctx); // 標準 / イラストの切替。イラスト専用の処理は選んだ時だけ有効にする
 attachSfx(ctx.events, ctx);
 attachHud(ctx);
 attachOverlay(ctx);

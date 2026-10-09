@@ -78,7 +78,7 @@ export function reverseRoute(down: Route, opt: {
     return { ...Lm, from: a, to: b + len };
   }).sort((p, q) => p.from - q.from);
   // 走行線・番線・ドアの側は向きごとに違うので写さない（逆向きの路線データで指定する）
-  const services: ServiceSpec[] = (down.services ?? []).map(({ lane: _l, laneLimits: _ll, platformSides: _ps, trackNames: _tn, ...v }) => ({
+  const services: ServiceSpec[] = (down.services ?? []).map(({ lane: _l, laneLimits: _ll, platformSides: _ps, trackNames: _tn, precedingLocalApart: _pa, ...v }) => ({
     ...v,
     stops: v.stops.map(ri).sort((a, b) => a - b),
     waits: v.waits?.map(w => ({ ...w, station: ri(w.station) })),

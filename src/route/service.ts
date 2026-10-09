@@ -2,13 +2,15 @@
 // route は各モジュールが参照を保持しているので、種別の切替は route の中身を書き換えて反映する（元データは初回に退避）
 import type { LatProfile, Route, ServiceId, ServiceSpec, SpeedLimit, Station, TimeOfDay, TrainKind } from './types';
 
-/** TOPで選べる種別。南海本線の特急は、コース両端も実際の停車駅に限る。 */
+/** TOPで選べる種別。南海本線の特急は、コース両端も実際の停車駅に限る（ラピートβ: 難波・新今宮・天下茶屋・堺・岸和田・泉佐野。
+ *  特急サザンはそれに加えて、みさき公園・和歌山大学前・和歌山市・和歌山港など、泉佐野より和歌山側の停車駅）。 */
 export function selectableServices(route: Route): ServiceSpec[] {
   const services = route.services ?? [];
   if (route.lineId !== 'shiokaze') return services;
   const limitedStops = new Set(['なんば', '新今宮', '天下茶屋', '堺', '岸和田', '泉佐野']);
+  const southernStops = new Set([...limitedStops, '尾崎', 'みさき公園', '和歌山大学前', '和歌山市', '和歌山港']);
   const ends = [route.stations[0]?.name, route.stations.at(-1)?.name];
-  return services.filter(v => (v.id !== 'limited' && v.id !== 'southern') || ends.every(name => name != null && limitedStops.has(name)));
+  return services.filter(v => (v.id !== 'limited' && v.id !== 'southern') || ends.every(name => name != null && (v.id === 'southern' ? southernStops : limitedStops).has(name)));
 }
 
 /** 1両の長さ [m]（既定。2300系・2000系・30000系の 17m 級は 18m） */

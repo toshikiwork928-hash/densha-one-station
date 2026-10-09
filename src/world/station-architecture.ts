@@ -1,5 +1,5 @@
 import type { Station, Route } from '../route/types';
-import { customPlatformEdges, trackSpan } from '../route/service';
+import { customPlatformEdges, trackLines, trackSpan } from '../route/service';
 import { GeoBatch, M, P } from './batch';
 
 export type CanopyProfile = {
@@ -21,6 +21,8 @@ export type HallProfile = {
   wallColor: number;
   roofOpening?: number;
   roofOpeningOffsets?: number[];
+  /** 'split-roof': 線路とホームの上を複数に分けた屋根で覆い、外周は腰壁と帯窓だけで上を開ける（泉佐野）。未指定は外周壁のある山形の大屋根 */
+  style?: 'split-roof';
 };
 
 export type StationArchitectureProfile = CanopyProfile | HallProfile;
@@ -28,6 +30,8 @@ export type StationArchitectureProfile = CanopyProfile | HallProfile;
 const HALLS: Record<string, HallProfile> = {
   '新今宮': { kind: 'hall', roofColor: 0x59646e, wallColor: 0x7b858c },
   '天下茶屋': { kind: 'hall', roofColor: 0x79838a, wallColor: 0xd2d0c8, roofOpening: 3.5, roofOpeningOffsets: [-5.2, 5.2] },
+  // 泉佐野: 白い丸柱と鉄骨の分割屋根、縁に透光帯、外側の線路の脇は白〜薄灰色のパネル壁と帯窓で上は開く（docs/izumisano-station-reference.md 4・6章）
+  '泉佐野': { kind: 'hall', style: 'split-roof', roofColor: 0xa9b1b5, wallColor: 0xe9e8e2 },
 };
 
 const PLATFORM_WALLS: Record<string, PlatformWallProfile> = {
@@ -75,7 +79,15 @@ export function addCanopyBraces(b: GeoBatch, x: number, width: number, len: numb
   }
 }
 
-export function hallBounds(route: Route, sta: Station): { from: number; to: number; left: number; right: number } {
+export interface HallBounds {
+  from: number; to: number; left: number; right: number;
+  /** custom 駅の島式ホーム（横位置と幅） */
+  islands: { lat: number; width: number }[];
+  /** 駅中心での線路の横位置（昇順） */
+  tracks: number[];
+}
+
+export function hallBounds(route: Route, sta: Station): HallBounds {
   const sc = (sta.platform.from + sta.platform.to) / 2;
   const span = trackSpan(route, sc);
   const platform = customPlatformEdges(route, sc, 0);
@@ -83,10 +95,14 @@ export function hallBounds(route: Route, sta: Station): { from: number; to: numb
   const right = Math.max(span[1] + 4.2, (platform?.[1] ?? -Infinity) + .25);
   const from = Math.min(sta.platform.from, ...(sta.customPlatforms ?? []).map(p => p.from ?? sta.platform.from)) - 10;
   const to = Math.max(sta.platform.to, ...(sta.customPlatforms ?? []).map(p => p.to ?? sta.platform.to)) + 10;
-  return { from, to, left, right };
+  const islands = (sta.customPlatforms ?? []).flatMap(p => p.kind === 'island' ? [{ lat: p.lat, width: p.width }] : []);
+  const tracks = trackLines(route).filter(l => sc >= l.from && sc <= l.to).map(l => l.lat(sc)).sort((a, c) => a - c);
+  return { from, to, left, right, islands, tracks };
 }
 
-export function addHallArchitecture(b: GeoBatch, bounds: { from: number; to: number; left: number; right: number }, profile: HallProfile): void {
+/** groundDy = 地面から線路面までの高さの符号反転（地面の高さ − 線路の高さ、負）。split-roof の駅舎が使う */
+export function addHallArchitecture(b: GeoBatch, bounds: HallBounds, profile: HallProfile, groundDy = 0): void {
+  if (profile.style === 'split-roof') { addSplitRoofHall(b, bounds, profile, groundDy); return; }
   const len = bounds.to - bounds.from, z = (bounds.from + bounds.to) / 2;
   const width = bounds.right - bounds.left;
   const roofY = 9.8;
@@ -128,5 +144,111 @@ export function addPlatformWall(b: GeoBatch, x: number, len: number, profile: Ca
   b.add('body', P.box, M(x, (3.4 + profile.Yroof) / 2, 0, 0, .12, profile.Yroof - 3.4, len), profile.wallColor);
   for (let z = -len / 2 + 4; z <= len / 2 - 4; z += profile.supportSpacing) {
     b.add('body', P.box, M(x, 2.75, z, 0, .2, 3.25, .2), profile.wallColor);
+  }
+}
+
+// ---------- 泉佐野: 分割屋根の駅舎 ----------
+// 寸法（屋根高・柱間隔・壁高・屋根の分割位置・駅舎の大きさ）は写真からの実測値ではなく、ゲーム用の近似。
+// 写真から読み取ったのは、白い丸柱と鉄骨（V字・K字の斜材）の屋根、縁の透光帯、屋根と屋根の間の空、
+// 外側の線路の脇の白〜薄灰色のパネル壁とその上の帯窓、壁の上が開いていること。乱数は使わない。
+const SPLIT = {
+  /** 屋根の上面の高さ（線路面基準） */
+  roofY: 9.4, roofT: .22,
+  /** 柱間隔 [m]（柱列に沿う方向） */
+  frame: 12,
+  /** ホーム面の高さと、島式ホームの柱列の中心からの距離（階段口の幅 ±1.3m の外側） */
+  platformY: 1.1, columnDx: 1.6,
+  /** 屋根の間の隙間（空が見える）の幅と、縁の透光帯の幅 */
+  slit: 2.0, edge: .9,
+  /** 外周のパネル壁の高さ、帯窓の上端（その上は開く） */
+  panelTop: 3.2, windowTop: 4.6,
+  white: 0xf1f1ec, glass: 0x5f7a88, daylight: 0xcfe3ea, steel: 0xe6e8e4,
+};
+
+function addSplitRoofHall(b: GeoBatch, bounds: HallBounds, profile: HallProfile, dy: number): void {
+  const { from, to, left, right, islands, tracks } = bounds;
+  const len = to - from, zc = (from + to) / 2, C = SPLIT;
+  const box = (x: number, y: number, z: number, w: number, h: number, d: number, col: number, rz = 0) => b.add('body', P.box, M(x, y, z, 0, w, h, d, 0, rz), col);
+  const zs: number[] = [];
+  for (let z = from + C.frame / 2; z <= to - C.frame / 2 + .01; z += C.frame) zs.push(z);
+
+  // 屋根: 両側にホームのある線路（本線）の真上に隙間を空け、外周・隙間の縁に透光帯を置く
+  const sides = (t: number) => islands.filter(p => Math.abs(Math.abs(p.lat - t) - (p.width / 2 + 1.7)) < .3).length;
+  const slits = tracks.filter(t => sides(t) === 2 && t > left + 3 && t < right - 3);
+  const cuts: number[] = [left];
+  for (const t of slits) cuts.push(t - C.slit / 2, t + C.slit / 2);
+  cuts.push(right);
+  for (let i = 0; i < cuts.length; i += 2) {
+    const a = cuts[i], c = cuts[i + 1], w = c - a, x = (a + c) / 2;
+    box(x, C.roofY, zc, w, C.roofT, len, profile.roofColor);
+    box(x, C.roofY - .16, zc, w - .1, .08, len - .1, 0xe3e2dc);
+    // 縁の透光帯（スラブより少し厚く、上面が少し高い）。長辺の両縁と、列車の出入りする短辺の縁
+    for (const ex of [a + C.edge / 2 - .005, c - C.edge / 2 + .005]) box(ex, C.roofY + .01, zc, C.edge, C.roofT + .02, len + .01, C.daylight);
+    for (const ez of [from + C.edge / 2, to - C.edge / 2]) box(x, C.roofY + .01, ez, w + .01, C.roofT + .02, C.edge, C.daylight);
+  }
+
+  // ホーム上の柱列: 階段口の両脇に白い丸柱を対で立て、梁（鉄骨）と斜材（V字・K字）で屋根を支える。柱はホームの上だけで、線路の上には立てない
+  const top = C.roofY - C.roofT / 2 - .1;
+  for (const p of islands) for (const z of zs) {
+    for (const sx of [-1, 1]) {
+      const cx = p.lat + sx * C.columnDx;
+      b.add('body', P.cyl, M(cx, (C.platformY + top) / 2, z, 0, .36, top - C.platformY, .36), C.white);
+      // 柱頭から梁の端へ斜めに上がる斜材（外へ開く）
+      const dx = sx * 1.5, dyb = 2.3;
+      box(cx + dx / 2, top - dyb / 2 - .1, z, Math.hypot(dx, dyb), .13, .13, C.steel, Math.atan2(dyb, dx));
+    }
+    // 梁: 屋根の下面に沿って対の柱を渡し、屋根の張り出しの下まで伸ばす
+    box(p.lat, top + .05, z, C.columnDx * 2 + 3.6, .3, .18, C.steel);
+  }
+  // 柱列どうしを結ぶ縦通しの梁
+  for (const p of islands) for (const sx of [-1, 1]) box(p.lat + sx * C.columnDx, top + .05, zc, .16, .3, len - C.edge * 2, C.steel);
+
+  // 外周: 低いパネル壁（白〜薄灰色）と帯窓。その上は柱と斜材だけで開く
+  const wallH = C.panelTop - .1;
+  for (const [x, sx] of [[left, 1], [right, -1]] as const) {
+    box(x, .1 + wallH / 2, zc, .16, wallH, len, profile.wallColor);
+    box(x, (C.panelTop + C.windowTop) / 2, zc, .1, C.windowTop - C.panelTop, len, C.glass);
+    box(x, C.panelTop, zc, .22, .1, len, C.white);
+    box(x, C.windowTop, zc, .22, .1, len, C.white);
+    for (let z = from + 3; z <= to - 2.9; z += 4) {
+      box(x + sx * .06, .1 + wallH / 2, z, .05, wallH, .08, 0xcdcdc6); // パネルの目地（線路側の面）
+      box(x, (C.panelTop + C.windowTop) / 2, z, .14, C.windowTop - C.panelTop, .1, C.white); // 窓の方立
+    }
+    // 壁の上は開く: 壁の上端から屋根の縁までを細い柱と斜材で支えるだけにする
+    for (const z of zs) {
+      const hh = C.roofY - C.roofT / 2 - C.windowTop;
+      box(x, C.windowTop + hh / 2, z, .22, hh, .22, C.white);
+      const dx = sx * 3, dyb = 3.2;
+      box(x + dx / 2, C.roofY - C.roofT / 2 - dyb / 2 - .1, z, Math.hypot(dx, dyb), .13, .13, C.steel, Math.atan2(dyb, dx));
+    }
+  }
+
+  // 蛍光灯の吊りレール: 夜の照明（env/night-lights.ts）の発光体は島式ホームの中央、高さ 4.1m に並ぶので、屋根から吊って支える
+  const railLen = len * .6 + 4;
+  for (const p of islands) {
+    box(p.lat, 4.22, zc, .14, .08, railLen, 0x8a9096);
+    for (const z of zs) if (z + C.frame / 2 < zc + railLen / 2 - 1 && z > zc - railLen / 2) box(p.lat, (4.26 + top) / 2, z + C.frame / 2, .05, top - 4.26, .05, 0x8a9096); // 吊り棒（柱と柱の間）
+  }
+
+  addSplitRoofStationBuildings(b, bounds, dy);
+}
+
+/** 東西の出入口と改札階（中2階）の駅舎。高架の両脇に貼り付く低い建物（階段・改札の内部は作らない） */
+function addSplitRoofStationBuildings(b: GeoBatch, bounds: HallBounds, dy: number): void {
+  const { tracks } = bounds, zc = (bounds.from + bounds.to) / 2;
+  if (!tracks.length || dy > -3) return; // 地上駅など、高架の脇に駅舎を置けないときは作らない
+  const height = Math.max(3, Math.min(7.4, -dy - 1.6)); // 床版の下に収める
+  const depth = 8, length = 40;
+  for (const [edge, sx] of [[tracks[0] - 3.5, -1], [tracks[tracks.length - 1] + 3.5, 1]] as const) {
+    const x = edge + sx * depth / 2, outer = edge + sx * depth;
+    b.add('body', P.boxB, M(x, dy, zc, 0, depth, height, length), 0xe2ded4);
+    // 改札階の帯窓（高架の脇の中2階）
+    b.add('body', P.box, M(outer + -sx * .02, dy + height * .62, zc, 0, .05, 1.5, length - 4), 0x4a6070);
+    // 出入口と庇
+    b.add('body', P.box, M(outer + -sx * .02, dy + 1.7, zc, 0, .06, 3.2, 9), 0x2b343d);
+    b.add('body', P.box, M(outer + sx * 1.1, dy + 3.5, zc, 0, 2.4, .16, 11), 0x8a9096);
+    for (const dz of [-4.8, 4.8]) b.add('body', P.box, M(outer + sx * 2.0, dy + 1.75, zc + dz, 0, .16, 3.5, .16), 0xb9bdc0);
+    // 屋根の張り出し
+    b.add('body', P.box, M(x, dy + height + .2, zc, 0, depth + .4, .4, length + .4), 0x6b7680);
   }
 }

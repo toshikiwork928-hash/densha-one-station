@@ -1,7 +1,10 @@
-// 元の材質・色・ゲーム進行を保持したまま、描画だけ切り替える試作。
+// イラスト風の描画。元の材質・色・ゲーム進行を保持したまま、描画だけ切り替える。
+// 標準の描画ではこのモジュールを読み込まず、イラストを選んだ時に render/look-switch.ts が enableIllustratedLook を呼ぶ。
+// 標準へ戻すときは dispose で、加工した材質（onBeforeCompile・プログラム鍵）・輪郭線・コールバックをすべて元に戻す。
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import type { TimeOfDay } from '../core/events';
+import { addTrainLookListener } from '../world/train-models';
 
 const PREFIX = /* glsl */`
 uniform float illustrationStrength;
@@ -38,18 +41,29 @@ const SHADE_OVERCAST = new THREE.Vector3(.84, .88, .97);
 const CONTACT: Record<TimeOfDay, number> = { morning: 0x1c2a42, noon: 0x18283b, evening: 0x2a2242, night: 0x141a2a };
 const CONTOUR = new THREE.Color(0x263444);
 
-export function attachIllustratedLook(ctx: GameContext): void {
-  const strength = { value: new URL(location.href).searchParams.get('look') === 'standard' ? 0 : 1 };
+export interface IllustratedLook {
+  /** イラスト専用の処理をすべて止めて、材質・輪郭線・コールバックを元に戻す */
+  dispose(): void;
+}
+
+export function enableIllustratedLook(ctx: GameContext): IllustratedLook {
+  // 有効な間は常に 1。標準へ戻すときは dispose で材質を加工前に戻すので、0 の状態は持たない
+  const strength = { value: 1 };
   const day = { value: 1 };
   // 直射光の強さ（帯の基準）と、帯の効き。時間帯で光量が違っても同じ割合で段が付くようにする
   const sunMax = { value: .5 };
   const band = { value: .6 };
   const shade = { value: new THREE.Vector3(...SHADE.noon) };
   const rimColor = { value: new THREE.Color(0, 0, 0) };
+  /** 加工した材質と、加工前の onBeforeCompile・プログラム鍵（dispose で戻す） */
+  const patched = new Map<THREE.Material, { before: THREE.Material['onBeforeCompile']; key: THREE.Material['customProgramCacheKey'] }>();
+  /** 加工しない材質も含め、一度見た材質（二重に調べない）。dispose でそのまま捨てる */
   const seen = new WeakSet<THREE.Material>();
-  const shadows = new Set<THREE.Material>();
+  /** 建物の接地影の材質と、加工前の不透明度・色 */
+  const shadows = new Map<THREE.Material, { opacity: number; color?: THREE.Color }>();
   const outlined = new WeakSet<THREE.Mesh>();
   const edgeCache = new WeakMap<THREE.BufferGeometry, THREE.EdgesGeometry>();
+  const edgeList = new Set<THREE.EdgesGeometry>();
   const contours: THREE.LineSegments[] = [];
   const contourMat = new THREE.LineBasicMaterial({ color: 0x263444, transparent: true, opacity: .38, depthWrite: false });
   // 輪郭線は遠いほど淡く。線幅は WebGL で変えられないため、濃さで細く見せる
@@ -64,26 +78,9 @@ export function attachIllustratedLook(ctx: GameContext): void {
     `);
   };
   contourMat.customProgramCacheKey = () => 'illustration-contour-v2';
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.style.cssText = 'position:fixed;bottom:12px;left:12px;z-index:30;padding:7px 12px;border:1px solid #ffffff40;border-radius:8px;background:#14202de0;color:#edf3f6;font:600 12px system-ui;cursor:pointer';
-  button.title = '描画を切替。走行状態はそのまま';
-  const refreshButton = () => {
-    button.textContent = strength.value ? '描画：イラスト' : '描画：標準';
-    button.setAttribute('aria-pressed', String(!!strength.value));
-    for (const line of contours) line.visible = !!strength.value;
-  };
-  button.addEventListener('click', () => {
-    strength.value = 1 - strength.value;
-    const url = new URL(location.href);
-    url.searchParams.set('look', strength.value ? 'illustrated' : 'standard');
-    history.replaceState(null, '', url);
-    refreshButton();
-  });
-  refreshButton(); document.body.appendChild(button);
 
   function patch(mat: THREE.Material) {
-    if (mat.userData.illustrationShadow) shadows.add(mat);
+    if (mat.userData.illustrationShadow && !shadows.has(mat)) shadows.set(mat, { opacity: mat.opacity, color: (mat as THREE.MeshBasicMaterial).color?.clone() });
     if (seen.has(mat)) return;
     seen.add(mat);
     if (!(mat instanceof THREE.MeshLambertMaterial || mat instanceof THREE.MeshStandardMaterial)) return;
@@ -91,8 +88,9 @@ export function attachIllustratedLook(ctx: GameContext): void {
     if (mat.transparent) return;
     const ground = mat.name === 'ground';
     const physical = mat instanceof THREE.MeshStandardMaterial;
-    const before = mat.onBeforeCompile;
+    const before = mat.onBeforeCompile, beforeKey = mat.customProgramCacheKey;
     const originalKey = mat.customProgramCacheKey();
+    patched.set(mat, { before, key: beforeKey });
     mat.onBeforeCompile = (shader, renderer) => {
       before.call(mat, shader, renderer);
       shader.uniforms.illustrationStrength = strength;
@@ -160,28 +158,40 @@ export function attachIllustratedLook(ctx: GameContext): void {
     mat.needsUpdate = true;
   }
 
-  const scan = () => ctx.scene.traverse(o => {
+  const inScene = (o: THREE.Object3D) => { let r: THREE.Object3D | null = o; while (r && r !== ctx.scene) r = r.parent; return !!r; };
+  /** 対象の材質を加工する */
+  const patchAll = (root: THREE.Object3D) => root.traverse(o => {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh) return;
     for (const mat of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) patch(mat);
-    if (mesh.name === 'train-shell' && !outlined.has(mesh)) {
-      outlined.add(mesh);
-      let edges = edgeCache.get(mesh.geometry);
-      if (!edges) { edges = new THREE.EdgesGeometry(mesh.geometry, 32); edgeCache.set(mesh.geometry, edges); }
-      const line = new THREE.LineSegments(edges, contourMat);
-      line.name = 'illustration-contour'; line.userData.noShadow = true;
-      line.visible = !!strength.value; mesh.add(line); contours.push(line);
-    }
   });
-  scan();
-  ctx.events.on('assetsReady', scan);
-  ctx.events.on('start', scan);
+  /** 対象の車体に輪郭線を付ける */
+  const outlineAll = (root: THREE.Object3D) => root.traverse(o => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh || mesh.name !== 'train-shell' || outlined.has(mesh)) return;
+    outlined.add(mesh);
+    let edges = edgeCache.get(mesh.geometry);
+    if (!edges) { edges = new THREE.EdgesGeometry(mesh.geometry, 32); edgeCache.set(mesh.geometry, edges); edgeList.add(edges); }
+    const line = new THREE.LineSegments(edges, contourMat);
+    line.name = 'illustration-contour'; line.userData.noShadow = true;
+    mesh.add(line); contours.push(line);
+  });
+  // 有効にした時の1回の走査と、シーン全体が変わる節目（素材の読込完了・開始）だけ全体を調べる。
+  // 実行中に増える車両（対向・追い越し・高野線・自列車の作り直し）は、生成時の登録口（train-models.ts）で知る。
+  // 輪郭線は、次のフレームで 3D シーンに入っている車両だけに付ける（車両プレビューの車両には付けない）
+  const newCars: THREE.Object3D[] = [];
+  const scanScene = () => { patchAll(ctx.scene); outlineAll(ctx.scene); };
+  scanScene();
+  const off = [
+    addTrainLookListener({ car: o => { patchAll(o); newCars.push(o); }, material: patch }),
+    ctx.events.on('assetsReady', scanScene),
+    ctx.events.on('start', scanScene),
+  ];
 
   // 時間帯・天候の切替は環境側と同じく徐々に移す
   const shadeTarget = new THREE.Vector3(), contactCol = new THREE.Color(CONTACT.noon), contactTarget = new THREE.Color();
   const sunLin = new THREE.Color(), camPos = new THREE.Vector3(), linePos = new THREE.Vector3();
-  let timer = 0;
-  ctx.events.on('frame', ({ dt }) => {
+  const onFrame = ({ dt }: { dt: number }) => {
     day.value = (1 - ctx.light.night * 0.85) * (1 - ctx.light.tunnel);
     // 環境モジュールが毎フレーム設定した値へ加算せず乗算するため、切替時も累積しない。
     const amount = strength.value * day.value;
@@ -204,18 +214,39 @@ export function attachIllustratedLook(ctx: GameContext): void {
     // 輪郭線: 日の色をわずかに混ぜ、夕方は暖色の暗い線に
     contourMat.color.copy(CONTOUR).lerp(sunLin.multiplyScalar(.22), .25);
     contourMat.opacity = .38 * day.value * (1 - .35 * overcast);
-    for (const mat of shadows) {
+    for (const mat of shadows.keys()) {
       mat.opacity = 0.24 * strength.value * day.value;
       if (mat instanceof THREE.MeshBasicMaterial) mat.color.copy(contactCol);
     }
-    // 遠い車両の輪郭線は描かない（描画コール削減。遠景ではほぼ見えない）
-    if (strength.value) {
-      camPos.setFromMatrixPosition(ctx.camera.matrixWorld);
-      for (const line of contours) {
-        linePos.setFromMatrixPosition(line.matrixWorld);
-        line.visible = linePos.distanceToSquared(camPos) < 260 * 260;
-      }
+    // 遠い車両の輪郭線は描かない（描画コール削減。遠景ではほぼ見えない）。シーンから外れた車両（追い越しの終了など）の輪郭線は手放す
+    for (const car of newCars.splice(0)) if (inScene(car)) outlineAll(car);
+    camPos.setFromMatrixPosition(ctx.camera.matrixWorld);
+    for (let i = contours.length - 1; i >= 0; i--) {
+      const line = contours[i];
+      if (!inScene(line)) { outlined.delete(line.parent as THREE.Mesh); line.removeFromParent(); contours.splice(i, 1); continue; }
+      linePos.setFromMatrixPosition(line.matrixWorld);
+      line.visible = linePos.distanceToSquared(camPos) < 260 * 260;
     }
-    if ((timer += dt) > 1) { timer = 0; scan(); }
-  });
+  };
+  off.push(ctx.events.on('frame', onFrame));
+
+  return {
+    dispose() {
+      for (const f of off.splice(0)) f();
+      // 材質を加工前に戻す。プログラムの鍵も戻るので、イラスト用のシェーダーは次の描画で捨てられる
+      for (const [mat, o] of patched) { mat.onBeforeCompile = o.before; mat.customProgramCacheKey = o.key; mat.needsUpdate = true; }
+      patched.clear();
+      for (const [mat, o] of shadows) {
+        mat.opacity = o.opacity;
+        if (o.color && mat instanceof THREE.MeshBasicMaterial) mat.color.copy(o.color);
+      }
+      shadows.clear();
+      for (const line of contours) line.removeFromParent();
+      contours.length = 0; newCars.length = 0;
+      for (const g of edgeList) g.dispose();
+      edgeList.clear();
+      contourMat.dispose();
+      // 露出と霧は環境側が毎フレーム設定し直すので、このモジュールが外れれば次のフレームで元の値になる
+    },
+  };
 }

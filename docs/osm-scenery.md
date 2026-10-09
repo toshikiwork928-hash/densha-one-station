@@ -38,6 +38,14 @@ npm run osm:scenery -- --course=namba --endpoint=https://overpass.kumi.systems/a
 | `areas` | `[種類, s,lat の並び]`。park / grass / pitch / school / grave / shrine / wood / water / lot（駐車場）。線路から ±320m の帯で切ってある（範囲の外の頂点は延長線へ写し、辺を 20m ごとに分けてから切る） |
 | `landmarks` | 名前のある大きな建物・社寺・公園・池の `[名前, s, lat]`（位置の確認用） |
 
+## 読み込み（区間ごとの別ファイル）
+
+- `src/data/osm/*.json` は静的importせず、`osm-town.ts` の `loadOsmFor(route)` が選んだコースに必要な区間だけ dynamic import で読む（Vite が区間ごとの別チャンクにする）。必要な区間は `osmSectionsFor(route)`（駅名が2つ以上一致する区間）で決まる。上下は同じ区間を共有。堺〜岸和田の通しは `sakai-izumiotsu` と `izumiotsu-kishiwada` の2区間。
+- `src/main.ts` は `buildWorld` の前に `loadCourseData(route)`（`ui/course-loading.ts`）で読み込みを待つ。失敗すると内容と再試行ボタンを出す（再試行はページの再読み込み。ブラウザーは失敗した dynamic import の結果を保持し、同じページのまま取り直せないため）。`osmFor` は読込済みのデータだけで動き、未読込なら例外にする。
+- 街並みのデータが無いコース（みさき公園〜和歌山港）: `osmSectionsFor` は区間 `misaki-wakayamako` だけを返す。これは水面1枚の手作りデータで、`DATASETS` の `waterOnly: true`。`osmFor` は川の溝（`terrain.ts`）のために返すが、街並みには使わない（`osmSceneryFor` は null、`hasOsmScenery` は false）。街並みは手続き生成のまま。共通の駅が無いコース（区間データが1つも無い）でも `loadOsmFor` は何も読まずに終わり、`osmFor` は null を返す。
+- `loadOsmFor` を呼ぶたびに別コースの区間データを捨て、読込中に別の読み込みが始まった古い呼び出しは `OsmLoadSuperseded` で終わる（何も配置しない）。`buildWorld` の後に `releaseOsmData()` で元データを手放す。
+- スクリプトでコースの景観を作るとき（`scripts/check-clearance.ts` など）は、`buildTown` の前に `await loadOsmFor(route)` を呼ぶ。
+
 ## 描画（`src/world/osm-town.ts`）
 
 - 線路から 55m 以内の戸建て・アパート・商店・マンションは `town-jp.ts` の部品（窓・ベランダ・看板）で作り、550m まで描く。それ以外は箱と屋根だけで 1.6km まで描く。
@@ -140,3 +148,23 @@ npm run osm:scenery -- --course=namba --endpoint=https://overpass.kumi.systems/a
 | 岸和田 | 129 / 412k | 135 / 415k |
 
 三角形は最大で約 +10%（木・補いの家・車）、描画回数はほぼ同じ（住ノ江は減）。最大値は変更前より小さい（961k → 842k）。
+
+## 川（地形が OSM の水面に沿う）
+
+作成日: 2026-10-09。川の溝と水面を、`route.structures` の橋の範囲の一律な溝から、OSM の水面（water 多角形）の形に沿った溝へ変えた。実装は `world/river.ts`・`world/terrain.ts`・`world/osm-town.ts`。
+
+- 川にする面: `kind: 'bridge'` の範囲（前後 60m）と s が重なる OSM の water 面。池・海は従来どおり地面に貼る。データの帯（線路の両側 320m）で切れた辺は、川の続きとして外側へ 300m 延ばす（向きは切り口から 40m 戻った点との差、s 方向の傾きは 0.4 まで）。
+- 深さ: 水面の縁（隣り合う面は1つにつなぐ。大津川は2つの面に分かれている）から内側へ 10m かけて 6m まで。水面の標高は -3.6m（橋の下と同じ）。縁の外は掘らず、地面のまま。水際は縁から内側へ約 5.7m の所になる。細い川（見出川の上流側は幅約 10m）は、周り 12m の最大の内側距離の 0.8 倍（最小 1.5m）まで斜面を狭めて、水面が残るようにする。
+- 線路の下: 橋の範囲の溝（まっすぐ、深さ 6m）は従来どおり。線路の帯とその両側 6m はこの溝、そこから 16m かけて消え、OSM 由来の溝との大きいほうを採る。`groundY(s)`（線路の位置の高さ）は変えていない。
+- 地形: `terrainY(s, lat)` が lat 方向にも変わる。`dryY(s)`（溝を除く地面）、`riverDepth(s, lat)`、`riverNear(s, lat, margin)` を `Terrain` に追加。OSM の水面は `buildTerrain` で最初に使えるようになった時に作って持つ（コース読み込み後。`releaseOsmData` の後も使える）。川を含む s 範囲（橋と水面の範囲に前後 30m）は、lat 4m・s 5m の細かい格子で地面を作り、それ以外は従来の格子。
+- 水面: 地面の高さが -3.6m より低い格子にだけ平らな面を置く（`waterAlong`）。岸の線は地面の形で決まる。橋の下の一律な水面板（`structures.ts`）はやめた。
+- 道路: 道路の中心と両縁のどこかが川の溝にかかる所は、溝の深さ 0 → 1.5m で路面を地面から 0.5m 持ち上げて橋にする（橋桁・高欄）。桁の下と地面の隙間が 2m 以下は橋台で埋め、それより広いと橋脚（約 12m ごと）。多角形の外では地面の高さに戻る。川に沿う道路が浮いたり、途中で切れたりしない。橋の判定は `bridge` の s 範囲ではなく溝の深さで決める。高架でない（地上の）線路の近くは、橋の溝の上でも路面を持ち上げない（線路の帯と両側 w/2+4m まで平ら、w/2+10m で全部）。
+- 建物・木: 溝・水面から 3m 以内には置かない（`riverNear`）。川の水面の貼り付け（池と同じ）は省く。
+
+### 岸和田〜泉佐野の橋
+
+`izumisano`（`kishiwada-izumisano.json`）は OSM の水面が線路を横切る所が2か所あるのに `route.structures` に橋が無く、川の溝が付かなかった。`kind: 'bridge'` を2つ足して、同じ川の仕組みに乗せた。
+
+- s 1675〜1740: OSM の水面が線路上（横位置 0〜4）で占める s は約 1697〜1717。川の名前は不明。水面の面は横位置 13 から先だけで、線路との間 9m は橋の下の溝が埋める。
+- s 5040〜5100: 同 約 5062〜5080（見出川）。上流側の水面は幅約 10m の細い流れ。
+- 範囲は水面の s に前後 20m 強を足し、5m 単位に丸めた。橋の構造・高さ・長さは不明のままで、見た目は汎用の桁橋（`bridgeStyle` なし）。橋の種類は見た目・音・架線の種類（橋の柱）にだけ影響する。ホーム・踏切とは重ならない。

@@ -324,6 +324,14 @@ export function makeMountainTerrain(route: Route, track: Track): MountainTerrain
     shelf: (s, side) => side < 0 ? lerpTab(wlS, s) : lerpTab(wrS, s),
     structureAt: (s, m = 0) => structs.find(t => s >= t.from - m && s <= t.to + m),
     riverAt: () => null,
+    // 谷川は mountain-terrain 自身が持つ。OSM の川の溝（terrain.ts）は使わない
+    dryY: (s) => self.groundY(s),
+    riverDepth: () => 0,
+    riverNear: () => false,
+    low: (s, m = .3) => self.groundY(s) < -m,
+    riverAreaKeys: new Set<string>(),
+    riverSpans: () => [],
+    riverLatRange: () => null,
     isCity: (s) => route.scenery.cityZones.some(z => s > z.from && s < z.to),
     nearCrossing: (s, m = 4) => crossings.some(c => Math.abs(s - c.s) < (c.roadWidth ?? 6) / 2 + m),
     nearStation: (s, m = 0) => route.stations.some(st => {

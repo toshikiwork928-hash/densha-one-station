@@ -13,7 +13,7 @@ import { tramBlocks } from './hankai-tram';
 import { getTerrain, hash } from './terrain';
 import { isMountain } from './mountain-terrain';
 import { buildMountainScenery } from './mountain-scenery';
-import { buildOsmTown, osmFor } from './osm-town';
+import { buildOsmTown, osmSceneryFor } from './osm-town';
 
 /** 木を置く位置（素材読込後に scenery.ts が配置） */
 export interface TreeSpot { s: number; lat: number; y: number; k: number; small?: boolean }
@@ -410,7 +410,7 @@ export function buildTown(ctx: GameContext): TownResult {
     if (tramBlocks(route, a - 1, b + 1, latOf(sd, d - 1), latOf(sd, d + 23))) return false; // 阪堺線・高師浜線の高架の通り道
     for (let s = a; s <= b; s += 3) {
       if (!flatOk(s) || !levelAt(s, latOf(sd, d)) || !levelAt(s, latOf(sd, d + 14))) return false;
-      if (T.nearCrossing(s, 4) || tunnelNear(s, 80) || T.groundY(s) < -.3) return false;
+      if (T.nearCrossing(s, 4) || tunnelNear(s, 80) || T.low(s)) return false;
       if (d < stationDepth(s) && (platSide(sd, s, 25) || thirdNear(sd, s, 25))) return false;
     }
     return true;
@@ -473,7 +473,7 @@ export function buildTown(ctx: GameContext): TownResult {
 
   // OpenStreetMap の沿線データがあるコースは、建物・道路・緑地をデータから作る（osm-town.ts）
   const osmDetail = new ChunkedBatch(300, new Set(['sign']));
-  const osm = osmFor(route);
+  const osm = osmSceneryFor(route);
   if (osm) {
     buildOsmTown(ctx, osm, {
       detail: osmDetail, chunks, shadowChunks, kit: (b, r) => new Kit(b, r, atlas),
@@ -492,7 +492,7 @@ export function buildTown(ctx: GameContext): TownResult {
   }
   for (const sd of osm ? [] : [-1, 1]) {
     // ---- 線路沿いの道路・電柱・電線・柵 ----
-    const roadOk = (s: number) => !tunnelNear(s, 30) && T.groundY(s) > -.3 && !platSide(sd, s, 20) && !loopNear(s, 20) && !thirdNear(sd, s, 20) && !T.nearCrossing(s, -1) && !towerNear(sd, s - 6, s + 6) && flatOk(s) && levelAt(s, latOf(sd, 13)) && levelAt(s, latOf(sd, 16.5));
+    const roadOk = (s: number) => !tunnelNear(s, 30) && !T.low(s) && !platSide(sd, s, 20) && !loopNear(s, 20) && !thirdNear(sd, s, 20) && !T.nearCrossing(s, -1) && !towerNear(sd, s - 6, s + 6) && flatOk(s) && levelAt(s, latOf(sd, 13)) && levelAt(s, latOf(sd, 16.5));
     const dA = 10.5, dB = 15.5, la = latOf(sd, dA), lb = latOf(sd, dB);
     for (let s = S0; s < S1; s += 40) {
       const e = Math.min(S1, s + 40);
@@ -598,7 +598,7 @@ export function buildTown(ctx: GameContext): TownResult {
       const dStart = coastal ? 17.5 : z === 'rural' ? 17.5 : 66;
       for (let d = dStart; d < 330; d += FW) {
         const sc = s + FS / 2;
-        if (!lotFree(sd, s, s + FS, d) || T.groundY(sc) < -.3) continue;
+        if (!lotFree(sd, s, s + FS, d) || T.low(sc)) continue;
         // 建物がある所は避ける
         if (d < 72 && occ.some(o => o.sd === sd && o.d > d && o.a < s + FS && o.b > s)) continue;
         const lat = latOf(sd, d + FW / 2), h = hash(Math.floor(sc / FS), Math.floor(d / FW) + sd * 100);
@@ -627,9 +627,11 @@ export function buildTown(ctx: GameContext): TownResult {
   for (const st of MT ? [] : route.structures ?? []) {
     if (st.kind !== 'bridge') continue;
     for (const sd of [-1, 1]) for (let i = 0; i < 26; i++) {
-      const s = st.from + rnd() * (st.to - st.from), y = T.groundY(s);
-      if (y < -2.2) continue;
-      ptree(s, latOf(sd, 12 + rnd() * 150), y, .8 + rnd() * .6, false);
+      const s = st.from + rnd() * (st.to - st.from);
+      if (T.low(s, 2.2)) continue;
+      const lat = latOf(sd, 12 + rnd() * 150), k = .8 + rnd() * .6;
+      if (T.riverNear(s, lat, 3)) continue; // 川の溝・水面（橋の下の溝、OSM の水面）の中は植えない
+      ptree(s, lat, T.terrainY(s, lat), k, false);
     }
   }
 

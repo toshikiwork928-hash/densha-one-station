@@ -100,8 +100,9 @@ export function createCounterTraffic(route: Route, tod: TimeOfDay, consist: (cod
       let extra: string | undefined;
       if (local && sta.name === '堺') extra = playerTowardNamba ? 'sakai-1' : 'sakai-3';
       if (sta.name === '泉佐野') {
-        if (plan.code === 'A') extra = playerTowardNamba ? 'izumisano-platform3' : 'izumisano-platform6';
-        else if (local && playerTowardNamba) extra = 'izumisano-platform1';
+        // 空港急行は外側線（下りは T1、上りは T4）、なんば方面の自列車と向かい合う下りの普通も T1。本線系統は本線のまま
+        if (plan.code === 'A') extra = playerTowardNamba ? 'izumisano-t1' : 'izumisano-t4';
+        else if (local && playerTowardNamba) extra = 'izumisano-t1';
       }
       const profile = extra ? route.extraTracks?.find(x => x.id === extra)?.lat : undefined;
       if (profile) { paths.push({ profile, station: p.station }); continue; }

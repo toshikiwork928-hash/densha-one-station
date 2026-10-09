@@ -152,16 +152,16 @@ export const shiokaze: Route = {
   structures: [
     { kind: 'viaduct', from: -400, to: 1610 },
     { kind: 'viaduct', from: 2570, to: 5395 },
-    { kind: 'viaduct', from: 7010, to: 7390 },
-    { kind: 'bridge', from: 7390, to: 7540 },
-    { kind: 'viaduct', from: 7540, to: 11200 },
+    { kind: 'viaduct', from: 7010, to: 7255 },
+    { kind: 'bridge', from: 7255, to: 7360 },   // 石津川。OSM の水面が本線を横切る 7275〜7340m に合わせる
+    { kind: 'viaduct', from: 7360, to: 11200 },
   ],
   // 区間内での概形配置。実測距離/橋長ではない。羽衣の南側へ高師浜線の高架分岐を描く。
   coastalLandmarks: [
     { kind: 'road-overpass', s: 1720, length: 155, side: -1, label: '湾岸バイパス' },
     { kind: 'road-overpass', s: 2440, length: 155, side: 1, label: '臨海連絡道路' },
     { kind: 'tram-overpass', s: 6310, length: 864, label: '阪堺電軌' },
-    { kind: 'steel-bridge', s: 7465, length: 150, label: '石津川橋梁' },
+    { kind: 'steel-bridge', s: 7307, length: 90, label: '石津川橋梁' },
     // 羽衣の3番線（高師浜線）。s = 島式ホームの泉大津側の端。3線並行のまま約300m高架を進み、のち海側（西）へ離れる（配線略図 011_03）。
     { kind: 'branch', s: stations[4].platform.from, length: 760, side: -1, direction: -1, label: '高師浜線' },
     // 泉大津駅前の2棟並びのタワーマンション（泉大津〜岸和田 kishiwada.ts と同じ物理位置）。駅中心（110m）から岸和田側（s の負の向き）へ約 135m、内陸（右）。direction = 岸和田側の向き

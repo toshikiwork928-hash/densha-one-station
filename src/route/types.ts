@@ -150,6 +150,9 @@ export interface ServiceSpec {
   platformSides?: Record<number, 'L' | 'R'>;
   /** 駅ごとの到着番線（custom 駅で種別により番線が違う所。駅 index → 番線名。Station.mainTrack を上書き） */
   trackNames?: Record<number, string>;
+  /** 終着駅で先行の普通（見えない仮想列車）を、走行線の横位置が同じでも自列車と別の番線にいるものとして扱い、閉そくから外す。
+   *  普通と同じ外側線を使う種別（泉佐野の空港急行・ラピートβ）が、先行の普通に塞がれて従来より遅れないようにする。向きごとに違うので reverseRoute は写さない */
+  precedingLocalApart?: boolean;
   /** lane の分岐器などの制限（先頭基準の区間。to には編成長が加算される） */
   laneLimits?: SpeedLimit[];
   /** 待避（この駅で後続の通過列車を待つ）: 駅 index と、通過していく列車の種別。種別適用で時間帯のもの（waitsByTime）に置き換わる */
@@ -237,6 +240,11 @@ export interface Route {
   gradients?: Gradient[];
   /** s = 0 の標高 [m]（上りは下りの終点側の標高から始まる） */
   elevation0?: number;
+  /** 地面が線路の高さに沿って上下する（山あいを通る路線）。既定（未指定）は地面の高さ 0 で、線路が 0 より高い所は盛土・高架になる。
+   *  true のときは線路が地面と同じ高さで、橋・高架・トンネルの所だけ地面と線路の高さが違う（world/terrain.ts） */
+  groundFollowsTrack?: boolean;
+  /** groundFollowsTrack のとき、高架（'viaduct'）の線路面と地面の高さの差 [m]（既定 9） */
+  viaductHeight?: number;
   limits: SpeedLimit[];
   /** 停車順。stations[0] が始発 */
   stations: Station[];

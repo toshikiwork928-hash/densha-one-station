@@ -59,6 +59,8 @@ async function main() {
   { const r = ROUTES['namba'], sN = r.stations.at(-1)!.stopS; for (const s of r.stations) KM[nameOf(s.name)] = (sN - s.stopS) / 1000; }
   { const r = ROUTES['nankai-through-up'], s0 = r.stations[0].stopS; for (const s of r.stations) KM[s.name] ??= KM['堺'] + (s.stopS - s0) / 1000; }
   { const r = ROUTES['izumisano'], s0 = r.stations[0].stopS; for (const s of r.stations) KM[s.name] ??= KM['岸和田'] + (s.stopS - s0) / 1000; }
+  /** 実ダイヤの駅間の距離（KM）を持つコースだけ対向列車を作る。みさき公園〜和歌山港は対向列車を置かない（oncoming: []）ので対象外 */
+  const hasKm = (r: Route) => r.stations.every(s => KM[nameOf(s.name)] != null);
   const tsec = (v: string | null) => { const m = v ? /(\d+):(\d+)/.exec(v) : null; return m ? +m[1] * 3600 + +m[2] * 60 : null; };
   const trains = (dir: 'inbound_trains' | 'outbound_trains') => {
     const out: { kind: string; pts: Pt[] }[] = [];
@@ -139,7 +141,7 @@ async function main() {
       };
     };
     for (const [id, r0] of Object.entries(ROUTES)) {
-      if (r0.lineId !== 'shiokaze' || r0.singleTrack) continue;
+      if (r0.lineId !== 'shiokaze' || r0.singleTrack || !hasKm(r0)) continue;
       routes[id] = { morning: [], noon: [], evening: [], night: [] };
       const firstKm = KM[nameOf(r0.stations[0].name)]!, lastKm = KM[nameOf(r0.stations.at(-1)!.name)]!;
       const oncoming = firstKm < lastKm ? IN : OUT;
@@ -198,7 +200,7 @@ async function main() {
     : undefined;
   const result: Record<string, Record<string, Record<string, [number, string, number][]>>> = newRouteOnly ? structuredClone(old?.meets ?? {}) : {};
   for (const [id, r0] of Object.entries(ROUTES)) {
-    if (r0.lineId !== 'shiokaze' || r0.singleTrack) continue;
+    if (r0.lineId !== 'shiokaze' || r0.singleTrack || !hasKm(r0)) continue;
     if (newRouteOnly && id !== newRouteOnly) continue;
     result[id] = {};
     for (const sv of r0.services ?? []) {

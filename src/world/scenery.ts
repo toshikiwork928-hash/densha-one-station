@@ -242,7 +242,7 @@ export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot
   // 山岳線: ビル・線路際の植え込みは平地（町）で地面が線路と同じ高さの所だけ
   const MT = isMountain(T) ? T : null;
   const level = (s: number, lat: number) => !MT || (MT.flat(s) > .97 && Math.abs(MT.terrainY(s, lat) - MT.groundY(s)) < .9);
-  const blocked = (s: number) => T.nearCrossing(s, 3) || T.structureAt(s, 60)?.kind === 'tunnel' || (!MT && T.groundY(s) < -.3) || !level(s, 0);
+  const blocked = (s: number) => T.nearCrossing(s, 3) || T.structureAt(s, 60)?.kind === 'tunnel' || (!MT && T.low(s)) || !level(s, 0);
   const overpasses = (route.coastalLandmarks ?? []).filter(l => l.kind === 'road-overpass');
   const blockedBuilding = (s: number, half = 0) => overpasses.some(l => Math.abs(s - l.s) < 45 + half);
   const towers = towerZones(route);

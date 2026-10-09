@@ -1,0 +1,117 @@
+// 南海本線 みさき公園〜和歌山港の独立コース（6駅・15.1km）。泉佐野〜みさき公園は別の作業（泉佐野駅の作り直し後）で作る。
+// 営業キロは泉佐野起点（南海公式の営業キロ）でみさき公園17.9、孝子22.3、和歌山大学前24.0、紀ノ川27.6、和歌山市30.2、和歌山港33.0km。
+// 線形・勾配・トンネル・橋は src/data/geometry/south.json（OSM の線路の中心線と国土地理院の標高から作った簡略化した下書き。実測ではない）を
+// scripts/slice-south-geometry.ts で切り出したもの（misaki-wakayamako-geometry.ts）。みさき公園の停止位置（south.json の s=17900）が s=180。
+// 駅の形は配線略図.net 南海本線 figures/011_06〜011_08 と Wikipedia に基づく概形。
+//   みさき公園: 盛土上・島式2面5線（多奈川線は描かない）→ 島式2面4線（loop）で近似。孝子・和歌山大学前・紀ノ川・和歌山市: 地上・相対式2面2線（和歌山市の2面5線は relative で近似）。
+//   和歌山港: 築堤上・島式1面2線、終点。ゲーム用に、下りは2番線・上りは1番線に入る。
+// 運行は普通と特急サザンだけ。景観は手続き生成のまばらな街並み（OSM の建物・道路データは作らない）、対向列車は置かない。
+import type { Route, Sign, SpeedLimit, Station, StationIsland, StationLoop } from '../types';
+import { reverseRoute } from '../reverse';
+import { islandZone, loopZone, setDestinations } from '../service';
+import { MWT, MWT_UP } from './misaki-wakayamako-timetable';
+import { MW_DISTANCES, MW_GRADIENTS, MW_SEGMENTS, MW_STRUCTURES } from './misaki-wakayamako-geometry';
+
+/** みさき公園の待避線は岸和田〜泉佐野（izumisano.ts）と同じ形 */
+const LOOP: StationLoop = { lat: -9.2, turnoutLength: 90, turnoutLimitKmh: 45 };
+/** 和歌山港の島式ホーム: 線路が左右へ 3.9m ずつ開き（線間 4+7.8=11.8m）、幅 8.4m のホーム。ホームの先で車止め（終点）。分岐器は両開き 60m。
+ *  実際のホームの幅・線間は不明（ゲーム用の概形） */
+const ISLAND: StationIsland = { spread: 3.9, length: 60 };
+const names = [
+  ['みさき公園', 'みさきこうえん'], ['孝子', 'きょうし'], ['和歌山大学前', 'わかやまだいがくまえ'],
+  ['紀ノ川', 'きのかわ'], ['和歌山市', 'わかやまし'], ['和歌山港', 'わかやまこう'],
+];
+const LAST = names.length - 1;
+const stations: Station[] = names.map(([name, kana], i) => {
+  const stopS = 180 + MW_DISTANCES[name];
+  return {
+    name, kana, stopS, platform: { from: stopS - 180, to: stopS + 40, side: 'L' },
+    scheduledArrival: i * 100, dwell: i && i < LAST ? 25 : undefined, stopMarkerCars: 6,
+    ...(i === LAST ? { elevated: true, island: { ...ISLAND }, headEnd: true } : {}),
+    ...(i === 0 ? { layout: 'loop' as const, loop: { ...LOOP } } : {}),
+    ...(i > 0 && i < LAST ? { layout: 'relative' as const } : {}),
+  };
+});
+
+const approachSigns = (stopS: number): Sign[] => [
+  ...[500, 200, 100, 50].map((d): Sign => ({ kind: 'distance', s: stopS - d, meters: d })),
+  { kind: 'stopMarker', s: stopS - 20, cars: 4 }, { kind: 'stopMarker', s: stopS, cars: 6 }, { kind: 'stopMarker', s: stopS, cars: 8 },
+];
+
+/** 曲線制限（ゲーム用）。半径 R の円弧は 3.8√R km/h（カント＋カント不足量 170mm 相当）を 5 の倍数に切り下げ、線区最高速度（普通 90）に満たないものだけ置く。
+ *  south.json の円弧は実際の曲線ではない（概形）ので、実際の制限速度とは一致しない */
+const TRAIN_LEN = 120;
+const curveKmh = (R: number) => Math.floor(3.8 * Math.sqrt(R) / 5) * 5;
+const limits: SpeedLimit[] = (() => {
+  const out: SpeedLimit[] = [];
+  let s = 0;
+  for (const g of MW_SEGMENTS) {
+    const len = g.type === 'straight' ? g.length : g.radius * g.angle;
+    if (g.type === 'arc' && curveKmh(g.radius) < 90) out.push({ from: Math.round(s), to: Math.round(s + len) + TRAIN_LEN, kmh: curveKmh(g.radius), label: '曲線制限' });
+    s += len;
+  }
+  // 和歌山市〜和歌山港（和歌山港線）の最高速度は不明。ゲーム用の仮値 80km/h（和歌山市のホームの先から終端まで）
+  const wakayamashi = stations[4];
+  out.push({ from: wakayamashi.platform.to, to: 15400 + TRAIN_LEN, kmh: 80, label: '和歌山港線' });
+  return out.sort((a, b) => a.from - b.from);
+})();
+
+/** 出発・場内信号と駅間の閉そく信号（izumisano.ts と同じ作り方。島式の和歌山港は S字区間の外に場内信号を置く） */
+const signals: { id: string; s: number }[] = [];
+for (let i = 0; i < stations.length; i++) {
+  const sta = stations[i], z = loopZone(sta), iz = islandZone(sta);
+  if (i > 0) signals.push({ id: `entry-${i}`, s: iz ? iz.inFrom - 60 : z ? z.inFrom - 60 : sta.platform.from - 150 });
+  if (i < LAST) signals.push({ id: `departure-${i}`, s: sta.stopS + 65 });
+  const next = stations[i + 1];
+  if (next) {
+    const from = z ? z.outTo + 60 : sta.platform.to + 160, nz = loopZone(next), niz = islandZone(next);
+    const to = niz ? niz.inFrom - 200 : nz ? nz.inFrom - 100 : next.platform.from - 200;
+    const n = Math.floor((to - from) / 600);
+    for (let k = 1; k <= n; k++) signals.push({ id: `block-${i}-${k}`, s: Math.round(from + (to - from) * k / (n + 1)) });
+  }
+}
+signals.sort((a, b) => a.s - b.s);
+
+export const misakiWakayamako: Route = {
+  id: 'misaki-wakayamako', lineId: 'shiokaze', theme: 'coast', name: '南海本線 みさき公園 → 和歌山港',
+  lineLimit: 90, startS: 180, startClock: 10 * 3600, trainLength: TRAIN_LEN,
+  segments: MW_SEGMENTS,
+  // 標高はみさき公園の地面が 0。地面が線路の高さに沿って上下する（terrain.ts の groundFollowsTrack）
+  elevation0: 0, groundFollowsTrack: true,
+  gradients: MW_GRADIENTS,
+  limits,
+  stations,
+  services: [
+    { id: 'local', name: '普通', cars: 4, units: [4], kind: 'commuter-new', kindOptions: ['commuter-new', 'commuter-old', 'commuter-1000'], formationOptions: [[4], [4, 2], [6]], lineLimit: 90, useLoop: true, stops: [0, 1, 2, 3, 4, 5], timetable: MWT.local, trackNames: { 5: '2番線' } },
+    { id: 'southern', name: '特急サザン', cars: 8, units: [4, 4], kind: 'southern-10000', unitKinds: ['southern-10000', 'commuter-old'], lineLimit: 110, stops: [0, 2, 4, 5], timetable: MWT.southern, trackNames: { 5: '2番線' } },
+  ],
+  // 途中に待避駅が無いので、先行の普通はサザンに追いつかれない間隔で先に出す
+  precedingHeadway: { southern: 330 },
+  prevName: '淡輪', nextName: '', signs: stations.slice(1).flatMap(st => approachSigns(st.stopS)),
+  extent: { from: -400, to: 15355 }, tracks: [0, 4],
+  // 孝子〜和歌山大学前は山あいで市街地にしない。和歌山市の周辺（紀ノ川橋梁の先から和歌山市の先まで）を市街地にする
+  scenery: { cityZones: [{ from: 11700, to: 13300 }] },
+  oncoming: [], signals, crossings: [],
+  // トンネル3本は south.json の OSM のトンネル（第一孝子越隧道・第二貴志隧道・第三貴志隧道に数が一致、どれがどれかは未確認）。橋は紀ノ川橋梁（推定）と小さな橋1つ。
+  // 最後の south.json の橋（32645〜32868、223m）は和歌山港のホーム（32820〜）と重なるため、川の橋でなく築堤・高架の取り付きと判断して viaduct にした（実際は不明）
+  structures: [
+    ...MW_STRUCTURES.filter(x => !(x.kind === 'bridge' && x.from === 14925)),
+    { kind: 'viaduct', from: 14925, to: 15365 },
+  ],
+  // 築堤・高架の高さ [m]（和歌山港。ゲーム用の仮値）。紀ノ川橋梁の下の水面は手作りのデータ（loadOsmFor。src/data/osm/misaki-wakayamako.json）
+  viaductHeight: 6,
+  // 終点・和歌山港は低速進入の ATS を有効にする（頭端式の終着駅。上りは終着が途中駅なので下で無効にする）
+  terminalApproach: true,
+};
+for (const v of misakiWakayamako.services!) { v.destination = '和歌山港'; v.destinationKana = 'わかやまこう'; }
+
+export const misakiWakayamakoUp: Route = reverseRoute(misakiWakayamako, {
+  id: 'misaki-wakayamako-up', name: '南海本線 和歌山港 → みさき公園', timetable: MWT_UP, signs: approachSigns,
+});
+misakiWakayamakoUp.terminalApproach = false; // みさき公園は本線の途中駅（終着 ATS は無効）
+for (const v of misakiWakayamakoUp.services!) {
+  // 和歌山港は上りの始発。島式の線のうち、ゲームの自線（進行方向の左）は物理的に下りの反対側の1番線
+  v.trackNames = { 0: '1番線' };
+  if (v.id === 'southern') { v.kind = 'commuter-old'; v.unitKinds = ['commuter-old', 'southern-10000']; }
+}
+setDestinations(misakiWakayamakoUp.services!, 'namba');

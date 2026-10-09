@@ -5,7 +5,7 @@ import { GeoBatch, M, P } from './batch';
 import { extrudeAlong, extrudeFn, loopTracks } from './track-mesh';
 import { coastalThirdTracks } from './coastal-stations';
 import { customPlatformEdges, islandOffset, islandShape, islandZones, profileLat, trackSpan } from '../route/service';
-import { TUNNEL_CENTER, TUNNEL_HALF, TUNNEL_WALL_H, getTerrain, gridAlong } from './terrain';
+import { TUNNEL_CENTER, TUNNEL_HALF, TUNNEL_WALL_H, getTerrain } from './terrain';
 import { BAND_CULL, isMountain } from './mountain-terrain';
 import { cullByDistance } from './cull';
 import { buildMountainSpan, buildRockSheds } from './mountain-structures';
@@ -179,14 +179,8 @@ export function buildStructures(ctx: GameContext): void {
         for (let s = st.from + 40; s < st.to - 20; s += 45) pier(batch, ctx, s, 2.9, true, bounds(s));
       }
       }
-      if (bridge) {
-        // 川面
-        const c = (st.from + st.to) / 2, w = (st.to - st.from) * .7;
-        const water = new THREE.MeshPhongMaterial({ color: 0x3c6577, shininess: 90, specular: 0x8899aa });
-        const rv = T.riverAt(c) ?? -3.6;
-        const wm = gridAlong(track, c - w / 2, c + w / 2, 10, () => [[-1400, rv], [1404, rv]], water);
-        wm.name = 'river'; scene.add(wm);
-      } else {
+      // 橋の川面は地形側（terrain.ts）。橋の下の溝と OSM の水面の形に沿って作る
+      if (!bridge) {
         for (let s = st.from + 12; s < st.to - 4; s += 20) if (!route.reserved?.some(z => z.noPiers && s > z.from && s < z.to)) pier(batch, ctx, s, 1.1, false, bounds(s));
       }
     }

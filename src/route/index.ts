@@ -5,11 +5,15 @@ import { shiokaze, shiokazeUp } from './routes/shiokaze';
 import { mountain, mountainUp } from './routes/mountain';
 import { kishiwada, kishiwadaUp } from './routes/kishiwada';
 import { izumisano, izumisanoUp } from './routes/izumisano';
+import { izumisanoMisaki, izumisanoMisakiUp } from './routes/izumisano-misaki';
 import { through, throughUp } from './routes/through';
 import { namba, nambaUp } from './routes/namba';
+import { misakiWakayamako, misakiWakayamakoUp } from './routes/misaki-wakayamako';
 
 export const ROUTES: Record<string, Route> = { [sakuragaoka.id]: sakuragaoka, [shiokaze.id]: shiokaze, [shiokazeUp.id]: shiokazeUp, [mountain.id]: mountain, [mountainUp.id]: mountainUp,
-  [kishiwada.id]: kishiwada, [kishiwadaUp.id]: kishiwadaUp, [izumisano.id]: izumisano, [izumisanoUp.id]: izumisanoUp, [through.id]: through, [throughUp.id]: throughUp, [namba.id]: namba, [nambaUp.id]: nambaUp };
+  [kishiwada.id]: kishiwada, [kishiwadaUp.id]: kishiwadaUp, [izumisano.id]: izumisano, [izumisanoUp.id]: izumisanoUp, [through.id]: through, [throughUp.id]: throughUp, [namba.id]: namba, [nambaUp.id]: nambaUp,
+  [izumisanoMisaki.id]: izumisanoMisaki, [izumisanoMisakiUp.id]: izumisanoMisakiUp,
+  [misakiWakayamako.id]: misakiWakayamako, [misakiWakayamakoUp.id]: misakiWakayamakoUp };
 /** 方向の切替（下り ↔ 上り）。タイトルの方向ボタン用 */
 export const ROUTE_DIRS: { id: string; label: string; desc: string }[] = [
   { id: shiokaze.id, label: '上り', desc: '泉大津 → 堺' },
@@ -39,13 +43,21 @@ const NANKAI_SECTIONS: SectionEntry[] = [
     ],
   },
   {
-    id: 'kishiwada-izumisano', name: '岸和田〜泉佐野', desc: '7駅・8.0km。貝塚の待避線と泉佐野の3面5線。普通・急行・空港急行・サザン・ラピートβ',
+    id: 'kishiwada-izumisano', name: '岸和田〜泉佐野', desc: '7駅・8.0km。貝塚の待避線と泉佐野の3面4線。普通・急行・空港急行・サザン・ラピートβ',
     dirs: [{ id: izumisano.id, label: '下り', desc: '岸和田 → 泉佐野' }, { id: izumisanoUp.id, label: '上り', desc: '泉佐野 → 岸和田' }],
   },
   // 既定（dirs[0]）を変えないよう末尾に置く
   {
     id: 'sakai-namba', name: '堺〜難波', desc: '9駅・9.8km。大和川橋梁、住ノ江からの複々線と車庫、高野線と並ぶ4線、終点は頭端式の難波（種別ごとに番線が違う）',
     dirs: [{ id: namba.id, label: '上り', desc: '堺 → なんば' }, { id: nambaUp.id, label: '下り', desc: 'なんば → 堺' }],
+  },
+  {
+    id: 'izumisano-misaki', name: '泉佐野〜みさき公園', desc: '10駅・17.9km。泉佐野の3面4線から、海沿いと山あいを南へ。普通・特急サザン（景観・ダイヤは作り込み前）',
+    dirs: [{ id: izumisanoMisaki.id, label: '下り', desc: '泉佐野 → みさき公園' }, { id: izumisanoMisakiUp.id, label: '上り', desc: 'みさき公園 → 泉佐野' }],
+  },
+  {
+    id: 'misaki-wakayamako', name: 'みさき公園〜和歌山港', desc: '6駅・15.1km。孝子越えの山あいのトンネル、紀ノ川橋梁、和歌山市、終点の和歌山港（築堤上の島式ホーム）。普通・特急サザン',
+    dirs: [{ id: misakiWakayamako.id, label: '下り', desc: 'みさき公園 → 和歌山港' }, { id: misakiWakayamakoUp.id, label: '上り', desc: '和歌山港 → みさき公園' }],
   },
 ];
 export const LINES: LineEntry[] = [
