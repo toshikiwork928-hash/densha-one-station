@@ -27,6 +27,11 @@ export interface SectionEntry { id: string; name: string; desc: string; dirs: Di
 export interface LineEntry { id: string; name: string; desc: string; theme: 'coast' | 'mountain'; dirs: DirEntry[]; sections?: SectionEntry[] }
 /** 南海本線の区間（難波側から） */
 const NANKAI_SECTIONS: SectionEntry[] = [
+  // メニューの並びは難波側から（堺〜難波が先頭）。既定の方向（dirs[0]）は変えない（下の LINES の dirs を参照）
+  {
+    id: 'sakai-namba', name: '堺〜難波', desc: '9駅・9.8km。大和川橋梁、住ノ江からの複々線と車庫、高野線と並ぶ4線、終点は頭端式の難波（種別ごとに番線が違う）',
+    dirs: [{ id: namba.id, label: '上り', desc: '堺 → なんば' }, { id: nambaUp.id, label: '下り', desc: 'なんば → 堺' }],
+  },
   { id: 'izumiotsu-sakai', name: '堺〜泉大津', desc: '10駅・10.6km。高架駅、路面電車跨線橋、鉄橋と支線', dirs: ROUTE_DIRS },
   {
     id: 'izumiotsu-kishiwada', name: '泉大津〜岸和田', desc: '5駅・5.6km。大津川を渡って地上へ、高架の屋内駅・岸和田。空港急行・特急ラピートβ・特急サザン',
@@ -46,11 +51,6 @@ const NANKAI_SECTIONS: SectionEntry[] = [
     id: 'kishiwada-izumisano', name: '岸和田〜泉佐野', desc: '7駅・8.0km。貝塚の待避線と泉佐野の3面4線。普通・急行・空港急行・サザン・ラピートβ',
     dirs: [{ id: izumisano.id, label: '下り', desc: '岸和田 → 泉佐野' }, { id: izumisanoUp.id, label: '上り', desc: '泉佐野 → 岸和田' }],
   },
-  // 既定（dirs[0]）を変えないよう末尾に置く
-  {
-    id: 'sakai-namba', name: '堺〜難波', desc: '9駅・9.8km。大和川橋梁、住ノ江からの複々線と車庫、高野線と並ぶ4線、終点は頭端式の難波（種別ごとに番線が違う）',
-    dirs: [{ id: namba.id, label: '上り', desc: '堺 → なんば' }, { id: nambaUp.id, label: '下り', desc: 'なんば → 堺' }],
-  },
   {
     id: 'izumisano-misaki', name: '泉佐野〜みさき公園', desc: '10駅・17.9km。泉佐野の3面4線から、海沿いと山あいを南へ。普通・特急サザン（景観・ダイヤは作り込み前）',
     dirs: [{ id: izumisanoMisaki.id, label: '下り', desc: '泉佐野 → みさき公園' }, { id: izumisanoMisakiUp.id, label: '上り', desc: 'みさき公園 → 泉佐野' }],
@@ -60,10 +60,13 @@ const NANKAI_SECTIONS: SectionEntry[] = [
     dirs: [{ id: misakiWakayamako.id, label: '下り', desc: 'みさき公園 → 和歌山港' }, { id: misakiWakayamakoUp.id, label: '上り', desc: '和歌山港 → みさき公園' }],
   },
 ];
+/** dirs の並び（既定の方向を保つための従来の順。メニューの並びは NANKAI_SECTIONS） */
+const LEGACY_ORDER = ['izumiotsu-sakai', 'izumiotsu-kishiwada', 'sakai-kishiwada', 'kishiwada-izumisano', 'sakai-namba', 'izumisano-misaki', 'misaki-wakayamako'];
 export const LINES: LineEntry[] = [
   {
     id: 'shiokaze', name: '南海本線', desc: '南海本線（難波〜堺〜泉大津〜岸和田）。海沿いの複線。区間を選ぶ。普通・急行・空港急行・特急ラピートβ・特急サザン', theme: 'coast',
-    dirs: NANKAI_SECTIONS.flatMap(x => x.dirs), sections: NANKAI_SECTIONS,
+    // 既定の方向（dirs[0]）は従来どおり堺〜泉大津の下り。メニューの区間の並び（sections）とは別に、堺〜難波を末尾側に置く
+    dirs: [...NANKAI_SECTIONS].sort((p, q) => LEGACY_ORDER.indexOf(p.id) - LEGACY_ORDER.indexOf(q.id)).flatMap(x => x.dirs), sections: NANKAI_SECTIONS,
   },
   {
     id: 'mountain', name: '高野線', desc: '高野線（橋本〜極楽橋、一部の駅を省略）。谷を上る単線の山岳線。50‰ の急勾配と急曲線、交換駅で行き違い。各停（2300系 2両/4両）', theme: 'mountain',
