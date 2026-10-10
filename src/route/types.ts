@@ -251,6 +251,12 @@ export interface Route {
   groundFollowsTrack?: boolean;
   /** groundFollowsTrack のとき、高架（'viaduct'）の線路面と地面の高さの差 [m]（既定 9） */
   viaductHeight?: number;
+  /** 周囲の山（国土地理院の標高）。線路の地面からの高さ [m] の格子。s0 から step ごとの行、lats は線路の中心からの横位置（右が正）。線路から ±350m 以内は 0（OSM の建物・道路が平らな地面を前提に置かれるため）。world/terrain.ts の reliefY */
+  relief?: { s0: number; step: number; lats: number[]; rows: number[][] };
+  /** 周囲の山を、線路から ±350m 以内（線路際 25m を除く）にも広げる s の範囲。山あいの区間（建物がほとんど無い所）だけ。範囲の両端は 150m でならす */
+  reliefNear?: { from: number; to: number }[];
+  /** OSM の建物が無い所に家を補わない s の範囲（山あいの区間。osm-town.ts の空き地の補い） */
+  noInfill?: { from: number; to: number }[];
   limits: SpeedLimit[];
   /** 停車順。stations[0] が始発 */
   stations: Station[];
@@ -304,6 +310,9 @@ export interface Route {
   bridgeStyle?: { color: number; throughGirder?: boolean };
   /** 複々線の駅（stations）でラッシュ時に足す対向の普通の走行線の横位置（trackProfiles のキー。緩行線） */
   oncomingLocal?: { stations: number[]; lat: number };
+  /** 対向列車の同じ線の判定（world/oncoming-timetable.ts）: 横位置の基準が同じで、待避線・番線の経路を持たない列車は、線形の S字（合流部）で横位置が離れて見えても同じ線とみなす。
+   *  既定は横位置の差だけで判定する。泉佐野の南の合流部（泉佐野〜みさき公園）で、同じ線の後続が横位置の差で別の線と判定される不具合を避ける */
+  counterSameTrack?: boolean;
   /** 市街地（海・工業地帯の遠景を置かない） */
   urban?: boolean;
 }

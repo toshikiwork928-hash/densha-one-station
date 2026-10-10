@@ -5,6 +5,7 @@
 //   npm run oncoming:meets                         … 全コースを作る
 //   npm run oncoming:meets -- --new-route-only=...  … 指定コースだけ更新する
 //   npm run oncoming:meets -- --refresh             … 取り直す
+//   npm run oncoming:meets -- --timetable          … 時刻付きの共通運行データ（src/data/oncoming-timetable.json）。泉佐野以南の4コースは和歌山港線を含む（和歌山港線内は出さない）
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { ROUTES } from '../src/route/index';
 import { applyService } from '../src/route/service';
@@ -50,7 +51,8 @@ interface Pt { km: number; t: number; stop: boolean }
 
 async function main() {
   const ri = await post('railroad_info', 'railroad_id=nankai&last_modified_timestamp=0');
-  const tt = (await post('timetable', 'railroad_id=nankai&diagram_revision=2024-12-21&timetable_id=weekday&last_modified_timestamp=0')).honsen;
+  const ttAll = await post('timetable', 'railroad_id=nankai&diagram_revision=2024-12-21&timetable_id=weekday&last_modified_timestamp=0');
+  const tt = ttAll.honsen, wakayamako = ttAll.wakayamakosen;
   const NAMES: string[] = ri.lines.honsen.stations.map((s: { station_name: string }) => s.station_name);
   const N = NAMES.length;
   const nameOf = (s: string) => s === 'なんば' ? '難波' : s;
@@ -59,7 +61,7 @@ async function main() {
   { const r = ROUTES['namba'], sN = r.stations.at(-1)!.stopS; for (const s of r.stations) KM[nameOf(s.name)] = (sN - s.stopS) / 1000; }
   { const r = ROUTES['nankai-through-up'], s0 = r.stations[0].stopS; for (const s of r.stations) KM[s.name] ??= KM['堺'] + (s.stopS - s0) / 1000; }
   { const r = ROUTES['izumisano'], s0 = r.stations[0].stopS; for (const s of r.stations) KM[s.name] ??= KM['岸和田'] + (s.stopS - s0) / 1000; }
-  /** 実ダイヤの駅間の距離（KM）を持つコースだけ対向列車を作る。みさき公園〜和歌山港は対向列車を置かない（oncoming: []）ので対象外 */
+  /** 実ダイヤの駅間の距離（KM）を持つコースだけ旧方式（oncoming-meets.json）のすれ違いを作る。泉佐野以南の4コースは --timetable（oncoming-timetable.json）だけ */
   const hasKm = (r: Route) => r.stations.every(s => KM[nameOf(s.name)] != null);
   const tsec = (v: string | null) => { const m = v ? /(\d+):(\d+)/.exec(v) : null; return m ? +m[1] * 3600 + +m[2] * 60 : null; };
   const trains = (dir: 'inbound_trains' | 'outbound_trains') => {
@@ -100,40 +102,74 @@ async function main() {
     // API の全駅を、既知駅の営業キロから補間・外挿する。コース外の駅も
     // 入出場点として残すため、路線ごとの変換前に全駅の距離を埋める。
     const apiNames = NAMES.map(nameOf);
-    const known = apiNames.map((name, i) => KM[name] == null ? null : { i, km: KM[name]! }).filter((x): x is { i: number; km: number } => x != null);
-    for (let i = 0; i < apiNames.length; i++) if (KM[apiNames[i]] == null) {
-      const left = [...known].reverse().find(x => x.i < i), right = known.find(x => x.i > i);
-      if (left && right) KM[apiNames[i]] = left.km + (right.km - left.km) * (i - left.i) / (right.i - left.i);
-      else if (left) {
-        const prev = [...known].reverse().find(x => x.i < left.i);
-        KM[apiNames[i]] = left.km + (left.km - (prev?.km ?? left.km - 1)) * (i - left.i) / (left.i - (prev?.i ?? left.i - 1));
-      } else if (right) {
-        const next = known.find(x => x.i > right.i);
-        KM[apiNames[i]] = right.km - ((next?.km ?? right.km + 1) - right.km) * (right.i - i) / ((next?.i ?? right.i + 1) - right.i);
+    const fillKm = (K: Record<string, number>) => {
+      const known = apiNames.map((name, i) => K[name] == null ? null : { i, km: K[name]! }).filter((x): x is { i: number; km: number } => x != null);
+      for (let i = 0; i < apiNames.length; i++) if (K[apiNames[i]] == null) {
+        const left = [...known].reverse().find(x => x.i < i), right = known.find(x => x.i > i);
+        if (left && right) K[apiNames[i]] = left.km + (right.km - left.km) * (i - left.i) / (right.i - left.i);
+        else if (left) {
+          const prev = [...known].reverse().find(x => x.i < left.i);
+          K[apiNames[i]] = left.km + (left.km - (prev?.km ?? left.km - 1)) * (i - left.i) / (left.i - (prev?.i ?? left.i - 1));
+        } else if (right) {
+          const next = known.find(x => x.i > right.i);
+          K[apiNames[i]] = right.km - ((next?.km ?? right.km + 1) - right.km) * (right.i - i) / ((next?.i ?? right.i + 1) - right.i);
+        }
       }
+    };
+    // 泉佐野以南の4コース（泉佐野〜みさき公園、みさき公園〜和歌山港。上り下り）は、コースの駅の営業キロ（stopS の差）を KMS に持つ。
+    // 既存コースの距離 KM は変えない（泉佐野以南の駅を KM に入れると、既存コースの区間外の点の位置が変わり、収録済みのデータが変わる）。
+    const SOUTH = new Set(['izumisano-misaki', 'izumisano-misaki-up', 'misaki-wakayamako', 'misaki-wakayamako-up']);
+    const KMS: Record<string, number> = { ...KM };
+    for (const [id, anchor] of [['izumisano-misaki', '泉佐野'], ['misaki-wakayamako', 'みさき公園']] as const) {
+      const r = ROUTES[id], s0 = r.stations[0].stopS;
+      if (KMS[anchor] == null) throw new Error(`${id}: 基準駅 ${anchor} の距離がない`);
+      for (const s of r.stations) KMS[nameOf(s.name)] ??= KMS[anchor] + (s.stopS - s0) / 1000;
     }
+    fillKm(KM); fillKm(KMS);
     const routes: Record<string, Record<TimeOfDay, TimedTrain[]>> = {};
     const revision = '2024-12-21';
-    const kinds = (dir: 'inbound_trains' | 'outbound_trains') => {
-      const out: { id: string; code: string; pts: { km: number; t: number; stop: boolean; apiIndex: number }[] }[] = [];
+    // 和歌山港線（Hub では別の線 wakayamakosen）。本線から直通する列車は、列車番号で本線の列車の前後につなぐ。線内だけの列車（普通）は単独の列車にする
+    type TPt = { km: number; t: number; stop: boolean; name: string };
+    const kinds = (dir: 'inbound_trains' | 'outbound_trains', K: Record<string, number>) => {
+      const out: { id: string; code: string; pts: TPt[] }[] = [];
+      const wk: Record<string, any[]> = wakayamako?.[dir] ?? {};
+      const wkUsed = new Set<string>();
       for (const [id, arr] of Object.entries<any[]>(tt[dir])) for (const tr of arr) {
         const code = kindOf(tr.train_type);
         if (!code) continue;
-        const pts: { km: number; t: number; stop: boolean; apiIndex: number }[] = [];
+        const pts: TPt[] = [];
           tr.departure_times.forEach((v: string | null, j: number) => {
           const t = tsec(v);
             const apiIndex = dir === 'inbound_trains' ? N - 1 - j : j;
-            if (t == null || KM[apiNames[apiIndex]] == null) return;
-            pts.push({ km: KM[apiNames[apiIndex]], t, stop: !String(v).startsWith('|'), apiIndex });
+            if (t == null || K[apiNames[apiIndex]] == null) return;
+            pts.push({ km: K[apiNames[apiIndex]], t, stop: !String(v).startsWith('|'), name: apiNames[apiIndex] });
         });
+        // 和歌山港線へ直通する列車（下り: 本線の終点の次が和歌山港、上り: 和歌山港が本線の始点の前）
+        const link = (dir === 'outbound_trains' ? tr.next_trains : tr.previous_trains)?.find((x: any) => x.line_id === 'wakayamakosen' && x.train_number === id);
+        const wkTrain = link ? wk[id]?.[0] : undefined;
+        if (K === KMS && wkTrain && K['和歌山港'] != null) {
+          wkUsed.add(id);
+          const port = tsec(wkTrain.departure_times[dir === 'outbound_trains' ? 1 : 0]);
+          if (port != null) pts.push({ km: K['和歌山港'], t: port, stop: true, name: '和歌山港' });
+        }
         if (pts.length >= 2) out.push({ id, code, pts });
+      }
+      // 線内だけの列車（普通）。和歌山市〜和歌山港の2点
+      if (K === KMS && K['和歌山港'] != null) for (const [id, arr] of Object.entries<any[]>(wk)) for (const tr of arr) {
+        const code = kindOf(tr.train_type);
+        if (!code || wkUsed.has(id) || (tr.previous_trains?.length ?? 0) + (tr.next_trains?.length ?? 0) > 0) continue;
+        const [a, b] = dir === 'outbound_trains' ? ['和歌山市', '和歌山港'] : ['和歌山港', '和歌山市'];
+        const ta = tsec(tr.departure_times[0]), tb = tsec(tr.departure_times[1]);
+        if (ta == null || tb == null) continue;
+        out.push({ id, code, pts: [{ km: K[a], t: ta, stop: true, name: a }, { km: K[b], t: tb, stop: true, name: b }] });
       }
       return out;
     };
-    const OUT = kinds('outbound_trains'), IN = kinds('inbound_trains');
+    const OUT_L = kinds('outbound_trains', KM), IN_L = kinds('inbound_trains', KM);
+    const OUT_S = kinds('outbound_trains', KMS), IN_S = kinds('inbound_trains', KMS);
     const timeOfDays: TimeOfDay[] = ['morning', 'noon', 'evening', 'night'];
-    const timetableSOf = (r: Route) => {
-      const k = r.stations.map(s => KM[nameOf(s.name)]!), s = r.stations.map(x => x.platform.from + 8), up = k[0] < k.at(-1)!;
+    const timetableSOf = (r: Route, K: Record<string, number>) => {
+      const k = r.stations.map(s => K[nameOf(s.name)]!), s = r.stations.map(x => x.platform.from + 8), up = k[0] < k.at(-1)!;
       return (km: number) => {
         let i = 1;
         while (i < k.length - 1 && (up ? km > k[i] : km < k[i])) i++;
@@ -141,10 +177,14 @@ async function main() {
       };
     };
     for (const [id, r0] of Object.entries(ROUTES)) {
-      if (r0.lineId !== 'shiokaze' || r0.singleTrack || !hasKm(r0)) continue;
+      const south = SOUTH.has(id), K = south ? KMS : KM, OUT = south ? OUT_S : OUT_L, IN = south ? IN_S : IN_L;
+      if (r0.lineId !== 'shiokaze' || r0.singleTrack || !r0.stations.every(s => K[nameOf(s.name)] != null)) continue;
       routes[id] = { morning: [], noon: [], evening: [], night: [] };
-      const firstKm = KM[nameOf(r0.stations[0].name)]!, lastKm = KM[nameOf(r0.stations.at(-1)!.name)]!;
+      const firstKm = K[nameOf(r0.stations[0].name)]!, lastKm = K[nameOf(r0.stations.at(-1)!.name)]!;
       const oncoming = firstKm < lastKm ? IN : OUT;
+      /** 和歌山港線は単線で、このコースでは上下の線が重なる（s 12870〜14790）。そこへ対向列車を出すと自列車の線と重なるので、
+       *  みさき公園〜和歌山港のコースでは和歌山市より先（和歌山港線内）の点を落とし、線内だけの列車は出さない */
+      const clipKm = id.startsWith('misaki-wakayamako') ? K['和歌山市'] : undefined;
       for (const tod of timeOfDays) {
         const r = structuredClone(r0); r.timeOfDay = tod;
         let courseMax = 0;
@@ -153,10 +193,10 @@ async function main() {
           courseMax = Math.max(courseMax, ...rs.stations.map(s => s.scheduledArrival));
         }
         const start = START_CLOCK[tod], winStart = start - 600, winEnd = start + courseMax + 600;
-        const toS = timetableSOf(r), routeMin = Math.min(r.extent.from, r.extent.to), routeMax = Math.max(r.extent.from, r.extent.to);
+        const toS = timetableSOf(r, K), routeMin = Math.min(r.extent.from, r.extent.to), routeMax = Math.max(r.extent.from, r.extent.to);
         const result: TimedTrain[] = [];
         for (const tr of oncoming) {
-          const points0 = tr.pts.map(p => ({ s: Math.round(toS(p.km)), depart: p.t, stop: p.stop, station: r.stations.findIndex(s => nameOf(s.name) === apiNames[p.apiIndex]) })).map(p => ({ ...p, station: p.station < 0 ? null : p.station }));
+          const points0 = tr.pts.filter(p => clipKm == null || p.km <= clipKm + 1e-9).map(p => ({ s: Math.round(toS(p.km)), depart: p.t, stop: p.stop, station: r.stations.findIndex(s => nameOf(s.name) === p.name) })).map(p => ({ ...p, station: p.station < 0 ? null : p.station }));
           points0.sort((a, b) => a.depart - b.depart || b.s - a.s);
           const points: TimedPoint[] = [];
           for (const p of points0) {

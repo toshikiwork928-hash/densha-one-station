@@ -327,6 +327,7 @@ export function makeMountainTerrain(route: Route, track: Track): MountainTerrain
     // 谷川は mountain-terrain 自身が持つ。OSM の川の溝（terrain.ts）は使わない
     dryY: (s) => self.groundY(s),
     riverDepth: () => 0,
+    reliefY: () => 0,
     riverNear: () => false,
     low: (s, m = .3) => self.groundY(s) < -m,
     riverAreaKeys: new Set<string>(),

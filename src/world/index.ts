@@ -29,6 +29,7 @@ import { buildSumiyoshiTaisha } from './sumiyoshi-taisha';
 import { createRunPasses } from './run-pass';
 import { buildWakayamashi } from './wakayamashi';
 import { buildWakayamashiTrains } from './wakayamashi-trains';
+import { buildWakayamadaigakumae } from './wakayamadaigakumae';
 import { downFrame } from './down-frame';
 import { buildIzumisanoAirport } from './izumisano-airport';
 import { buildHagurazakiDepot, buildHagurazakiDepotTrains } from './hagurazaki-depot';
@@ -73,6 +74,8 @@ export function buildWorld(ctx: GameContext): World {
   // みさき公園〜和歌山港の和歌山市駅（構内・車庫・JR・留置の電車。上りは world/mw-frame.ts で下りの座標へ写す）。ctx.rng を消費しない
   buildWakayamashi(ctx);
   buildWakayamashiTrains(ctx);
+  // みさき公園〜和歌山港の和歌山大学前駅の周辺（橋上駅舎・駅ビル・イオンモールへのデッキ・西口・マンション・斜面。同じく下りの座標）。ctx.rng を消費しない
+  buildWakayamadaigakumae(ctx);
   // 泉佐野〜みさき公園専用（下り 'izumisano-misaki' と上り '-up'。座標は下りのもの、world/down-frame.ts）。ctx.rng を消費しない
   const sctx = downFrame(ctx, 'izumisano-misaki');
   if (sctx) {

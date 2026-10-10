@@ -4,7 +4,8 @@
 // 駅は既存の駅形で近似（尾崎の2面4線・みさき公園の島式2面は未再現）。泉佐野は岸和田〜泉佐野コースと同じ島式3面4線・駅舎。羽倉崎は2面3線（custom）。
 // 泉佐野の南の空港線の分岐・JR 関西空港線の橋・羽倉崎検車区は描画専用（route/routes/izumisano-airport.ts、hagurazaki-depot.ts と world/ の同名モジュール）。
 // 種別は普通と特急サザンだけ（日中の実際の運転）。対向列車・踏切・OSM の街並みは未作成。docs/spec-south-courses.md
-import type { ExtraTrack, LatProfile, Route, Segment, ServiceSpec, Sign, SpeedLimit, Station, StationLoop } from '../types';
+import type { ExtraTrack, LatProfile, Route, Segment, ServiceSpec, Sign, SpeedLimit, Station, StationLoop, TimeOfDay } from '../types';
+import { setLocalPatterns } from '../day-patterns';
 import { mirrorProfile, reverseRoute } from '../reverse';
 import { loopZone, setDestinations } from '../service';
 import SOUTH from '../../data/geometry/south.json';
@@ -132,6 +133,8 @@ const reserved = [...airportReserved(AIRPORT), ...HAGURAZAKI_RESERVED];
 
 const services: ServiceSpec[] = [
   { id: 'local', name: '普通', cars: 4, units: [4], kind: 'commuter-new', kindOptions: ['commuter-new', 'commuter-old', 'commuter-1000'], formationOptions: [[4], [4, 2], [6]], lineLimit: 90, useLoop: true, stops: names.map((_, i) => i), timetable: SM.local },
+  // 急行（ラッシュ時の運転。泉佐野以南の停車駅は泉佐野、尾崎、みさき公園、和歌山大学前、和歌山市で、サザンと同じ。docs/south-timetable-research.md 3章）
+  { id: 'express', name: '急行', cars: 6, units: [4, 2], kind: 'commuter-old', kindOptions: ['commuter-old', 'commuter-new', 'commuter-1000', 'commuter-9000'], formationOptions: [[4, 2], [4, 4], [6]], lineLimit: 100, stops: [0, 5, 9], timetable: SM.express },
   { id: 'southern', name: '特急サザン', cars: 8, units: [4, 4], kind: 'southern-10000', unitKinds: ['southern-10000', 'commuter-old'], lineLimit: 110, stops: [0, 5, 9], timetable: SM.southern },
 ];
 
@@ -145,9 +148,13 @@ export const izumisanoMisaki: Route = {
   extent: { from: -400, to: END }, tracks: [0, 4], trackProfiles: { 4: MAIN_UP },
   deckJoin: [{ from: -400, to: 600 }],
   scenery: { cityZones: [{ from: -Infinity, to: START + 11500 }, { from: START + 15500, to: Infinity }] },
-  oncoming: [], signals, crossings: [],
+  // 対向列車は実ダイヤの時刻付き共通運行（data/oncoming-timetable.json、world/oncoming-timetable.ts）。停車シーンの設定は持たない。
+  // 泉佐野の南の合流部（s 300〜550）で本線の列車を同じ線と判定する（counterSameTrack）
+  oncoming: [], counterSameTrack: true, signals, crossings: [],
   structures: [{ kind: 'viaduct', from: -400, to: VIADUCT_END }],
-  extraTracks: EXTRA, reserved,
+  extraTracks: EXTRA,
+  // 周囲の山（国土地理院の標高。south.json の relief。営業キロ + START が s）
+  relief: { s0: START, step: SOUTH.relief.step, lats: SOUTH.relief.lats, rows: SOUTH.relief.rows.slice(0, Math.ceil((END - START) / SOUTH.relief.step) + 3) }, reserved,
   terminalApproach: false,
 };
 // 下りの走行線と番線（ゲーム用の割り当て。泉佐野の割り当てと同じ）: 普通は外側下り線(T1)の1番（ドア右）、サザンは下り本線(T2)の2番（ドア左）。
@@ -175,3 +182,15 @@ setDestinations(izumisanoMisakiUp.services!, 'namba');
 izumisanoMisakiUp.stations[LAST - OZAKI].loopTrack = '4番線';
 // みさき公園（上りの始発）: 上り本線(T3)の3番線から発車する（普通・サザンとも）
 setMisakiParkUp(izumisanoMisakiUp, 0);
+
+// 尾崎の緩急接続（平日の実ダイヤ。docs/south-timetable-research.md 5章）: 普通が尾崎の待避線に入り、本線に停車する優等列車が先に発車してから発車する。
+// 優等列車は尾崎に停車するので通過待ちでなく待ち合わせ。下りは朝・夜が急行、日中・夕がサザン。上りは朝が急行、日中・夜がサザン（夕は普通のうち待つのが3割弱なので入れない）。
+// 既存コース（泉大津〜岸和田・岸和田〜泉佐野など）の待避・待ち合わせとは別（このコースだけ）
+const OZAKI_WAITS_DOWN: Partial<Record<TimeOfDay, ['尾崎', 'express' | 'southern'][]>> = {
+  morning: [['尾崎', 'express']], noon: [['尾崎', 'southern']], evening: [['尾崎', 'southern']], night: [['尾崎', 'express']],
+};
+const OZAKI_WAITS_UP: Partial<Record<TimeOfDay, ['尾崎', 'express' | 'southern'][]>> = {
+  morning: [['尾崎', 'express']], noon: [['尾崎', 'southern']], night: [['尾崎', 'southern']],
+};
+setLocalPatterns(izumisanoMisaki, { waits: OZAKI_WAITS_DOWN });
+setLocalPatterns(izumisanoMisakiUp, { waits: OZAKI_WAITS_UP });

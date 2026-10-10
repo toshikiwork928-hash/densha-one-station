@@ -129,7 +129,10 @@ export function createCounterTraffic(route: Route, tod: TimeOfDay, consist: (cod
     }
     return o.lat + islandOffset(route, o.lat, s);
   };
+  /** 本線を走る列車どうし（待避線・番線の経路が無く、横位置の基準が同じ）。route.counterSameTrack のコースだけ */
+  const sameTrack = (a: CounterTrain, b: CounterTrain) => !!route.counterSameTrack && a.lat === b.lat && a.paths.length === 0 && b.paths.length === 0;
   const conflict = (a: CounterTrain, b: CounterTrain) => {
+    if (sameTrack(a, b)) return true;
     const from = Math.max(a.head, b.head), to = Math.min(a.head + a.length, b.head + b.length);
     if (from <= to) {
       for (let s = from; s <= to; s += 4) if (Math.abs(laneAt(a, s) - laneAt(b, s)) < 3.4) return true;
@@ -237,7 +240,7 @@ export function createCounterTraffic(route: Route, tod: TimeOfDay, consist: (cod
       } else o.arrivedClock = undefined;
     }
   };
-  return { trains, update, laneAt, conflict, floorOf };
+  return { trains, update, laneAt, conflict, floorOf, sameTrack };
 }
 
 /** 車両モデルは種別・編成ごとに再利用し、描画範囲外でも運行時計を進める。 */

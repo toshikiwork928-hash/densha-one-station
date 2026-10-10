@@ -8,6 +8,7 @@
 import { serviceOf } from './service';
 import type { Route, RunPass, ServiceId, TimeOfDay, Wait } from './types';
 import { LOCAL_TT } from './routes/local-timetables';
+import { SOUTH_LOCAL_TT } from './routes/south-local-timetables';
 
 const TIMES: TimeOfDay[] = ['morning', 'noon', 'evening', 'night'];
 type WaitDef = [station: string, passedBy: ServiceId];
@@ -24,18 +25,23 @@ export function setLocalPatterns(route: Route, p: { waits?: Partial<Record<TimeO
   };
   // 特急はラピートとサザンが交互に走る: 1本の運転の中で、先に抜く特急がラピートなら次はサザン（サザンの無いコースはラピートのまま）
   const hasSouthern = !!serviceOf(route, 'southern') && route.services!.some(v => v.id === 'southern');
+  // 特急がサザンだけ・急行が急行だけのコース（泉佐野以南）は、待避の相手をその種別にする（交互の割り当てをしない）
+  const onlySouthern = hasSouthern && !route.services!.some(v => v.id === 'limited');
+  const hasAirport = route.services!.some(v => v.id === 'airport');
   // 急行も同じく急行と空港急行が交互（パターンで空港急行と明示したものはそのまま、次は急行）
   local.waitsByTime = Object.fromEntries(TIMES.map(t => {
     let k = 0, kk = 0;
     return [t, (p.waits?.[t] ?? []).map(([n, by]): Wait => {
       let id: ServiceId = by;
-      if (by === 'limited' || by === 'southern') id = hasSouthern ? (k++ % 2 ? 'southern' : 'limited') : 'limited';
+      if (onlySouthern && by === 'southern') id = 'southern';
+      else if (by === 'limited' || by === 'southern') id = hasSouthern ? (k++ % 2 ? 'southern' : 'limited') : 'limited';
+      else if (!hasAirport && by === 'express') id = 'express';
       else if (by === 'express' || by === 'airport') id = by === 'airport' ? (kk = 1, 'airport') : (kk++ % 2 ? 'airport' : 'express');
       return { station: at(n), passedBy: id };
     })];
   }));
   local.runPassesByTime = Object.fromEntries(TIMES.map(t => [t, (p.passes?.[t] ?? []).map(([a, b, by]): RunPass => ({ from: at(a), to: at(b), passedBy: by }))]));
-  const tt = LOCAL_TT[route.id];
+  const tt = LOCAL_TT[route.id] ?? SOUTH_LOCAL_TT[route.id];
   if (tt) local.timetableByTime = tt;
 }
 

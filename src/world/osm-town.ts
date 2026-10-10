@@ -420,6 +420,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
   {
     const frnd = createRng(777);
     for (const sd of [-1, 1]) for (let cs = S0 + 6; cs < S1; cs += 12) {
+      if (route.noInfill?.some(z => cs > z.from && cs < z.to)) continue; // 山あいの区間（route.noInfill）は、OSM の建物が無い所に家を補わない
       const [lo, hi] = span(cs);
       for (let d = 13; d < 200; d += 12.5) {
         const cl = sd < 0 ? lo - d : hi + d;
@@ -475,7 +476,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
     nB++;
     const lv = Math.min(45, Math.max(1, lv0));
     const sd = lat < (span(s)[0] + span(s)[1]) / 2 ? -1 : 1;
-    const p = track.at(s, lat, 0), y = ground(s);
+    const p = track.at(s, lat, 0), y = ground(s) + T.reliefY(s, lat);
     // 正面（局所 -Z）を線路へ向ける: 局所 Z = 線路から離れる向き（長さの軸に直交）
     const d2 = dirAt(s, a + Math.PI / 2), away = sd < 0 ? -1 : 1;
     const ry = Math.atan2(d2.x * away, d2.z * away);
@@ -562,7 +563,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
     const tris: number[] = [];
     const Wp = P2.map(([q, l], i) => {
       const [ds, dl] = dirOf(C2, i), v = track.at(q, l, 0);
-      v.y = ground(q) + DECK * riseAt(C2[i][0], C2[i][1], ds, dl, cw) + dy; return v;
+      v.y = ground(q) + T.reliefY(q, l) + DECK * riseAt(C2[i][0], C2[i][1], ds, dl, cw) + dy; return v;
     });
     for (let i = 0; i + 1 < P2.length; i++) {
       const A = Wp[i], B = Wp[i + 1], dx = B.x - A.x, dz = B.z - A.z, L = Math.hypot(dx, dz) || 1;
@@ -600,7 +601,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
       if (r < .02) { acc = 12; continue; }
       const A = track.at(sa, la, 0), B = track.at(sb, lb, 0), L = Math.hypot(B.x - A.x, B.z - A.z);
       if (L < .5) continue;
-      const yA = ground(sa) + DECK * rA, yB = ground(sb) + DECK * rB, y = (yA + yB) / 2;
+      const yA = ground(sa) + T.reliefY(sa, la) + DECK * rA, yB = ground(sb) + T.reliefY(sb, lb) + DECK * rB, y = (yA + yB) / 2;
       const yaw = Math.atan2(B.x - A.x, B.z - A.z), mx = (A.x + B.x) / 2, mz = (A.z + B.z) / 2, cx = Math.cos(yaw), sx = Math.sin(yaw);
       const pitch = -Math.atan2(yB - yA, L), Ls = Math.hypot(L, yB - yA) + .2;
       b.add('body', P.box, M(mx, y - .55, mz, yaw, w + .6, 1.2, Ls, pitch), 0xa5a49c); // 桁
@@ -709,7 +710,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
       if (underHill(q + 20, piece.reduce((a, p) => a + p[1], 0) / piece.length)) continue;
       const contour = piece.map(([x, y]) => new THREE.Vector2(x, y));
       const tri = THREE.ShapeUtils.triangulateShape(contour, []);
-      const V = contour.map(v => { const p = track.at(v.x, v.y, 0); p.y = T.terrainY(clampS(v.x), v.y) + dy; return p; });
+      const V = contour.map(v => { const p = track.at(v.x, v.y, 0); p.y = T.terrainY(clampS(v.x), v.y) - T.reliefY(clampS(v.x), v.y) + dy; return p; }); // 面は大きな三角形で山の斜面を横切るので、周囲の山（relief）には沿わせない（山は地面のメッシュで描く）
       for (const [i, j, k] of tri) out.push(V[i].x, V[i].y, V[i].z, V[j].x, V[j].y, V[j].z, V[k].x, V[k].y, V[k].z);
     }
     upFacing(out, true);
@@ -747,7 +748,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
       if (!inPoly(pts, ss, ll) || gap(ss, ll) < 9 || roadNear(ss, ll) || reservedAt(ss, ll) || waters.some(w => inPoly(w, ss, ll)) || T.riverNear(clampS(ss), ll, 3) || underHill(ss, ll) || inSea(ss, ll, 4)) continue;
       if (type === 'park' && rnd() < (big ? .15 : .35)) continue; // 公園は広場を残す
       const [rs, rl] = toReal(ss, ll);
-      trees.push({ s: rs, lat: rl, y: ground(ss), k: type === 'wood' || type === 'shrine' || big ? 1.05 + rnd() * .5 : .8 + rnd() * .4 });
+      trees.push({ s: rs, lat: rl, y: ground(ss) + T.reliefY(ss, ll), k: type === 'wood' || type === 'shrine' || big ? 1.05 + rnd() * .5 : .8 + rnd() * .4 });
       nT++;
     }
   }
@@ -763,7 +764,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
           const ts = ss + ns * side * (w / 2 + 1.2), tl = ll + nl * side * (w / 2 + 1.2);
           if (gap(ts, tl) < 40 || underHill(ts, tl) || inSea(ts, tl, 4) || rnd() < .3 || T.riverNear(clampS(ts), tl, 4)) continue;
           const [rs, rl] = toReal(ts, tl);
-          trees.push({ s: rs, lat: rl, y: ground(ts), k: .7 + rnd() * .25 }); nT++;
+          trees.push({ s: rs, lat: rl, y: ground(ts) + T.reliefY(ts, tl), k: .7 + rnd() * .25 }); nT++;
         }
       }
     }

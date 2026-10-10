@@ -18,6 +18,8 @@ export interface Terrain {
   groundY(s: number): number;
   /** 山（トンネル上）を含む地表の標高 */
   terrainY(s: number, lat: number): number;
+  /** 周囲の山（route.relief）の、線路の地面からの高さ [m]。線路から ±350m 以内は 0 */
+  reliefY(s: number, lat: number): number;
   trackY(s: number): number;
   /** s を含む構造物（margin だけ拡張して判定） */
   structureAt(s: number, margin?: number): Structure | undefined;
@@ -122,10 +124,51 @@ function makeTerrain(route: Route, track: Track): Terrain {
     }
     return 0;
   };
+  // 周囲の山（route.relief）: 行（100m ごとの s）を線形補間し、横は節点を線形に結ぶ。
+  // 既定は線路から ±350m 以内を 0 にし（OSM の建物・道路が平らな地面を前提に置かれる）、外側だけ。
+  // route.reliefNear の範囲（山あいの区間）は、線路際 25m を除いて ±350m 以内にも広げる。
+  // 斜面の傾きは 0.55（約 29°）まで。縁（高さ 0）から外へ向かって、節点ごとに高さを頭打ちにする（標高データの崖を斜面にならす）
+  const MAX_SLOPE = .55, NEAR = 45;
+  const clampRows = (rows: number[][], baseL: number) => rows.map(row => {
+    const L = route.relief!.lats, out = row.slice();
+    for (const j of L.keys()) if (Math.abs(L[j]) <= baseL) out[j] = 0;
+    for (const dir of [1, -1]) {
+      let prevL = baseL * dir, prevH = 0;
+      const order = [...L.keys()].filter(j => Math.abs(L[j]) > baseL && Math.sign(L[j]) === dir).sort((p, q) => Math.abs(L[p]) - Math.abs(L[q]));
+      for (const j of order) { out[j] = Math.min(out[j], prevH + MAX_SLOPE * Math.abs(L[j] - prevL)); prevL = L[j]; prevH = out[j]; }
+    }
+    return out;
+  });
+  const Ro = route.relief && { ...route.relief, rows: clampRows(route.relief.rows, 350) };
+  const Rf = route.relief && route.reliefNear?.length ? { ...route.relief, rows: clampRows(route.relief.rows, NEAR) } : undefined;
+  const nearMask = (s: number) => {
+    let m = 0;
+    for (const z of route.reliefNear ?? []) m = Math.max(m, smooth(Math.min(s - z.from, z.to - s) / 150));
+    return m;
+  };
+  const sampleRelief = (Rr: NonNullable<typeof Ro>, s: number, lat: number): number => {
+    const f = Math.max(0, Math.min(Rr.rows.length - 1 - 1e-9, (s - Rr.s0) / Rr.step)), k = Math.floor(f), u = f - k;
+    const row = (j: number) => Rr.rows[k][j] * (1 - u) + Rr.rows[Math.min(Rr.rows.length - 1, k + 1)][j] * u;
+    const L = Rr.lats;
+    if (lat <= L[0]) return row(0);
+    if (lat >= L[L.length - 1]) return row(L.length - 1);
+    let j = 0; while (j + 2 < L.length && lat > L[j + 1]) j++;
+    const t = (lat - L[j]) / (L[j + 1] - L[j]);
+    return row(j) * (1 - t) + row(j + 1) * t;
+  };
+  const reliefY = (s: number, lat: number): number => {
+    if (!Ro) return 0;
+    const m = Rf ? nearMask(s) : 0;
+    if (m <= 0 && Math.abs(lat) <= 350) return 0;
+    const outer = Math.abs(lat) <= 350 ? 0 : sampleRelief(Ro, s, lat);
+    if (m <= 0 || !Rf) return outer;
+    const full = sampleRelief(Rf, s, lat) * smooth((Math.abs(lat) - NEAR) / 40);
+    return outer * (1 - m) + full * m;
+  };
   const crossings = route.crossings ?? [];
   return {
-    groundY, trackY,
-    terrainY: (s, lat) => dryY(s) + hill(s, lat) - riverDepth(s, lat),
+    groundY, trackY, reliefY,
+    terrainY: (s, lat) => dryY(s) + hill(s, lat) + reliefY(s, lat) - riverDepth(s, lat),
     dryY, riverDepth,
     riverNear: (s, lat, m = 0) => {
       if (stubDepth(s - m, lat) > 0 || stubDepth(s, lat) > 0 || stubDepth(s + m, lat) > 0) return true;
@@ -242,17 +285,18 @@ export function buildTerrain(ctx: GameContext): Terrain {
   const follow = !!route.groundFollowsTrack;
   const edgeY = (y: number) => follow ? y - 9 : Math.min(y, 0) - 9;
   // 地面リボン（曲線内側は折り返さないよう幅を制限）
-  const LAT = [-1400, -500, -220, -90, -30, -6, 0, 4, 10, 34, 94, 224, 504, 1404];
+  const LAT = [-1404, -1000, -700, -500, -350, -220, -90, -30, -6, 0, 4, 10, 34, 94, 224, 350, 500, 700, 1000, 1404];
   const cols = (s: number): [number, number][] => {
     const y = T.groundY(s), k = T.curvature(s), R = Math.abs(k) > 1e-5 ? 1 / Math.abs(k) : 1e9;
     return LAT.map((l, j) => {
       const inside = (k > 0 && l > 0) || (k < 0 && l < 0);
       const ll = inside ? Math.sign(l) * Math.min(Math.abs(l), R * .85) : l;
-      return [ll, j === 0 || j === LAT.length - 1 ? edgeY(y) : y - .02];
+      const rel = T.reliefY(s, l);
+      return [ll, (j === 0 || j === LAT.length - 1 ? edgeY(y) : y - .02) + rel];
     });
   };
   // 大都市（route.urban）は舗装・空き地の灰色がちの地面
-  const gc = new THREE.Color(route.urban ? 0x9a9a8e : 0x7fa05a), dirt = new THREE.Color(0x9a9270);
+  const gc = new THREE.Color(route.urban ? 0x9a9a8e : 0x7fa05a), dirt = new THREE.Color(0x9a9270), forestC = new THREE.Color(0x48663a);
   // OSM の沿線データで街並みを作るコース（海沿いの市街地）は、線路から約 500m まで町の地面の色（舗装・空き地）
   const town = !route.urban && !!osmSceneryFor(route), townC = new THREE.Color(0x9a9886);
   // 川（橋の範囲と OSM の水面）がある s の範囲は、溝の形を出せるよう細かい格子で作る（lat 4m・s 5m）。ほかは従来の格子
@@ -295,8 +339,10 @@ export function buildTerrain(ctx: GameContext): Terrain {
       if (!dense) {
         const g = gridAlong(track, p0, p1, 10, cols, groundMat, (q, j, out) => {
           const h = hash(Math.floor(q / 30), j);
-          out.copy(town && j >= 1 && j <= LAT.length - 2 ? townC : gc).multiplyScalar(.85 + h * .22);
-          if (j >= 5 && j <= 8) out.lerp(dirt, .35); // 線路際は土っぽく
+          const l = LAT[j], rel = T.reliefY(q, l);
+          out.copy(town && Math.abs(l) <= 500 ? townC : gc).multiplyScalar(.85 + h * .22);
+          if (Math.abs(l) <= 10) out.lerp(dirt, .35); // 線路際は土っぽく
+          if (rel > 4) out.lerp(forestC, Math.min(.65, rel / 60)); // 山は濃い緑
         });
         g.name = 'ground'; scene.add(g);
         continue;

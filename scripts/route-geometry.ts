@@ -135,7 +135,7 @@ const project = (line: V[], cum: number[], p: V) => {
 };
 
 // ---------------- 標高（国土地理院 標高API） ----------------
-async function elevations(line: V[]): Promise<number[]> {
+async function elevations(line: V[], seaZero = false): Promise<number[]> {
   const cache: Record<string, number> = existsSync(elevFile) ? JSON.parse(readFileSync(elevFile, 'utf8')) : {};
   const out: number[] = [];
   let fetched = 0;
@@ -158,7 +158,8 @@ async function elevations(line: V[]): Promise<number[]> {
     out.push(cache[key]);
   }
   writeFileSync(elevFile, JSON.stringify(cache));
-  // 取れなかった点（海上など）は前後から補う
+  // 取れなかった点（海上など）。seaZero は標高 0（海）、そうでなければ前後から補う
+  if (seaZero) return out.map(e => Number.isFinite(e) ? e : 0);
   for (let i = 0; i < out.length; i++) if (!Number.isFinite(out[i])) { let j = i + 1; while (j < out.length && !Number.isFinite(out[j])) j++; const a = out[i - 1] ?? out[j], b = out[j] ?? a; for (let k = i; k < j; k++) out[k] = a + (b - a) * (k - i + 1) / (j - i + 1); }
   return out;
 }
@@ -326,6 +327,17 @@ async function main() {
     for (const [a, b] of parts) gradients.push({ from: Math.round(a), to: Math.round(b), permil: g.permil });
   }
 
+  // 周囲の山（relief）: 線路の中心から左右 350m 以上の所の標高を、線路の地面（トンネル・橋の中は出入口の補間）からの高さで持つ。
+  // 350m 以内の節点は、route.reliefNear の範囲（山あいの区間）だけで使う（ほかは OSM の建物・道路が平らな地面前提で置かれるので 0 として扱う）。海（標高データ無し）は 0。右が正（ゲームの lat と同じ）
+  const RELIEF_LATS = [-1400, -1000, -700, -500, -350, -250, -170, -100, -50, 50, 100, 170, 250, 350, 500, 700, 1000, 1400];
+  const reliefPts: V[] = [];
+  for (let k = 0; k < N; k++) {
+    const ci = idx(fromGame(k * step)), th0 = th[ci], nx = Math.sin(th0), ny = -Math.cos(th0), c = line[ci];
+    for (const l of RELIEF_LATS) reliefPts.push([c[0] + nx * l, c[1] + ny * l]);
+  }
+  const reliefZ = await elevations(reliefPts, true);
+  const relief = { step, lats: RELIEF_LATS, rows: Array.from({ length: N }, (_, k) => RELIEF_LATS.map((_, j) => Math.max(0, Math.round(reliefZ[k * RELIEF_LATS.length + j] - elev[k] - 2)))) };
+  console.log(`周囲の山: 最大 ${Math.max(...relief.rows.flat())}m、5m 以上の点 ${relief.rows.flat().filter(h => h >= 5).length} / ${relief.rows.flat().length}`);
   // 勾配を積分した標高と、ならした標高（地面）の差
   let zr = 0, maxZ = 0, zAt = 0;
   for (let k = 0; k < el5.length; k++) {
@@ -340,7 +352,7 @@ async function main() {
     chain: chain.id, generated: new Date().toISOString().slice(0, 10),
     note: 's は泉佐野（0）からの営業キロ [m]。駅の stopS は s + 開始位置の規約（180）を路線データ側で足す。標高 z は泉佐野の地面からの差（地面。高架・築堤の高さは含まない）。',
     stations: chain.stations.map((s, i) => ({ name: s.name, s: Math.round(stS[i]), osmLatLon: inv(stPt[i]), groundZ: profile[Math.round(stS[i] / step)]?.z })),
-    segments, structures, gradients, profile,
+    segments, structures, gradients, profile, relief,
     diagnostics: { osmLengthM: Math.round(osmLen), arcs: segments.filter(g => g.type === 'arc').length, minRadiusM: Math.round(minRadius), maxDeviationM: Math.round(maxDev) },
   };
   mkdirSync('src/data/geometry', { recursive: true });

@@ -13,6 +13,7 @@ import { buildIndoorStations } from './indoor-station';
 import { buildCustomStation } from './custom-stations';
 import { buildElevatedConcourse, buildHeritageFacade, buildCoastalSpecialStations, coastalThirdTracks } from './coastal-stations';
 import { addCanopyRoof, addCanopyBraces, addPlatformWall, architectureOf } from './station-architecture';
+import { isDaigakumae } from '../route/routes/misaki-wakayamako-daigakumae';
 
 const platMat = new THREE.MeshLambertMaterial({ color: 0xc9c5bc });
 const bodyMat = new THREE.MeshLambertMaterial({ vertexColors: true });
@@ -341,7 +342,8 @@ export function buildStations(ctx: GameContext): void {
     }
     const sc = (sta.platform.from + sta.platform.to) / 2;
     const dy = sta.elevated ? T.groundY(sc) - T.trackY(sc) : 0;
-    buildStation(ctx, sta, prev, next, { elevatedDy: dy });
+    // 和歌山大学前: 橋上駅舎・駅ビル・駅前は専用モジュール（world/wakayamadaigakumae.ts）が描くので、標準の駅舎・駅前広場は作らない
+    buildStation(ctx, sta, prev, next, { elevatedDy: dy, minimal: isDaigakumae(ctx.route.id, sta.name) });
     // 相対式ホーム: 対向線側にもホーム（上りの運転で使う）
     const L1 = Math.max(...ctx.route.tracks);
     if (L1 > 0) buildStation(ctx, sta, prev, next, { lat: L1, side: sta.platform.side === 'L' ? 'R' : 'L', minimal: true, elevatedDy: dy, shift: sta.platformOpp });

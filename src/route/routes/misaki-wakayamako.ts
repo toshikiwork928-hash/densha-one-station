@@ -11,9 +11,10 @@ import type { Route, Sign, SpeedLimit, Station, StationIsland } from '../types';
 import { reverseRoute } from '../reverse';
 import { islandZone, loopZone, setDestinations } from '../service';
 import { MWT, MWT_UP } from './misaki-wakayamako-timetable';
-import { MW_DISTANCES, MW_GRADIENTS, MW_SEGMENTS, MW_STRUCTURES } from './misaki-wakayamako-geometry';
+import { MW_DISTANCES, MW_GRADIENTS, MW_RELIEF, MW_SEGMENTS, MW_STRUCTURES } from './misaki-wakayamako-geometry';
 import { addMisakiPark, setMisakiParkUp } from './misaki-park';
 import { applyWakayama, applyWakayamaUp } from './misaki-wakayamako-wakayama';
+import { applyDaigakumae } from './misaki-wakayamako-daigakumae';
 
 /** 和歌山港の島式ホーム: 線路が左右へ 3.9m ずつ開き（線間 4+7.8=11.8m）、幅 8.4m のホーム。ホームの先で車止め（終点）。分岐器は両開き 60m。
  *  実際のホームの幅・線間は不明（ゲーム用の概形） */
@@ -72,6 +73,7 @@ for (let i = 0; i < stations.length; i++) {
 }
 signals.sort((a, b) => a.s - b.s);
 
+const MOUNTAIN = [{ from: stations[0].stopS + 250, to: stations[2].stopS - 450 }];
 export const misakiWakayamako: Route = {
   id: 'misaki-wakayamako', lineId: 'shiokaze', theme: 'coast', name: '南海本線 みさき公園 → 和歌山港',
   lineLimit: 90, startS: 180, startClock: 10 * 3600, trainLength: TRAIN_LEN,
@@ -83,14 +85,17 @@ export const misakiWakayamako: Route = {
   stations,
   services: [
     { id: 'local', name: '普通', cars: 4, units: [4], kind: 'commuter-new', kindOptions: ['commuter-new', 'commuter-old', 'commuter-1000'], formationOptions: [[4], [4, 2], [6]], lineLimit: 90, stops: [0, 1, 2, 3, 4, 5], timetable: MWT.local, trackNames: { 5: '2番線' } },
+    // 急行（ラッシュ時の運転。停車駅はみさき公園、和歌山大学前、和歌山市、和歌山港でサザンと同じ。docs/south-timetable-research.md 3章。実際は和歌山港まで行く急行は一部）
+    { id: 'express', name: '急行', cars: 6, units: [4, 2], kind: 'commuter-old', kindOptions: ['commuter-old', 'commuter-new', 'commuter-1000', 'commuter-9000'], formationOptions: [[4, 2], [4, 4], [6]], lineLimit: 100, stops: [0, 2, 4, 5], timetable: MWT.express, trackNames: { 5: '2番線' } },
     { id: 'southern', name: '特急サザン', cars: 8, units: [4, 4], kind: 'southern-10000', unitKinds: ['southern-10000', 'commuter-old'], lineLimit: 110, stops: [0, 2, 4, 5], timetable: MWT.southern, trackNames: { 5: '2番線' } },
   ],
-  // 途中に待避駅が無いので、先行の普通はサザンに追いつかれない間隔で先に出す
-  precedingHeadway: { southern: 330 },
+  // 途中に待避駅が無いので、先行の普通はサザン・急行に追いつかれない間隔で先に出す（普通の時刻表を実際の所要時間に合わせて長くしたので、従来の 330 から広げた）
+  precedingHeadway: { express: 440, southern: 440 },
   prevName: '淡輪', nextName: '', signs: stations.slice(1).flatMap(st => approachSigns(st.stopS)),
   extent: { from: -400, to: 15355 }, tracks: [0, 4],
   // 孝子〜和歌山大学前は山あいで市街地にしない。和歌山市の周辺（紀ノ川橋梁の先から和歌山市の先まで）を市街地にする
   scenery: { cityZones: [{ from: 11700, to: 13300 }] },
+  // 対向列車は実ダイヤの時刻付き共通運行（data/oncoming-timetable.json）。和歌山港線（単線）内の対向列車は出さない（scripts/oncoming-meets.ts が和歌山市より先の点を落とす）
   oncoming: [], signals, crossings: [],
   // トンネル3本は south.json の OSM のトンネル（第一孝子越隧道・第二貴志隧道・第三貴志隧道に数が一致、どれがどれかは未確認）。橋は紀ノ川橋梁（推定）と小さな橋1つ。
   // 最後の south.json の橋（32645〜32868、223m）は和歌山港のホーム（32820〜）と重なるため、川の橋でなく築堤・高架の取り付きと判断して viaduct にした（実際は不明）
@@ -98,6 +103,9 @@ export const misakiWakayamako: Route = {
     ...MW_STRUCTURES.filter(x => !(x.kind === 'bridge' && x.from === 14925)),
     { kind: 'viaduct', from: 14925, to: 15365 },
   ],
+  relief: MW_RELIEF, // 周囲の山（国土地理院の標高）
+  // みさき公園〜和歌山大学前は、ほぼ山あいで建物がほとんど無い（ユーザー指摘）。線路際まで山を広げ、OSM に無い所へ家を補わない。駅の前後 250m は除く
+  reliefNear: MOUNTAIN, noInfill: MOUNTAIN,
   // 築堤・高架の高さ [m]（和歌山港。ゲーム用の仮値）。紀ノ川橋梁の下の水面は手作りのデータ（loadOsmFor。src/data/osm/misaki-wakayamako.json）
   viaductHeight: 6,
   // 終点・和歌山港は低速進入の ATS を有効にする（頭端式の終着駅。上りは終着が途中駅なので下で無効にする）
@@ -108,6 +116,8 @@ for (const v of misakiWakayamako.services!) { v.destination = '和歌山港'; v.
 addMisakiPark(misakiWakayamako, 0, false);
 // 和歌山側の景観・配線（紀ノ川橋梁・加太線の分岐・和歌山市駅・和歌山港線の単線）。reverseRoute より前に足す
 applyWakayama(misakiWakayamako);
+// 和歌山大学前（橋上駅舎・駅ビル・イオンモール和歌山へのデッキ・西口・マンション・斜面）。景観を置かない範囲。描画は world/wakayamadaigakumae.ts
+applyDaigakumae(misakiWakayamako);
 
 export const misakiWakayamakoUp: Route = reverseRoute(misakiWakayamako, {
   id: 'misaki-wakayamako-up', name: '南海本線 和歌山港 → みさき公園', timetable: MWT_UP, signs: approachSigns,

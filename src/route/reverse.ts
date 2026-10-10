@@ -44,6 +44,12 @@ export function singleTrackSignals(stations: Station[], crossings: { s: number }
   return sig.map(s => ({ id: prefix + 's' + Math.round(s), s: Math.round(s) }));
 }
 
+/** 周囲の山（relief）を逆向きの座標へ写す: s' = 全長 − s、lat' = 線路の左右の和 − lat */
+function mirrorRelief(r: NonNullable<Route['relief']>, L: number, C: number): NonNullable<Route['relief']> {
+  const last = r.s0 + r.step * (r.rows.length - 1);
+  return { s0: L - last, step: r.step, lats: r.lats.map(l => C - l).reverse(), rows: [...r.rows].reverse().map(row => [...row].reverse()) };
+}
+
 export function reverseRoute(down: Route, opt: {
   id: string; name: string; timetable: Record<string, ServiceSpec['timetable']>;
   /** 下りの停車駅 index で指定した対向列車の停車（上りでは駅 index を反転して配置） */ oncomingStops?: StopScene[];
@@ -121,6 +127,7 @@ export function reverseRoute(down: Route, opt: {
     name: opt.name,
     startS,
     elevation0: endY,
+    ...(down.relief ? { relief: mirrorRelief(down.relief, L, C) } : {}),
     segments: [...down.segments].reverse().map(g => g.type === 'arc' ? { ...g, turn: g.turn === 'L' ? 'R' : 'L' } : { ...g }),
     gradients: (down.gradients ?? []).map(g => ({ from: m(g.to), to: m(g.from), permil: -g.permil })).sort((a, b) => a.from - b.from),
     limits,

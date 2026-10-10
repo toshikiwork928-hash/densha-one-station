@@ -78,6 +78,52 @@ function run(route: Route, id: ServiceId) {
 }
 
 const up = (x: number) => Math.ceil(x * MARGIN / 5) * 5;
+
+/** 実際の時刻表に近づけるための下限（泉佐野以南の4コースだけ）。始発の発車からの秒で、停車駅（駅 index）ごとに
+ *  'dep' = 発車の下限（途中駅）、'arr' = 到着の下限（終着、または和歌山市のように直前の列車が着く時刻が分かる駅）。
+ *  値は鉄道運用Hub の平日時刻表（改正 2024-12-21）の、各駅の発車時刻の始発からの差の中央値（全時間帯。分単位の時刻なので ±30 秒の誤差）。
+ *  終着は「実際の発車時刻 − ゲームの停車時間 25 秒」。和歌山港線は線内の普通・直通列車の所要から。出典・求め方は docs/south-timetable-research.md 7章と spec-south-courses.md 15章。
+ *  localWait（普通が尾崎で優等列車を待つ時間帯）は、尾崎の到着を待ちなしの時刻にし、以降の発車は実際の値から、ゲームの待ち時間が実際より短い分（下り 約104秒、上り 約164秒。
+ *  ゲームの待避は game/overtake.ts の運動計画で決まり、実際の待ち時間（下り 約3分、上り 約4分）より短い）を引いた値にする。
+ *  自動運転の最速走行 + 5% より短い値は無視する（最速走行より速い時刻表にしない）。 */
+type Floor = Record<number, ['dep' | 'arr', number]>;
+const REAL_FLOORS: Record<string, { local?: Floor; localWait?: Floor; express?: Floor; southern?: Floor }> = {
+  // 泉佐野 0、羽倉崎 1、吉見ノ里 2、岡田浦 3、樽井 4、尾崎 5、鳥取ノ荘 6、箱作 7、淡輪 8、みさき公園 9
+  'izumisano-misaki': {
+    local: { 1: ['dep', 180], 2: ['dep', 300], 3: ['dep', 420], 4: ['dep', 540], 5: ['dep', 780], 6: ['dep', 900], 7: ['dep', 1020], 8: ['dep', 1260], 9: ['arr', 1355] },
+    localWait: { 1: ['dep', 180], 2: ['dep', 300], 3: ['dep', 420], 4: ['dep', 540], 5: ['arr', 755], 6: ['dep', 975], 7: ['dep', 1155], 8: ['dep', 1395], 9: ['arr', 1490] },
+    express: { 5: ['dep', 480], 9: ['arr', 935] },
+    southern: { 5: ['dep', 480], 9: ['arr', 935] },
+  },
+  // みさき公園 0、淡輪 1、箱作 2、鳥取ノ荘 3、尾崎 4、樽井 5、岡田浦 6、吉見ノ里 7、羽倉崎 8、泉佐野 9。泉佐野の到着は、羽倉崎の発車 + 下りの羽倉崎〜泉佐野の所要（約 160 秒）
+  'izumisano-misaki-up': {
+    local: { 1: ['dep', 120], 2: ['dep', 360], 3: ['dep', 540], 4: ['dep', 660], 5: ['dep', 840], 6: ['dep', 1020], 7: ['dep', 1140], 8: ['dep', 1260], 9: ['arr', 1420] },
+    localWait: { 1: ['dep', 120], 2: ['dep', 360], 3: ['dep', 540], 4: ['arr', 635], 5: ['dep', 915], 6: ['dep', 1035], 7: ['dep', 1215], 8: ['dep', 1335], 9: ['arr', 1495] },
+    express: { 4: ['dep', 480], 9: ['arr', 890] },
+    southern: { 4: ['dep', 480], 9: ['arr', 890] },
+  },
+  // みさき公園 0、孝子 1、和歌山大学前 2、紀ノ川 3、和歌山市 4、和歌山港 5。普通の和歌山港は、和歌山市の発車（到着 + 25 秒）+ 線内の普通の所要 240 秒
+  'misaki-wakayamako': {
+    local: { 1: ['dep', 360], 2: ['dep', 480], 3: ['dep', 720], 4: ['arr', 900], 5: ['arr', 1165] },
+    express: { 2: ['dep', 420], 4: ['arr', 780], 5: ['arr', 1140] },
+    southern: { 2: ['dep', 420], 4: ['arr', 780], 5: ['arr', 1140] },
+  },
+  // 和歌山港 0、和歌山市 1、紀ノ川 2、和歌山大学前 3、孝子 4、みさき公園 5。普通の和歌山市の到着は線内の普通の所要 300 秒、サザン・急行の和歌山市の発車は 420 秒
+  'misaki-wakayamako-up': {
+    local: { 1: ['arr', 300], 2: ['dep', 505], 3: ['dep', 805], 4: ['dep', 925], 5: ['arr', 1200] },
+    express: { 1: ['dep', 420], 3: ['dep', 780], 5: ['arr', 1175] },
+    southern: { 1: ['dep', 420], 3: ['dep', 780], 5: ['arr', 1175] },
+  },
+};
+function floorsOf(route: Route, id: ServiceId): Floor | undefined {
+  const f = REAL_FLOORS[route.id];
+  if (!f || (id !== 'local' && id !== 'express' && id !== 'southern')) return undefined;
+  const svc = route.services?.find(v => v.id === id);
+  // 普通が尾崎で優等列車を待つ時間帯（待ちありの実際の時刻に合わせる）
+  if (id === 'local' && f.localWait && svc?.waits?.some(w => route.stations[w.station].name === '尾崎')) return f.localWait;
+  return f[id];
+}
+
 function table(route: Route): Record<string, string> {
   const res: Record<string, string> = {};
   for (const id of (route.services ?? []).map(v => v.id)) res[id] = tableOf(route, id, true);
@@ -87,13 +133,20 @@ function table(route: Route): Record<string, string> {
 function tableOf(route: Route, id: ServiceId, log = false): string {
   {
     const raw = run(route, id);
+    const floors = floorsOf(route, id);
     // 駅間の走行時間に余裕を足し、停車時間はそのまま
     let prevRaw = 0, prevOut = 0;
     const tt: string[] = [];
     for (const k of Object.keys(raw).map(Number).sort((a, b) => a - b)) {
       const r = raw[k];
-      const arr = k === 0 ? 0 : prevOut + up(r.arr - prevRaw);
-      const dep = r.dep != null ? arr + (r.dep - r.arr) : undefined;
+      let arr = k === 0 ? 0 : prevOut + up(r.arr - prevRaw);
+      let dep = r.dep != null ? arr + (r.dep - r.arr) : undefined;
+      // 実際の時刻表より早い分は後ろへずらす（以降の駅間の走行時間は保つ）
+      const f = floors?.[k];
+      if (f) {
+        if (f[0] === 'arr' && arr < f[1]) { const d = f[1] - arr; arr += d; if (dep != null) dep += d; }
+        else if (f[0] === 'dep' && dep != null && dep < f[1]) { const d = f[1] - dep; dep += d; arr += d; }
+      }
       tt.push(`${k}: { arr: ${arr}${dep != null ? `, dep: ${dep}` : ''} }`);
       prevRaw = r.dep ?? r.arr; prevOut = dep ?? arr;
       if (log) console.log(route.id, id, k, route.stations[k].name, r.arr.toFixed(1), '→', arr, dep ?? '');
@@ -120,27 +173,52 @@ if (kishiwadaThroughExpressOnly) {
   process.exit(0);
 }
 
+/** 泉佐野〜みさき公園の時間帯ごとの普通の時刻表（尾崎の待ち合わせの待ち時間込み）。既存コースの local-timetables.ts には触らない */
+function writeSouthLocal(): void {
+  const lines: string[] = [];
+  for (const route of [izumisanoMisaki, izumisanoMisakiUp]) {
+    const local = route.services?.find(v => v.id === 'local');
+    if (!local?.waitsByTime) continue;
+    const byTod: string[] = [];
+    for (const tod of ['morning', 'noon', 'evening', 'night'] as const) {
+      route.timeOfDay = tod;
+      local.timetableByTime = undefined; // 生成中は基準の時刻表から
+      byTod.push(`${tod}: ${tableOf(route, 'local')}`);
+    }
+    route.timeOfDay = undefined;
+    lines.push(`  '${route.id}': {\n    ${byTod.join(',\n    ')},\n  },`);
+  }
+  writeFileSync('src/route/routes/south-local-timetables.ts', `// 泉佐野以南の2コースの、時間帯ごとの普通の時刻表（尾崎の緩急接続の待ち時間込み。scripts/timetable.ts --south-only が生成。手で直さない）
+import type { ServiceSpec, TimeOfDay } from '../types';
+
+export const SOUTH_LOCAL_TT: Record<string, Partial<Record<TimeOfDay, ServiceSpec['timetable']>>> = {
+${lines.join('\n')}
+};
+`);
+}
+
 // --south-only は泉佐野以南のコースだけ更新
 if (process.argv.includes('--south-only')) {
   const dn = table(izumisanoMisaki), up = table(izumisanoMisakiUp);
-  const body = (r: Record<string, string>) => `{ local: ${r.local}, southern: ${r.southern} }`;
+  const body = (r: Record<string, string>) => `{ local: ${r.local}, express: ${r.express}, southern: ${r.southern} }`;
   writeFileSync('src/route/routes/izumisano-misaki-timetable.ts', `// 南海本線 泉佐野〜みさき公園の時刻表（scripts/timetable.ts が生成。手で直さない）
 import type { ServiceSpec } from '../types';
 
-type Id = 'local' | 'southern';
+type Id = 'local' | 'express' | 'southern';
 export const SM: Record<Id, ServiceSpec['timetable']> = ${body(dn)};
 export const SM_UP: Record<Id, ServiceSpec['timetable']> = ${body(up)};
 `);
+  writeSouthLocal();
   process.exit(0);
 }
 /** 南海本線 みさき公園〜和歌山港（普通・特急サザン）。ほかのコースの時刻表には触らない */
 function writeMisakiWakayamako(): void {
   const dn = table(misakiWakayamako), up = table(misakiWakayamakoUp);
-  const body = (r: Record<string, string>) => `{ local: ${r.local}, southern: ${r.southern} }`;
+  const body = (r: Record<string, string>) => `{ local: ${r.local}, express: ${r.express}, southern: ${r.southern} }`;
   writeFileSync('src/route/routes/misaki-wakayamako-timetable.ts', `// 南海本線 みさき公園〜和歌山港の時刻表（scripts/timetable.ts が生成。手で直さない）
 import type { ServiceSpec } from '../types';
 
-type Id = 'local' | 'southern';
+type Id = 'local' | 'express' | 'southern';
 /** 下り（みさき公園 → 和歌山港） */
 export const MWT: Record<Id, ServiceSpec['timetable']> = ${body(dn)};
 /** 上り（和歌山港 → みさき公園） */

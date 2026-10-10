@@ -9,6 +9,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 const CUT = 17720, TAIL = 100;
 type Seg = { type: 'straight'; length: number } | { type: 'arc'; radius: number; angle: number; turn: 'L' | 'R' };
 interface South {
+  relief: { step: number; lats: number[]; rows: number[][] };
   segments: Seg[];
   gradients: { from: number; to: number; permil: number }[];
   structures: { kind: 'bridge' | 'tunnel'; from: number; to: number }[];
@@ -38,6 +39,9 @@ const structures = data.structures.filter(x => x.to > CUT && x.to - x.from > 40)
 const dropped = data.structures.filter(x => x.to > CUT && x.to - x.from <= 40);
 const stations = data.stations.filter(x => x.s >= 17900).map(x => ({ name: x.name, s: x.s - 17900 }));
 
+// 周囲の山（south.json の relief）: 営業キロ CUT 以降の行を使い、s0 は最初の行の s（-CUT）
+const k0 = Math.ceil(CUT / data.relief.step);
+const relief = { s0: k0 * data.relief.step - CUT, step: data.relief.step, lats: data.relief.lats, rows: data.relief.rows.slice(k0) };
 const lit = (x: unknown) => JSON.stringify(x).replace(/"([a-z]+)":/g, '$1: ').replace(/"([^"]+)":/g, '\'$1\': ').replace(/"/g, "'").replace(/,/g, ', ').replace(/\{/g, '{ ').replace(/\}/g, ' }');
 const lines = (xs: unknown[]) => xs.map(x => `  ${lit(x)},`).join('\n');
 writeFileSync('src/route/routes/misaki-wakayamako-geometry.ts', `// みさき公園〜和歌山港の線形・勾配・構造物（scripts/slice-south-geometry.ts が src/data/geometry/south.json から生成。手で直さない）
@@ -59,6 +63,9 @@ ${lines(gradients)}
 export const MW_STRUCTURES: { kind: 'bridge' | 'tunnel'; from: number; to: number }[] = [
 ${lines(structures)}
 ];
+
+/** 周囲の山（国土地理院の標高。線路の地面からの高さ [m]。線路から ±350m 以内は 0）。Route.relief */
+export const MW_RELIEF: { s0: number; step: number; lats: number[]; rows: number[][] } = ${JSON.stringify(relief)};
 
 /** みさき公園を 0 とした各駅の営業キロ [m]（south.json の駅の s - 17900） */
 export const MW_DISTANCES: Record<string, number> = ${lit(Object.fromEntries(stations.map(x => [x.name, x.s])))};

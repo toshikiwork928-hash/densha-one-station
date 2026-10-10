@@ -85,6 +85,8 @@ async function build(ctx: GameContext): Promise<void> {
   }
   // みさき公園〜和歌山港の和歌山市駅（電車を除く）
   (await import('../src/world/wakayamashi')).buildWakayamashi(ctx);
+  // みさき公園〜和歌山港の和歌山大学前駅の周辺（橋上駅舎・駅ビル・デッキ・イオンモール・西口・マンション・斜面）
+  (await import('../src/world/wakayamadaigakumae')).buildWakayamadaigakumae(ctx);
   // 泉佐野〜みさき公園の専用景観（空港線の高架・JR の橋・羽倉崎検車区。電車を除く）
   const sctx = (await import('../src/world/down-frame')).downFrame(ctx, 'izumisano-misaki');
   if (sctx) {
@@ -103,8 +105,8 @@ const cases: [Route, ServiceId[]][] = [[shiokaze, ['local', 'express', 'airport'
   [izumisano, ['local', 'express', 'airport', 'southern', 'limited']], [izumisanoUp, ['local', 'express', 'airport', 'southern', 'limited']],
   [throughUp, ['local', 'airport', 'southern']], [through, ['local', 'airport', 'southern']],
   [namba, ['local', 'express', 'southern', 'limited']], [nambaUp, ['local', 'express', 'southern', 'limited']],
-  [izumisanoMisaki, ['local', 'southern']], [izumisanoMisakiUp, ['local', 'southern']],
-  [misakiWakayamako, ['local', 'southern']], [misakiWakayamakoUp, ['local', 'southern']]];
+  [izumisanoMisaki, ['local', 'express', 'southern']], [izumisanoMisakiUp, ['local', 'express', 'southern']],
+  [misakiWakayamako, ['local', 'express', 'southern']], [misakiWakayamakoUp, ['local', 'express', 'southern']]];
 let total = 0;
 let checked = 0;
 for (const [src, services] of cases) {

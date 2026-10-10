@@ -19,8 +19,10 @@ const { coastalThirdTracks } = await import('../src/world/coastal-stations');
 
 type Tod = keyof typeof START_CLOCK;
 const TODS: Tod[] = ['morning', 'noon', 'evening', 'night'];
-const routeIds = ['shiokaze', 'shiokaze-up', 'kishiwada', 'kishiwada-up', 'izumisano', 'izumisano-up', 'nankai-through', 'nankai-through-up', 'namba', 'namba-up'];
-const only = ((globalThis as any).process?.argv as string[] | undefined)?.find(x => x.startsWith('--only='))?.slice('--only='.length);
+const routeIds = ['shiokaze', 'shiokaze-up', 'kishiwada', 'kishiwada-up', 'izumisano', 'izumisano-up', 'nankai-through', 'nankai-through-up', 'namba', 'namba-up',
+  // 泉佐野以南（実ダイヤの対向列車。みさき公園〜和歌山港は和歌山港線内の対向列車を出さない）
+  'izumisano-misaki', 'izumisano-misaki-up', 'misaki-wakayamako', 'misaki-wakayamako-up'];
+const only = (((globalThis as any).process?.argv as string[] | undefined)?.find(x => x.startsWith("--only="))?.slice("--only=".length) ?? "").split(",").filter(Boolean);
 let checks = 0;
 let minatoNoonExpressFollowFrames = 0;
 const minatoNoonSamples: string[] = [];
@@ -60,7 +62,7 @@ function sameLaneAt(traffic: ReturnType<typeof createCounterTraffic>, a: Counter
 
 /** 車体が離れていても、近接する前後端が同じ線路にいる場合は閉そく間隔を検査する。 */
 function sharesLane(traffic: ReturnType<typeof createCounterTraffic>, rear: CounterTrain, front: CounterTrain): boolean {
-  return sameLaneAt(traffic, rear, front)
+  return traffic.sameTrack(rear, front) || sameLaneAt(traffic, rear, front)
     || Math.abs(traffic.laneAt(rear, rear.head) - traffic.laneAt(front, front.head + front.length)) < 3.4;
 }
 
@@ -155,7 +157,7 @@ function assertSafety(routeId: string, tod: Tod): void {
 }
 
 for (const routeId of routeIds) for (const tod of TODS) {
-  if (only && only !== `${routeId}/${tod}`) continue;
+  if (only.length && !only.includes(`${routeId}/${tod}`) && !only.includes(routeId)) continue;
   const timetable = counterTimetable(routeId, tod);
   verify(timetable != null && timetable.length > 0, `${routeId}/${tod}: 時刻表がない`);
   assertSafety(routeId, tod);
@@ -199,4 +201,4 @@ for (const mountainId of ['mountain', 'mountain-up']) {
 // 旧架空コースは従来の 1 編成だけで、共通ダイヤを使わない。
 verify(sakuragaoka.oncoming.length === 1, '桜ヶ丘: 旧対向列車が1編成でない');
 verify(counterTimetable(sakuragaoka.id, 'noon') == null, '桜ヶ丘: 共通時刻表を誤適用');
-console.log(`対向列車検証: ${checks} 件成功（10方向×4時間帯、0.1秒刻み、昼の湊停車普通直後の急行 ${minatoNoonExpressFollowFrames} フレーム）`);
+console.log(`対向列車検証: ${checks} 件成功（${routeIds.length}方向×4時間帯、0.1秒刻み、昼の湊停車普通直後の急行 ${minatoNoonExpressFollowFrames} フレーム）`);

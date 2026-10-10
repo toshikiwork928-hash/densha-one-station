@@ -176,6 +176,7 @@ function buildUrbanBackdrop(ctx: GameContext, from: number, to: number, at: (s: 
       const d = dMin + rnd() * (1500 - dMin), p = at(s + rnd() * 20, side * d, 0), t = ctx.track.trackAt(s);
       const hh = 18 + rnd() * rnd() * (d < 700 ? 90 : 140), w = 18 + rnd() * 30, dep = 18 + rnd() * 30;
       c.copy(near).lerp(far, Math.min(1, (d - 250) / 1250)).multiplyScalar(.9 + rnd() * .15);
+      if (T.reliefY(s, side * d) > 1.5) continue; // 周囲の山（route.relief）の中に埋まる遠景ビルは置かない
       city.at(s).add('body', P.boxB, M(p.x, 0, p.z, -t.phi + (rnd() - .5) * .3, w, hh, dep), c.getHex());
     }
   }
@@ -237,7 +238,7 @@ export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot
     if (thirds.some(t => s > t.from - radius && s < t.to + radius && Math.abs(lat - t.lat(s)) < radius + 2.1)) return;
     if (tramBlocks(route, s - radius, s + radius, lat - radius, lat + radius)) return; // 阪堺線の跨線橋・高師浜線の高架支線の通り道
     const t = trackAt(s);
-    items.push({ model, pl: { p: new THREE.Vector3(t.x + t.rx * lat, y ?? T.groundY(s), t.z + t.rz * lat), yaw: -t.phi + yaw, k } });
+    items.push({ model, pl: { p: new THREE.Vector3(t.x + t.rx * lat, y ?? T.groundY(s) + T.reliefY(s, lat), t.z + t.rz * lat), yaw: -t.phi + yaw, k } });
   };
   const pick = <T>(arr: T[]): T => arr[Math.floor(rnd() * arr.length)];
   const facing = (side: number) => (side < 0 ? Math.PI / 2 : -Math.PI / 2) + (rnd() < .3 ? Math.PI : 0);

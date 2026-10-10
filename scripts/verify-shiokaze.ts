@@ -91,9 +91,9 @@ if (process.argv.includes('--selection-only')) process.exit(0);
     const down = route === misakiWakayamako, n = route.stations.length, last = n - 1, tag = route.id;
     assert.deepEqual(route.stations.map(s => s.name), down ? names : [...names].reverse(), `${tag}の駅`);
     assert.equal(Math.abs(route.stations[last].stopS - route.stations[0].stopS), 15100, `${tag}みさき公園〜和歌山港 15.1km`);
-    assert.equal(route.oncoming.length, 0, `${tag}は対向列車を置かない`);
+    assert.equal(route.oncoming.length, 0, `${tag}の route.oncoming は空（対向列車は oncoming-timetable.json の共通運行）`);
     assert.equal(route.crossings?.length, 0, `${tag}は踏切を置かない`);
-    assert.deepEqual(selectableServices(route).map(v => v.id), ['local', 'southern'], `${tag}のTOP種別は普通とサザン`);
+    assert.deepEqual(selectableServices(route).map(v => v.id), ['local', 'express', 'southern'], `${tag}のTOP種別は普通・急行・サザン`);
     const track = buildTrack(route);
     assert.ok(Math.abs(track.length - 15378.192) < .01, `${tag}の線形の総延長 ${track.length}`);
     // ホームは直線・水平（みさき公園は待避線の分岐器を含む区間も本線が直線）
@@ -547,7 +547,8 @@ for (const [route, parts] of [[throughUp, [shiokazeUp, kishiwada]], [through, [k
   assert.ok(!approachText(r, 5, sv).includes('待'), '昼の浜寺公園は待避なし');
   assert.ok(!approachText(r, 1, sv).includes('待'), '待避しない駅は案内なし');
 }
-for (const source of [kishiwada, kishiwadaUp, izumisano, izumisanoUp, throughUp, through, misakiWakayamako, misakiWakayamakoUp]) {
+const routeOnly = process.argv.find(a => a.startsWith('--route-only='))?.slice('--route-only='.length);
+for (const source of [kishiwada, kishiwadaUp, izumisano, izumisanoUp, throughUp, through, misakiWakayamako, misakiWakayamakoUp].filter(r => !routeOnly || r.id === routeOnly)) {
   for (const service of selectableServices(source).map(v => v.id)) {
     const ctx = context(source, service), game = createGame(ctx);
     const finalSta = ctx.route.stations.at(-1)!, finalZone = loopZone(finalSta) ?? { inFrom: finalSta.platform.from - 160, outTo: finalSta.platform.to + 130 };
@@ -587,6 +588,7 @@ for (const source of [kishiwada, kishiwadaUp, izumisano, izumisanoUp, throughUp,
   }
 }
 console.log('泉大津〜岸和田・堺〜岸和田・みさき公園〜和歌山港（上下）の完走・サザンの放送チェック成功');
+if (routeOnly) process.exit(0);
 
 // 南海本線 堺〜難波（上りのみ・頭端式の難波）: 駅・線形・番線、5種別の完走
 {

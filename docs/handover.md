@@ -98,12 +98,14 @@ scripts/           検証・データ生成（Node で esbuild して実行）
 - 普通は待避線のある駅で、待避・待ち合わせがある時だけ待避線に入る。ただし待避線の外側にしかホームがない駅（浜寺公園の堺方面）は常に待避線
 - 自列車を抜く列車（`game/overtake.ts` + `world/overtaking.ts`）、複々線の走行中の追い越し（`world/run-pass.ts`、描画だけ）、先行列車（`game/preceding.ts`）
 - **対向列車**（`world/oncoming.ts`）
-  - 南海本線の全10方向・全4時間帯は `src/data/oncoming-timetable.json` と `world/oncoming-timetable.ts` の共通処理。列車番号、種別、停車駅、0時からの発車秒を保持し、`route.startClock + state.t` で運行する。プレイヤーの位置・種別で対向列車の発車や本数を変えない。描画範囲外の列車も運行し、近い車両モデルだけ再利用して表示する。
+  - 南海本線の全14方向（泉佐野以南の4方向を含む）・全4時間帯は `src/data/oncoming-timetable.json` と `world/oncoming-timetable.ts` の共通処理。列車番号、種別、停車駅、0時からの発車秒を保持し、`route.startClock + state.t` で運行する。プレイヤーの位置・種別で対向列車の発車や本数を変えない。描画範囲外の列車も運行し、近い車両モデルだけ再利用して表示する。
   - 生成: `npm run oncoming:meets -- --timetable`。鉄道運用Hub（https://unyohub.2pd.jp/railroad_nankai/）の平日時刻表（2024-12-21改正）を利用。原時刻表は `node_modules/.cache/unyohub` のみ。各開始時刻の10分前から、その時間帯の最長コース所要時間＋10分までに区間を横切る列車を収録する。ダイヤ改正・駅位置変更時は再生成する。旧 `oncoming-meets.json` は比較用に残す。
   - 原データは分単位の発車時刻で、到着時刻・実信号位置は含まない。同区間・同種別の短い所要時間と加減速から到着時刻を推定し、余分な時間は駅での待避へ割り当てる。加減速・戸扱いが収まらない場合は早発せず遅らせる。秒単位の実運行を再現するものではない。
   - 普通は待避線・複々線の緩行線を使用。堺の上り普通は3番線、下り普通は1番線。空港急行は泉佐野の外側線（下りは外側下り線、上りは外側上り線）。ゲーム用の進路占有を調べ、同じ線の先行列車の最後尾から300m以上を確保し、停車ホームが空くまで後続を駅手前に保持する。実閉そくの位置ではない。
   - 浜寺公園は上下で副線の距離が異なる。堺→泉大津・岸和田の対向普通は堺方面副線（本線から4m、横位置8m）を使用し、泉大津方面の副線9.2mを流用しない。泉大津終着の同方向待機普通は、堺構内用の進路に終着駅の待避線移動を加えて1番線（横位置−9.2m）へ置く。
   - 単線の高野線は `game/meet.ts` の交換駅・出発信号・構内進入完了までの占有を維持する。桜ヶ丘は従来の1編成。両者も `verify:oncoming` の検証対象。
+  - 泉佐野以南の4コース（`izumisano-misaki` と上り、`misaki-wakayamako` と上り）も同じ `oncoming-timetable.json` を使う。更新手順: (1) `node_modules/.cache/unyohub` に Hub の原データがあるか確認（無ければ `npm run oncoming:meets -- --timetable --refresh` で取得。間隔・User-Agent は既存の仕組み） (2) `npm run timetable -- --south-only` と `-- --misaki-wakayamako-only` で自列車の時刻表を作る（コースの最長所要時間が対向列車の収録範囲を決めるので、先に流す） (3) `npm run oncoming:meets -- --timetable` (4) `npm run verify:oncoming`。4コースの駅の距離はコースの営業キロ（スクリプトの KMS）で、既存コースの距離（KM）とは別。和歌山港線内の対向列車は出さない（上下の線を重ねて描く区間のため）。詳細は spec-south-courses.md の14・15章、調査は south-timetable-research.md。
+  - 泉佐野以南の自列車のダイヤ: 実際の所要時間の下限は `scripts/timetable.ts` の `REAL_FLOORS`（Hub の平日時刻表の中央値）。尾崎の待ち合わせは `izumisano-misaki.ts` の `OZAKI_WAITS_*`、時間帯ごとの普通の時刻表は `south-local-timetables.ts`（生成）。
   - 開発用: `window.__oncomingDebug()` で列車番号・種別・横位置・停車駅・安全上の遅れ秒を確認できる。一時停止中は時計を進めず、再開始では運行と車両表示を初期化する。
 - 高野線のモブ（なんば付近を走る電車）: `world/koya-traffic.ts`。同じ向きは 80 秒以上・出現位置の前方 500m を空ける。開発用 `window.__koyaDebug()`
 - なんばの留置: `world/namba-parked.ts`（車止め側の端を自列車の停止位置 `NAMBA_STOP` にそろえる。高野線1番線は除く）

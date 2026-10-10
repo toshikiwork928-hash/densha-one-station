@@ -413,7 +413,9 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
 
   const timed = createTimetableOncoming(ctx, (code, k, towardNamba) => {
     const { id, ...spec } = realConsist(code, k, towardNamba);
-    return { ...spec, cars: spec.cars!, kind: spec.kind!, dest: towardNamba ? WAKAYAMA_DEST[id][0] : 'なんば' };
+    // 泉佐野以南のコースでは、和歌山方面の普通は実際のダイヤどおり和歌山市行き（既存コースの羽倉崎行きは変えない）
+    const south = route.id.startsWith('izumisano-misaki') || route.id.startsWith('misaki-wakayamako');
+    return { ...spec, cars: spec.cars!, kind: spec.kind!, dest: towardNamba ? (south && id === 'local' ? '和歌山市' : WAKAYAMA_DEST[id][0]) : 'なんば' };
   });
   // 停車シーンの間引き: プレイ開始後の最初のフレームで決める（種別・時間帯が確定してから。同じプレイ中は変わらない）
   let planned = false;
