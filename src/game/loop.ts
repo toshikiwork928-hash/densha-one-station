@@ -285,7 +285,9 @@ export function createGame(ctx: GameContext): Game {
     if (serviceDelta && svcs.length) {
       const k = Math.max(0, svcs.findIndex(x => x.id === service));
       service = svcs[(k + serviceDelta + svcs.length) % svcs.length].id;
-      if (stageId !== 'all') stageId = ''; // 種別が変わると停車駅間が変わるので先頭区間へ（全線通しは維持）
+      // 種別が変わると停車駅間が変わるので先頭区間へ（全線通しと、新しい種別でも選べる終点指定の区間は維持）
+      const keep = route.partialGoals?.some(g => !g.asAll && `${g.from}-${g.to}` === stageId && g.services.includes(service));
+      if (stageId !== 'all' && !keep) stageId = '';
     }
     st.sel = { stageId, mode: MODES[(mi + modeDelta + MODES.length) % MODES.length], service, vehicles: st.sel.vehicles, routeId: st.sel.routeId };
     saveSelection(st.sel);

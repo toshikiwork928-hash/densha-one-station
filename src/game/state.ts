@@ -15,7 +15,7 @@ export type GameMode = 'normal' | 'recovery' | 'timeOnly';
 export const MODE_LABEL: Record<GameMode, string> = { normal: '通常', recovery: '遅延回復', timeOnly: '定時運転' };
 
 /** ステージ = 停車駅間（全線通しは from = 始発, to = 終着） */
-export interface Stage { id: string; from: number; to: number; label: string }
+export interface Stage { id: string; from: number; to: number; label: string; /** 全線通しと同じく長い区間（遅延回復の開始遅れを大きくする） */ long?: boolean }
 
 /** 種別ごとに選んだ車種・両数 */
 /** units = 連結するユニット（両数）。cars は旧形式の保存データ（両数のみ）の読み込み用 */
@@ -135,7 +135,14 @@ export function stagesOf(route: Route): Stage[] {
     list.push({ id: `${a}-${b}`, from: a, to: b, label: `${st[a].name} → ${st[b].name}` });
   }
   if (list.length > 1) {
-    const a = idx[0], b = idx[idx.length - 1];
+    let a = idx[0], b = idx[idx.length - 1];
+    const goals = (route.partialGoals ?? []).filter(g => g.services.includes(route.activeServiceId as ServiceId) && idx.includes(g.from) && idx.includes(g.to) && g.from < g.to);
+    const whole = goals.find(g => g.asAll);
+    if (whole) { a = whole.from; b = whole.to; }
+    for (const g of goals) {
+      if (!g.asAll && !(g.from === a && g.to === b))
+        list.push({ id: `${g.from}-${g.to}`, from: g.from, to: g.to, label: `${st[g.from].name} → ${st[g.to].name}`, long: true });
+    }
     list.push({ id: 'all', from: a, to: b, label: '全線通し' });
   }
   return list;
@@ -154,7 +161,7 @@ export const departureTime = (route: Route, index: number): number => {
 
 /** 遅延回復モードの開始遅れ [s] */
 export const lateStartFor = (stage: Stage, mode: GameMode): number =>
-  mode !== 'recovery' ? 0 : stage.id === 'all' ? 45 : 20;
+  mode !== 'recovery' ? 0 : stage.id === 'all' || stage.long ? 45 : 20;
 
 export function createState(route: Route, sel?: Selection): GameState {
   const st = {} as GameState;

@@ -110,6 +110,11 @@ export const misakiWakayamako: Route = {
   viaductHeight: 6,
   // 終点・和歌山港は低速進入の ATS を有効にする（頭端式の終着駅。上りは終着が途中駅なので下で無効にする）
   terminalApproach: true,
+  // 普通の通しは和歌山市まで（和歌山市〜和歌山港は区間だけ選べる）。急行・サザンは通し（和歌山港まで）のほかに和歌山市を終点にする区間も選べる。上りへは引き継がない
+  partialGoals: [
+    { from: 0, to: stations.findIndex(s => s.name === '和歌山市'), services: ['local'], asAll: true },
+    { from: 0, to: stations.findIndex(s => s.name === '和歌山市'), services: ['express', 'southern'] },
+  ],
 };
 for (const v of misakiWakayamako.services!) { v.destination = '和歌山港'; v.destinationKana = 'わかやまこう'; }
 // みさき公園（始発）: 盛土上の島式2面5線（custom 駅）。下りは普通が1番線(T1)、サザンが2番線(T2)から発車する。多奈川線(5番線・T5)と分岐も描く。定義は misaki-park.ts（泉佐野〜みさき公園と共通）
@@ -123,6 +128,14 @@ export const misakiWakayamakoUp: Route = reverseRoute(misakiWakayamako, {
   id: 'misaki-wakayamako-up', name: '南海本線 和歌山港 → みさき公園', timetable: MWT_UP, signs: approachSigns,
 });
 misakiWakayamakoUp.terminalApproach = false; // みさき公園は終着だが頭端式でない（終着 ATS は無効）
+// 和歌山市発: 普通の通しは和歌山市始発（和歌山港〜和歌山市は区間だけ選べる）。急行・サザンは通し（和歌山港始発）のほかに和歌山市始発の区間も選べる
+{
+  const wk = misakiWakayamakoUp.stations.findIndex(s => s.name === '和歌山市'), last = misakiWakayamakoUp.stations.length - 1;
+  misakiWakayamakoUp.partialGoals = [
+    { from: wk, to: last, services: ['local'], asAll: true },
+    { from: wk, to: last, services: ['express', 'southern'] },
+  ];
+}
 for (const v of misakiWakayamakoUp.services!) {
   // 和歌山港は上りの始発。島式の線のうち、ゲームの自線（進行方向の左）は物理的に下りの反対側の1番線
   v.trackNames = { 0: '1番線' };

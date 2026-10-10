@@ -123,6 +123,7 @@ export function reverseRoute(down: Route, opt: {
   const startS = stations[0].stopS;
   return {
     ...down,
+    partialGoals: undefined, // 駅 index が下りのもの。上りへは引き継がない
     id: opt.id,
     name: opt.name,
     startS,

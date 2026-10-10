@@ -134,6 +134,9 @@ function tableOf(route: Route, id: ServiceId, log = false): string {
   {
     const raw = run(route, id);
     const floors = floorsOf(route, id);
+    // 実ダイヤに合わせて後ろへずらす量は、1駅につき最大 CAP 秒まで。ゲームの列車は実際より速く走れるので、実際の所要時間のままにすると、
+    // 速く運転した人が途中駅で定時発車まで長く待たされる（夕方の急行の尾崎で約80秒）。尾崎で優等列車を待つ普通（localWait）の待ちは実際どおり
+    const CAP = floors && floors === REAL_FLOORS[route.id]?.localWait ? Infinity : 15;
     // 駅間の走行時間に余裕を足し、停車時間はそのまま
     let prevRaw = 0, prevOut = 0;
     const tt: string[] = [];
@@ -144,8 +147,8 @@ function tableOf(route: Route, id: ServiceId, log = false): string {
       // 実際の時刻表より早い分は後ろへずらす（以降の駅間の走行時間は保つ）
       const f = floors?.[k];
       if (f) {
-        if (f[0] === 'arr' && arr < f[1]) { const d = f[1] - arr; arr += d; if (dep != null) dep += d; }
-        else if (f[0] === 'dep' && dep != null && dep < f[1]) { const d = f[1] - dep; dep += d; arr += d; }
+        if (f[0] === 'arr' && arr < f[1]) { const d = Math.min(CAP, f[1] - arr); arr += d; if (dep != null) dep += d; }
+        else if (f[0] === 'dep' && dep != null && dep < f[1]) { const d = Math.min(CAP, f[1] - dep); dep += d; arr += d; }
       }
       tt.push(`${k}: { arr: ${arr}${dep != null ? `, dep: ${dep}` : ''} }`);
       prevRaw = r.dep ?? r.arr; prevOut = dep ?? arr;

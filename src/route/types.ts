@@ -304,6 +304,12 @@ export interface Route {
   timeOfDay?: TimeOfDay;
   /** 種別適用後: 自列車の走行線（ServiceSpec.lane。route/service.ts が設定） */
   activeLane?: LatProfile;
+  /** 種別適用後: いま選んでいる種別（route/service.ts が設定。種別ごとに区間の一覧を変えるのに使う） */
+  activeServiceId?: ServiceId;
+  /** 全線通しとは別の始発・終着の区間（例: 急行・サザンの和歌山市行き）。from・to は駅 index。
+   *  指定した種別でどちらも停車駅のときだけ有効。asAll なら全線通しの区間そのものをこの区間にし、無ければ全線通しの前に区間として加わる。
+   *  上りの路線へは引き継がない（上りの路線データで指定する） */
+  partialGoals?: { from: number; to: number; services: ServiceId[]; asAll?: boolean }[];
   /** false のとき、coastalLandmarks があっても遠景を沿岸（海・工業地帯）にしない。内陸のコースが鋼橋などの目印だけを使うとき */
   coastalScenery?: false;
   /** 鋼橋の塗色と形（throughGirder = 下路プレートガーダー: 線路の両脇に桁の側板が立つ。トラス区間 steel-bridge は除く） */

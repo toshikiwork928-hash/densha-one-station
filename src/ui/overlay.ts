@@ -236,7 +236,15 @@ export function attachOverlay(ctx: GameContext): void {
     if (!v) return stagesOf(route);
     const idx = v.stops, list = [];
     for (let k = 0; k < idx.length - 1; k++) list.push({ id: `${idx[k]}-${idx[k + 1]}`, label: `${route.stations[idx[k]].name} → ${route.stations[idx[k + 1]].name}` });
-    if (idx.length > 2) list.push({ id: 'all', label: '全線通し' });
+    if (idx.length > 2) {
+      const goals = (route.partialGoals ?? []).filter(g => g.services.includes(v.id) && idx.includes(g.from) && idx.includes(g.to) && g.from < g.to);
+      const whole = goals.find(g => g.asAll), a = whole?.from ?? idx[0], b = whole?.to ?? idx[idx.length - 1];
+      for (const g of goals) {
+        if (!g.asAll && !(g.from === a && g.to === b))
+          list.push({ id: `${g.from}-${g.to}`, label: `${route.stations[g.from].name} → ${route.stations[g.to].name}` });
+      }
+      list.push({ id: 'all', label: '全線通し' });
+    }
     return list;
   }
 

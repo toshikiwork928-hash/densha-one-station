@@ -307,6 +307,7 @@ export function applyService(route: Route, id: ServiceId | undefined): ServiceSp
   const carLen = carLenOf(svc.kind), len = svc.cars * carLen, off = stopOffset(svc.cars, carLen, route.stopBaseCars ?? BASE_CARS);
   route.trainLength = len;
   route.activeLane = svc.lane;
+  route.activeServiceId = svc.id;
   route.lineLimit = svc.lineLimit ?? b.lineLimit; // 種別ごとの最高速度（曲線・分岐器の制限は共通）
   route.startS = b.startS - off;
   route.stations.forEach((sta, i) => {

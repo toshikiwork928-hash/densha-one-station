@@ -398,7 +398,8 @@ for (const source of [shiokaze, shiokazeUp, mountain, mountainUp]) {
     assert.equal(ctx.state.state, 'result', `${source.id}/${service}完走`);
     assert.equal(ctx.state.penalties.atsBrake, 0, `${source.id}/${service}正常運転でATS非常制動なし`);
     assert.equal(result.overspeed, 0, `${source.id}/${service}全区間（終着ATS速度曲線含む）で速度超過減点なし`);
-    assert.ok(Math.abs(ctx.state.train.s - ctx.route.stations.at(-1)!.stopS) < 15, `${source.id}/${service}終着停止`);
+    // 終着は選んだ区間の終点（普通の全線通しが和歌山市までのコースがある）
+    assert.ok(Math.abs(ctx.state.train.s - ctx.route.stations[ctx.state.endIndex].stopS) < 15, `${source.id}/${service}終着停止`);
     if (source.theme === 'coast') {
       console.log(`  終着入線 ${service}: 入線区間の最高速 ${zoneMax.toFixed(1)}km/h 番線案内=${result.log.some((l: string) => l.includes('入線'))}`);
       const intoLoop = service === 'local', track = finalSta.enterLoop ? finalSta.loopTrack : finalSta.mainTrack;
@@ -575,10 +576,12 @@ for (const source of [kishiwada, kishiwadaUp, izumisano, izumisanoUp, throughUp,
     assert.equal(ctx.state.state, 'result', `${source.id}/${service}完走`);
     assert.equal(ctx.state.penalties.atsBrake, 0, `${source.id}/${service}ATS非常制動なし`);
     assert.equal(result.overspeed, 0, `${source.id}/${service}速度超過なし`);
-    assert.ok(Math.abs(ctx.state.train.s - finalSta.stopS) < 15, `${source.id}/${service}終着停止`);
-    assert.equal(ctx.state.stops.length, ctx.route.services!.find(s => s.id === service)!.stops.length - 1, `${source.id}/${service}停車駅数`);
-    if (service === 'local' && finalSta.loop) assert.ok(zoneMax <= 46, `${source.id}/${service}終着の待避線へ45km/hで入線`);
-    const nst = ctx.route.stations.length, waits = [...new Set(ctx.route.services!.find(v => v.id === 'local')!.waits?.filter(w => w.station > 0 && w.station < nst - 1).map(w => w.station) ?? [])];
+    // 終着・停車駅数は選んだ区間（普通の全線通しが和歌山市までのコースがある）で数える
+    const endSta = ctx.route.stations[ctx.state.endIndex], reachesLast = ctx.state.endIndex === ctx.route.stations.length - 1;
+    assert.ok(Math.abs(ctx.state.train.s - endSta.stopS) < 15, `${source.id}/${service}終着停止`);
+    assert.equal(ctx.state.stops.length, ctx.route.services!.find(s => s.id === service)!.stops.filter(i => i > ctx.state.fromIndex && i <= ctx.state.endIndex).length, `${source.id}/${service}停車駅数`);
+    if (service === 'local' && finalSta.loop && reachesLast) assert.ok(zoneMax <= 46, `${source.id}/${service}終着の待避線へ45km/hで入線`);
+    const waits = [...new Set(ctx.route.services!.find(v => v.id === 'local')!.waits?.filter(w => w.station > 0 && w.station < ctx.state.endIndex).map(w => w.station) ?? [])];
     assert.deepEqual([...observedWaits], service === 'local' ? waits : [], `${source.id}/${service}普通の待避`);
     for (const k of Object.keys(stopT)) {
       const gap = arriveT[+k] - stopT[+k];
