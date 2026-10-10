@@ -115,6 +115,12 @@ const REAL_FLOORS: Record<string, { local?: Floor; localWait?: Floor; express?: 
     southern: { 1: ['dep', 420], 3: ['dep', 780], 5: ['arr', 1175] },
   },
 };
+/** 実際の停車が30秒以内の途中駅。REAL_FLOORS の下限を当てない（実ダイヤの動画で和歌山大学前は着・発とも同じ分の表示。ユーザー指摘 2026-10-10）。
+ *  ゲーム内の停車は時刻表の 25 秒だが、下限でずらすと最速の自動運転が定時より約20秒早く着き、約45秒待つことになっていた */
+const SHORT_STOPS: Record<string, string[]> = {
+  'misaki-wakayamako': ['孝子', '和歌山大学前', '紀ノ川'],
+  'misaki-wakayamako-up': ['孝子', '和歌山大学前', '紀ノ川'],
+};
 function floorsOf(route: Route, id: ServiceId): Floor | undefined {
   const f = REAL_FLOORS[route.id];
   if (!f || (id !== 'local' && id !== 'express' && id !== 'southern')) return undefined;
@@ -144,8 +150,9 @@ function tableOf(route: Route, id: ServiceId, log = false): string {
       const r = raw[k];
       let arr = k === 0 ? 0 : prevOut + up(r.arr - prevRaw);
       let dep = r.dep != null ? arr + (r.dep - r.arr) : undefined;
-      // 実際の時刻表より早い分は後ろへずらす（以降の駅間の走行時間は保つ）
-      const f = floors?.[k];
+      // 実際の時刻表より早い分は後ろへずらす（以降の駅間の走行時間は保つ）。実際の停車が短い途中駅（SHORT_STOPS）はずらさず、
+      // 速く運転した人でも停車を約25秒に近づける（ずらす分は後続の駅の到着側の下限に回る）
+      const f = SHORT_STOPS[route.id]?.includes(route.stations[k].name) ? undefined : floors?.[k];
       if (f) {
         if (f[0] === 'arr' && arr < f[1]) { const d = Math.min(CAP, f[1] - arr); arr += d; if (dep != null) dep += d; }
         else if (f[0] === 'dep' && dep != null && dep < f[1]) { const d = Math.min(CAP, f[1] - dep); dep += d; arr += d; }

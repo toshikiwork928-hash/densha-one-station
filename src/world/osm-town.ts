@@ -752,6 +752,28 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
       nT++;
     }
   }
+  // 山あいの区間（route.noInfill）: OSM に森が無くても、線路際から斜面へ木を植える（実際は線路のすぐ脇まで樹木が迫る）。
+  // 線路に近いほど密に。建物・道路・踏切・保守用の敷地は避ける。木の高さは地形（山・トンネルの上の山を含む）に合わせる
+  {
+    const MTN_MAX = 4400, mrnd = createRng(9091);
+    const offs = [6.5, 11, 17, 26, 42, 70, 105];
+    let nM = 0;
+    for (const z of route.noInfill ?? []) {
+      for (let s = Math.max(z.from, S0); s < Math.min(z.to, S1) && nM < MTN_MAX; s += 14) {
+        for (const side of [-1, 1]) for (const off of offs) {
+          const far = off > 30;
+          if (mrnd() > (off < 20 ? .85 : off < 45 ? .6 : .45)) continue;
+          const ss = s + (mrnd() - .5) * 12, [lo, hi] = span(ss);
+          const ll = (side < 0 ? lo - off : hi + off) + (mrnd() - .5) * (far ? 14 : 4);
+          const cs = clampS(ss);
+          if (occ.has(ck(ss, ll)) || roadNear(ss, ll) || reservedAt(ss, ll) || inSea(ss, ll, 4) || T.riverNear(cs, ll, 4) || T.nearCrossing(ss, 8) || nearLine(ss - 3, ss + 3, ll - 3, ll + 3)) continue;
+          trees.push({ s: ss, lat: ll, y: T.terrainY(cs, ll), k: 1.0 + mrnd() * .6 + (far ? .2 : 0) });
+          nM++;
+        }
+      }
+    }
+    if (import.meta.env?.DEV) console.info(`OSM 景観: 山あいの木 ${nM}/${MTN_MAX}`);
+  }
   // 道路沿いの街路樹（幹線・主要道路、線路から 40m 以上）
   for (const r of data.roads) {
     if ((r[0] as number) > 1) continue;

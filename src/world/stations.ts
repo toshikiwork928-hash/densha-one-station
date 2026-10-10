@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { FONT } from '../core/config';
 import type { GameContext } from '../core/context';
-import type { Station } from '../route/types';
+import type { Station, StationStructure } from '../route/types';
 import { GeoBatch, M, P, onLight } from './batch';
 import { canvasTex } from './canvas-tex';
 import { getTerrain } from './terrain';
@@ -47,7 +47,9 @@ export function nameTex(sta: Station, prevName: string, nextName: string): THREE
 }
 
 /** lat = ホームに面する線路の横位置（2面4線駅は待避線）、side = ホームの側、minimal = 駅舎・駅前広場を作らない（対向側ホーム） */
-export interface StationBuildOpts { /** ホームを s 方向へずらす [m]（踏切を挟んだ対面ホーム） */ shift?: number; lat?: number; side?: 'L' | 'R'; minimal?: boolean; /** 高架駅: 地面までの高さ（負）。駅舎・広場を地面に置き、ホームを高架上に */ elevatedDy?: number }
+export interface StationBuildOpts { /** ホームを s 方向へずらす [m]（踏切を挟んだ対面ホーム） */ shift?: number; lat?: number; side?: 'L' | 'R'; minimal?: boolean; /** 高架駅: 地面までの高さ（負）。駅舎・広場を地面に置き、ホームを高架上に */ elevatedDy?: number;
+  /** 駅舎のホーム上の位置・外観・連絡の種類（未指定は sta.structure。構成のわからない駅は標準の駅舎を中央に置く） */
+  end?: StationStructure['end']; link?: StationStructure['link']; style?: StationStructure['style'] }
 
 export function buildStation(ctx: GameContext, sta: Station, prevName: string, nextName: string, opt: StationBuildOpts = {}): THREE.Group {
   const { rng: rnd, track } = ctx;
@@ -125,30 +127,50 @@ export function buildStation(ctx: GameContext, sta: Station, prevName: string, n
     box(-5.2, -gy / 2 + .6, len * .2, 2.6, -gy + 1.2, 7, 0xd8d4ca);
     box(-5.2, 1.1 + 2.6, len * .2, 2.8, .2, 7.4, 0x6b7680);
   }
+  // 駅舎の位置: 局所 +z = s の減る向き（なんば寄り）。構成（structure）が無ければ中央。ends = 両端に小さな駅舎を1棟ずつ
+  const stc = sta.structure, endPos = opt.end ?? stc?.end ?? 'center', wood = (opt.style ?? stc?.style) === 'wood-western';
+  const link = opt.link ?? stc?.link;
+  const bwU = endPos === 'ends' ? 14 : wood ? 20 : bw;
+  const bzs = endPos === 'ends' ? [len / 2 - bwU / 2 - 4, -(len / 2 - bwU / 2 - 4)] : [endPos === 'namba' ? len / 2 - bwU / 2 - 8 : endPos === 'wakayama' ? -(len / 2 - bwU / 2 - 8) : 0];
+  // 階段口（跨線橋・地下道への降り口）の位置: 駅舎の反対側の少し内側。構成が無い駅は従来どおり対向側ホームだけ（len の 18%）
+  const linkZ = endPos === 'namba' ? bzs[0] - bwU / 2 - 14 : endPos === 'wakayama' ? bzs[0] + bwU / 2 + 14 : endPos === 'ends' ? 0 : len * .18;
+  const drawStairs = (!stc && opt.minimal) || (!!stc && link === 'underpass');
   if (!opt.minimal) {
-  b.add('body', P.plane, M(X(-21), .04, 0, 0, 28, len * .9, 1, -Math.PI / 2), 0x6a6c70); // 広場の舗装
+  const pz = bzs.reduce((q, w) => q + w, 0) / bzs.length;
+  b.add('body', P.plane, M(X(-21), .04, pz, 0, 28, len * .9, 1, -Math.PI / 2), 0x6a6c70); // 広場の舗装
   for (let z = -len * .3; z < len * .3; z += 3) box(-28, .06, z, 4.5, .02, .1, 0xeeeeee); // 駐車枠
-  b.add('body', P.boxB, M(X(bx), 0, 0, 0, bd, 7.5, bw), 0xe8e4da);
-  box(bx, 7.75, 0, bd + .6, .5, bw + .6, 0x6b7680);
-  box(bx - bd / 2 - .02, 2.0, 0, .04, 3.2, 8, 0x2b343d); // 出入口ガラス
-  box(bx - bd / 2 - 1.2, 3.8, 0, 2.4, .15, 10, 0x8a9096); // 庇
-  for (let z = -bw / 2 + 2; z < bw / 2 - 1; z += 3.2) if (Math.abs(z) > 5) box(bx - bd / 2 - .02, 5.4, z, .04, 1.3, 2, 0x2b343d);
-  // 広場の人・タクシー・バス停
-  for (let k = 0; k < 10; k++) person(b, rnd, X(-(14 + rnd() * 12)), (rnd() - .5) * 40, rnd() * 6);
-  for (const z of [-14, -9]) {
-    b.add('body', P.boxB, M(X(-25), .25, z, 0, 1.7, .7, 4.4), 0xd8c020);
-    b.add('body', P.boxB, M(X(-25), .95, z + .2, 0, 1.5, .55, 2.2), 0xd8c020);
-    box(-25, 1.25, z + .2, 1.52, .4, 2.0, 0x2a333c);
-    box(-25, 1.6, z + .3, .3, .15, .5, 0xf4f4f4);
+  for (const bz of bzs) {
+    if (wood) {
+      // 洋風木造駅舎（淡輪: 1925年竣工。屋根は黒）
+      b.add('body', P.boxB, M(X(bx), 0, bz, 0, bd - 1, 4.6, bwU), 0xe6dcc2);
+      b.add('body', P.gable, M(X(bx), 4.6, bz, 0, bd + 1.2, 2.6, bwU + 1.2), 0x2a2c30);
+      box(bx - (bd - 1) / 2 - .02, 1.7, bz, .04, 2.6, 6, 0x2b343d); // 出入口
+      for (let z = -bwU / 2 + 2.5; z < bwU / 2 - 1; z += 3.4) if (Math.abs(z) > 3.2) box(bx - (bd - 1) / 2 - .02, 2.6, bz + z, .04, 1.3, 1.6, 0x2b343d);
+      continue;
+    }
+    b.add('body', P.boxB, M(X(bx), 0, bz, 0, bd, 7.5, bwU), 0xe8e4da);
+    box(bx, 7.75, bz, bd + .6, .5, bwU + .6, 0x6b7680);
+    box(bx - bd / 2 - .02, 2.0, bz, .04, 3.2, Math.min(8, bwU - 4), 0x2b343d); // 出入口ガラス
+    box(bx - bd / 2 - 1.2, 3.8, bz, 2.4, .15, Math.min(10, bwU - 3), 0x8a9096); // 庇
+    for (let z = -bwU / 2 + 2; z < bwU / 2 - 1; z += 3.2) if (Math.abs(z) > 5 || bwU < 18) box(bx - bd / 2 - .02, 5.4, bz + z, .04, 1.3, 2, 0x2b343d);
   }
-  box(-20, 1.3, 14, .1, 2.6, .1, 0x777777); box(-20, 2.5, 14, .05, .5, .5, 0x2a7ab8);
+  // 広場の人・タクシー・バス停
+  for (let k = 0; k < 10; k++) person(b, rnd, X(-(14 + rnd() * 12)), pz + (rnd() - .5) * 40, rnd() * 6);
+  for (const z of [-14, -9]) {
+    b.add('body', P.boxB, M(X(-25), .25, pz + z, 0, 1.7, .7, 4.4), 0xd8c020);
+    b.add('body', P.boxB, M(X(-25), .95, pz + z + .2, 0, 1.5, .55, 2.2), 0xd8c020);
+    box(-25, 1.25, pz + z + .2, 1.52, .4, 2.0, 0x2a333c);
+    box(-25, 1.6, pz + z + .3, .3, .15, .5, 0xf4f4f4);
+  }
+  box(-20, 1.3, pz + 14, .1, 2.6, .1, 0x777777); box(-20, 2.5, pz + 14, .05, .5, .5, 0x2a7ab8);
   // 駐輪場
-  box(-12, 2.1, -len * .3, 3, .06, 14, 0x9aa4ae);
-  for (let z = -len * .3 - 6; z < -len * .3 + 6; z += .6) box(-12, .5, z, 1.6, .9, .05, [0x333333, 0x9a2a2a, 0x2a4a8a, 0xcccccc][Math.floor(rnd() * 4)]);
-  } else if (!gy) {
-    // 対向側ホーム: 跨線橋の階段口（簡易）
-    box(-4.6, 2.3, len * .18, 2.2, 2.4, 9, 0xd8d4ca);
-    box(-4.6, 3.6, len * .18, 2.6, .2, 9.6, 0x6b7680);
+  box(-12, 2.1, pz - len * .3, 3, .06, 14, 0x9aa4ae);
+  for (let z = pz - len * .3 - 6; z < pz - len * .3 + 6; z += .6) box(-12, .5, z, 1.6, .9, .05, [0x333333, 0x9a2a2a, 0x2a4a8a, 0xcccccc][Math.floor(rnd() * 4)]);
+  }
+  if (!gy && drawStairs) {
+    // 跨線橋・地下道の階段口（簡易）。跨線橋の階段室と橋は buildFootbridge
+    box(-4.6, 2.3, linkZ, 2.2, 2.4, 9, 0xd8d4ca);
+    box(-4.6, 3.6, linkZ, 2.6, .2, 9.6, 0x6b7680);
   }
   b.parent = null;
   if (gy) {
@@ -174,9 +196,9 @@ export function buildStation(ctx: GameContext, sta: Station, prevName: string, n
   // 駅舎の正面看板（広場側）と線路側
   if (!opt.minimal) {
   const front = new THREE.Mesh(new THREE.PlaneGeometry(9, 1.7), bsMat);
-  front.position.set(X(bx - bd / 2 - .05), 6.4 + gy, 0); front.rotation.y = -sx * Math.PI / 2; grp.add(front);
+  front.position.set(X(bx - bd / 2 - .05), (wood ? 5.0 : 6.4) + gy, bzs[0]); front.rotation.y = -sx * Math.PI / 2; grp.add(front);
   const back = new THREE.Mesh(new THREE.PlaneGeometry(9, 1.7), bsMat);
-  back.position.set(X(bx + bd / 2 + .05), 6.4 + gy, 0); back.rotation.y = sx * Math.PI / 2; grp.add(back);
+  back.position.set(X(bx + bd / 2 + .05), (wood ? 5.0 : 6.4) + gy, bzs[0]); back.rotation.y = sx * Math.PI / 2; grp.add(back);
   }
 
   onLight(ctx, f => { signMat.emissiveIntensity = bsMat.emissiveIntensity = .05 + f * .75; });
@@ -294,6 +316,28 @@ function buildIslandConcourse(ctx: GameContext, sta: Station, loopLat: number, c
   onLight(ctx, f => { bsMat.emissiveIntensity = .05 + f * .75; });
 }
 
+/** 跨線橋（地上駅）: 階段室（各ホーム）と、線路・架線の上を渡る屋根つきの通路。lats = つなぐホームの中心の横位置。位置はホーム中央（駅舎の位置に応じてずらす） */
+export function buildFootbridge(ctx: GameContext, sta: Station, lats: number[]): void {
+  const { track } = ctx;
+  const lo = Math.min(...lats) - 1.4, hi = Math.max(...lats) + 1.4;
+  const sc = (sta.platform.from + sta.platform.to) / 2, len = sta.platform.to - sta.platform.from;
+  const e = sta.structure?.end;
+  const z = e === 'namba' ? len * .25 : e === 'wakayama' ? -len * .25 : 0;
+  const s = sc - z, t = track.trackAt(s);
+  const grp = new THREE.Group(); grp.name = 'footbridge'; grp.position.copy(track.at(s, 0, 0)); grp.rotation.y = -t.phi; ctx.scene.add(grp);
+  const b = new GeoBatch(), yb = 7.6, H = 3.0;
+  const box = (x: number, y: number, zz: number, w: number, h: number, d: number, col: number) => b.add('body', P.boxB, M(x, y, zz, 0, w, h, d), col);
+  box((lo + hi) / 2, yb, 0, hi - lo, H, 3.4, 0xdedad0); // 通路（壁）
+  box((lo + hi) / 2, yb + H, 0, hi - lo + .6, .3, 4.0, 0x6b7680); // 屋根
+  for (let x = lo + 2; x < hi - 1; x += 3) b.add('body', P.box, M(x, yb + 1.6, 1.72, 0, 2.0, 1.0, .06), 0x2b343d); // 窓
+  for (const l of lats) { // 階段室（ホーム上）
+    box(l, 1.1, 0, 3.4, yb - 1.1, 4.2, 0xd8d4ca);
+    box(l, yb + .0, 0, 3.8, .3, 4.6, 0x6b7680);
+    b.add('body', P.box, M(l, 2.6, 2.12, 0, 2.2, 1.8, .06), 0x2b343d);
+  }
+  b.build({ body: bodyMat }, grp);
+}
+
 export function buildStations(ctx: GameContext): void {
   const st = ctx.route.stations, T = getTerrain(ctx);
   if (ctx.route.theme === 'mountain') { buildMountainStations(ctx); return; }
@@ -343,10 +387,13 @@ export function buildStations(ctx: GameContext): void {
     const sc = (sta.platform.from + sta.platform.to) / 2;
     const dy = sta.elevated ? T.groundY(sc) - T.trackY(sc) : 0;
     // 和歌山大学前: 橋上駅舎・駅ビル・駅前は専用モジュール（world/wakayamadaigakumae.ts）が描くので、標準の駅舎・駅前広場は作らない
-    buildStation(ctx, sta, prev, next, { elevatedDy: dy, minimal: isDaigakumae(ctx.route.id, sta.name) });
+    // 駅舎の位置（Station.structure）: 下りホーム（左）か上りホーム（右）か、ホームごとか。構成の不明な駅は従来どおり下りホームの中央
+    const L1 = Math.max(...ctx.route.tracks), S = sta.structure;
+    const fullDown = !S || S.building === 'down' || S.building === 'both', fullUp = !!S && (S.building === 'up' || S.building === 'both');
+    buildStation(ctx, sta, prev, next, { elevatedDy: dy, minimal: isDaigakumae(ctx.route.id, sta.name) || !fullDown });
     // 相対式ホーム: 対向線側にもホーム（上りの運転で使う）
-    const L1 = Math.max(...ctx.route.tracks);
-    if (L1 > 0) buildStation(ctx, sta, prev, next, { lat: L1, side: sta.platform.side === 'L' ? 'R' : 'L', minimal: true, elevatedDy: dy, shift: sta.platformOpp });
+    if (L1 > 0) buildStation(ctx, sta, prev, next, { lat: L1, side: sta.platform.side === 'L' ? 'R' : 'L', minimal: !fullUp, elevatedDy: dy, shift: sta.platformOpp });
+    if (S?.link === 'footbridge' && L1 > 0) buildFootbridge(ctx, sta, [-4.1, L1 + 4.1]);
   });
   buildIndoorStations(ctx); // 屋内式の駅の大屋根・室内（Station.indoor）
 }

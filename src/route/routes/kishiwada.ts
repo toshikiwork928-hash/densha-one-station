@@ -124,7 +124,7 @@ export const kishiwada: Route = {
     {
       id: 'express', name: '急行', cars: 6, units: [4, 2], kind: 'commuter-old',
       kindOptions: ['commuter-old', 'commuter-new', 'commuter-1000', 'commuter-9000'], formationOptions: [[4, 2], [4, 4], [4, 2, 2], [6]],
-      lineLimit: 100, stops: [0, 4], timetable: KT.express,
+      lineLimit: 110, stops: [0, 4], timetable: KT.express,
     },
     airportService([0, 2, 4], KT.airport),
     {

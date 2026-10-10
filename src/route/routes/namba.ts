@@ -212,7 +212,7 @@ const services: ServiceSpec[] = [
   {
     id: 'express', name: '急行', cars: 6, units: [4, 2], kind: 'commuter-old',
     kindOptions: ['commuter-old', 'commuter-new', 'commuter-1000', 'commuter-9000'], formationOptions: [[4, 2], [4, 4], [4, 2, 2], [6]],
-    lineLimit: 100, stops: FAST, timetable: NB.express, lane: LANE.express, ...fast('6番線', 'R'),
+    lineLimit: 110, stops: FAST, timetable: NB.express, lane: LANE.express, ...fast('6番線', 'R'),
   },
   { ...airportService(FAST, NB.airport), lane: LANE.express, ...fast('6番線', 'R') },
   {

@@ -170,6 +170,19 @@ export function createState(route: Route, sel?: Selection): GameState {
   return st;
 }
 
+/** 選んだ区間の終点に合わせて行先を決める（ServiceSpec.destinationByEnd）。元の行先は初回に退避 */
+const baseDest = new WeakMap<object, [string | undefined, string | undefined]>();
+function applyDestinations(route: Route, end: number): void {
+  const name = route.stations[end]?.name;
+  for (const v of route.services ?? []) {
+    if (!v.destinationByEnd) continue;
+    let b = baseDest.get(v);
+    if (!b) { b = [v.destination, v.destinationKana]; baseDest.set(v, b); }
+    const hit = name ? v.destinationByEnd[name] : undefined;
+    v.destination = hit ? hit[0] : b[0]; v.destinationKana = hit ? hit[1] : b[1];
+  }
+}
+
 export function resetState(st: GameState, route: Route): void {
   const services = selectableServices(route);
   const fallback = services.find(x => x.id === 'express')?.id ?? services[0]?.id ?? 'express';
@@ -182,6 +195,7 @@ export function resetState(st: GameState, route: Route): void {
   const stage = findStage(route, sel.stageId);
   if (stage) sel.stageId = stage.id; // 種別により存在しない区間（例: 特急の全線通し）は先頭区間へ
   const from = stage?.from ?? 0, end = stage?.to ?? route.stations.length - 1;
+  applyDestinations(route, end);
   const s0 = from === 0 ? route.startS : route.stations[from].stopS;
   const late = stage ? lateStartFor(stage, sel.mode) : 0;
   Object.assign(st, {

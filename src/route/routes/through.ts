@@ -35,7 +35,7 @@ const dnServices: ServiceSpec[] = [
   {
     id: 'express', name: '急行', cars: 6, units: [4, 2], kind: 'commuter-old',
     kindOptions: ['commuter-old', 'commuter-new', 'commuter-1000', 'commuter-9000'], formationOptions: [[4, 2], [4, 4], [4, 2, 2], [6]],
-    lineLimit: 100, stops: [0, dnIdx('羽衣'), dnIdx('泉大津'), 13], timetable: NT.express,
+    lineLimit: 110, stops: [0, dnIdx('羽衣'), dnIdx('泉大津'), 13], timetable: NT.express,
   },
   airportService([0, dnIdx('羽衣'), dnIdx('泉大津'), dnIdx('春木'), 13], NT.airport),
   {

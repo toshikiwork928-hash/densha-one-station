@@ -127,7 +127,7 @@ export const shiokaze: Route = {
     {
       id: 'express', name: '急行', cars: 6, units: [4, 2], kind: 'commuter-old',
       kindOptions: ['commuter-old', 'commuter-new', 'commuter-1000', 'commuter-9000'], formationOptions: [[4, 2], [4, 4], [4, 2, 2], [6]],
-      lineLimit: 100, stops: [0, 4, 9], timetable: TT.express, platformSides: { 9: 'R' }, trackNames: { 9: '4番線' },
+      lineLimit: 110, stops: [0, 4, 9], timetable: TT.express, platformSides: { 9: 'R' }, trackNames: { 9: '4番線' },
     },
     { ...airportService([0, 4, 9], TT.airport), platformSides: { 9: 'R' }, trackNames: { 9: '4番線' } },
     { id: 'limited', name: '特急ラピートβ', cars: 6, units: [6], kind: 'limited', lineLimit: 110, stops: [0, 9], timetable: TT.limited, platformSides: { 9: 'R' }, trackNames: { 9: '4番線' } },

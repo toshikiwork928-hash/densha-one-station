@@ -370,7 +370,7 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
       let lat = local && ol ? ol.lat : mainOncomingLat;
       const base = {
         carLen: carLenOf(consist.kind!), gap: .8, kmh: local ? 80 : fast ? 105 : 95, ...consist, cars: consist.cars!,
-        dest: towardNamba ? WAKAYAMA_DEST[id][0] : 'なんば',
+        dest: towardNamba ? (route.wakayamaDest?.[id] ?? WAKAYAMA_DEST[id])[0] : 'なんば',
       };
       let spec: OncomingSpec | null = null;
       if (st >= 0) {

@@ -92,7 +92,9 @@ if (process.argv.includes('--selection-only')) process.exit(0);
     assert.deepEqual(route.stations.map(s => s.name), down ? names : [...names].reverse(), `${tag}の駅`);
     assert.equal(Math.abs(route.stations[last].stopS - route.stations[0].stopS), 15100, `${tag}みさき公園〜和歌山港 15.1km`);
     assert.equal(route.oncoming.length, 0, `${tag}の route.oncoming は空（対向列車は oncoming-timetable.json の共通運行）`);
-    assert.equal(route.crossings?.length, 0, `${tag}は踏切を置かない`);
+    // 踏切は OSM の位置（scripts/build-crossings.ts）。停車した列車（最長 8両）の下には置かない
+    assert.ok((route.crossings?.length ?? 0) >= 20, `${tag}の踏切 ${route.crossings?.length}`);
+    for (const c of route.crossings ?? []) for (const st of route.stations) assert.ok(c.s < st.stopS - 165 - (c.roadWidth ?? 6) / 2 || c.s > st.stopS + 6 + (c.roadWidth ?? 6) / 2, `${tag}の踏切 ${c.id} が ${st.name} の停車位置の下`);
     assert.deepEqual(selectableServices(route).map(v => v.id), ['local', 'express', 'southern'], `${tag}のTOP種別は普通・急行・サザン`);
     const track = buildTrack(route);
     assert.ok(Math.abs(track.length - 15378.192) < .01, `${tag}の線形の総延長 ${track.length}`);
@@ -152,7 +154,19 @@ if (process.argv.includes('--selection-only')) process.exit(0);
         assert.ok(Math.abs(tr.pathLat(r.stations[0].stopS) - (v.id === 'local' ? -9.2 : 0)) < 1e-6, `${tag}/${v.id}みさき公園の発車線`);
         assert.equal(r.stations[0].platform.side, v.id === 'local' ? 'R' : 'L');
         assert.equal(r.stations[last].mainTrack, '2番線');
-        assert.ok(approachText(r, last, svc).includes('終点'), approachText(r, last, svc));
+        // 普通の行先は和歌山市（和歌山港まで走る区間 4-5 のときだけ和歌山港）。終点の放送は、行先が終着駅のときだけ
+        const atLast = v.id === 'local' ? { ...svc, destination: '和歌山港', destinationKana: 'わかやまこう' } : svc;
+        assert.ok(approachText(r, last, atLast).includes('終点'), approachText(r, last, atLast));
+        if (v.id === 'local') assert.ok(!approachText(r, last, svc).includes('終点'), '普通（和歌山市行）は和歌山港を終点と言わない');
+        // 行先は選んだ区間の終点で決まる: 普通は和歌山市（4-5 は和歌山港）、急行・サザンは和歌山港（和歌山市までの区間は和歌山市）
+        for (const [stageId, dest] of [['all', v.id === 'local' ? '和歌山市' : '和歌山港'], ['0-4', '和歌山市'], ['4-5', '和歌山港']] as const) {
+          if (v.id === 'local' && stageId === '0-4') continue; // 普通に 0-4 は無い（通しが和歌山市まで）
+          const q = structuredClone(route);
+          createState(q, { stageId, service: v.id, mode: 'normal', vehicles: {} } as any);
+          const got = q.services!.find(x => x.id === v.id)!;
+          assert.equal(got.destination, dest, `${tag}/${v.id}/${stageId}の行先`);
+          assert.ok(departText(q, 0, false, got).includes(`${dest === '和歌山市' ? 'ワカヤマシ' : 'ワカヤマコウ'}行きです`), `${tag}/${v.id}/${stageId}の放送`);
+        }
         assert.ok(Math.abs(tr.pathLat(r.stations[last].stopS) + 3.9) < 1e-6, `${tag}/${v.id}和歌山港の自線は島式ホームの左の線`);
         assert.equal(r.stations[last].platform.side, 'R');
       } else {
@@ -527,7 +541,7 @@ for (const [route, parts] of [[throughUp, [shiokazeUp, kishiwada]], [through, [k
     const a = route.services!.find(v => v.id === 'airport')!, e = route.services!.find(v => v.id === 'express')!;
     const haruki = route.stations.findIndex(s => s.name === '春木');
     assert.deepEqual(a.stops.filter(i => i !== haruki), e.stops, `${route.id}空港急行と急行の差は春木停車のみ`);
-    assert.equal(a.lineLimit, 100); assert.deepEqual(a.units, [4, 4]); assert.equal(a.kind, 'commuter-new');
+    assert.equal(a.lineLimit, 110); assert.deepEqual(a.units, [4, 4]); assert.equal(a.kind, 'commuter-new');
     if (haruki >= 0) {
       assert.ok(a.stops.includes(haruki), `${route.id}空港急行は春木に停車`);
       assert.ok(!e.stops.includes(haruki), `${route.id}急行は春木を通過`);

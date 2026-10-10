@@ -543,6 +543,59 @@ function ptInPoly(p: V, poly: V[]): boolean {
   return c;
 }
 
+/** 踏切（railway=level_crossing）と構内・歩行者の踏切（railway=crossing）。線路から 40m 以内の点と、その点を通る道路の種類を取る */
+async function fetchCrossings(): Promise<OsmEl[]> {
+  const cacheDir = 'node_modules/.cache/osm', cache = `${cacheDir}/${courseId}.cross.json`;
+  if (existsSync(cache) && !args.has('refresh')) return JSON.parse(readFileSync(cache, 'utf8')).elements;
+  const [s, w, n, e] = C.bbox, bb = `${s},${w},${n},${e}`;
+  const q = `[out:json][timeout:180];
+way["railway"="rail"]["name"~"${C.railName}"](${bb})->.rail;
+node(around.rail:40)["railway"~"^(level_crossing|crossing)$"]->.cr;
+.cr out;
+way(bn.cr)["highway"];
+out tags geom;`;
+  const url = args.get('endpoint') ?? 'https://overpass-api.de/api/interpreter';
+  console.log(`Overpass へ問い合わせ（踏切）: ${url}`);
+  const res = await fetch(url, { method: 'POST', body: new URLSearchParams({ data: q }), headers: { 'User-Agent': 'densha-one-station scenery builder (personal, non-commercial)' } });
+  if (!res.ok) throw new Error(`Overpass ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  const json = await res.json() as { elements: OsmEl[] };
+  mkdirSync(cacheDir, { recursive: true });
+  writeFileSync(cache, JSON.stringify(json));
+  return json.elements;
+}
+
+const ROAD_W: Record<string, number> = { trunk: 9, primary: 8, secondary: 7, tertiary: 6, unclassified: 5, residential: 5, living_street: 4, service: 4, track: 3.5, cycleway: 3, footway: 2.5, path: 2.5, pedestrian: 3, steps: 2.5 };
+
+async function makeCrossings(route: Route, proj: (p: V, maxDist?: number) => { c: number; d: number } | null, toS: (c: number) => number) {
+  const els = await fetchCrossings();
+  const nodes = els.filter(e => e.type === 'node' && e.tags?.railway && e.lat != null);
+  const ways = els.filter(e => e.type === 'way' && e.tags?.highway && e.geometry);
+  const rows: { s: number; d: number; kind: string; hw: string; w: number; name: string; node: number }[] = [];
+  for (const nd of nodes) {
+    const r = proj(xy(nd.lat!, nd.lon!), 200);
+    if (!r || Math.abs(r.d) > 30) continue;
+    const s = toS(r.c);
+    if (s < route.extent.from - 20 || s > route.extent.to + 20) continue;
+    const cand = ways.filter(w => w.geometry!.some(g => Math.abs(g.lat - nd.lat!) < 2e-7 && Math.abs(g.lon - nd.lon!) < 2e-7));
+    // 道路の種類は、いちばん太いものを採る
+    let hw = '', w = 0, name = '';
+    for (const c of cand) {
+      const h = c.tags!.highway, base = ROAD_W[h] ?? 4, lanes = Number(c.tags!.lanes ?? 0);
+      const ww = Math.max(base, lanes >= 2 ? Math.min(9, 3 + lanes * 1.7) : 0, Number(c.tags!.width ?? 0) > 0 ? Math.min(10, Number(c.tags!.width)) : 0);
+      if (ww > w) { w = ww; hw = h; name = c.tags!.name ?? ''; }
+    }
+    rows.push({ s: Math.round(s), d: Math.round(r.d * 10) / 10, kind: nd.tags!.railway, hw, w: Math.round(w * 2) / 2, name, node: nd.id });
+  }
+  rows.sort((p, q) => p.s - q.s);
+  // 同じ s（数m以内）の点（上下線で別の点になっている）はまとめる
+  const merged: typeof rows = [];
+  for (const r of rows) { const l = merged[merged.length - 1]; if (l && l.kind === r.kind && Math.abs(l.s - r.s) < 8) { l.w = Math.max(l.w, r.w); if (!l.name) l.name = r.name; continue; } merged.push({ ...r }); }
+  console.log(`踏切の点 ${rows.length} → まとめて ${merged.length}（level_crossing ${merged.filter(m => m.kind === 'level_crossing').length}、crossing ${merged.filter(m => m.kind === 'crossing').length}）`);
+  for (const m of merged) console.log(`  s=${String(m.s).padStart(6)}  d=${String(m.d).padStart(6)}  ${m.kind.padEnd(15)} ${m.hw.padEnd(12)} w=${m.w}  ${m.name}  node/${m.node}`);
+  mkdirSync('node_modules/.cache/osm', { recursive: true });
+  writeFileSync(`node_modules/.cache/osm/${courseId}.crossings.json`, JSON.stringify(merged, null, 1));
+}
+
 async function main() {
   const els = await fetchOsm();
   const route = C.route;
@@ -590,6 +643,8 @@ async function main() {
     const s = toS(r.c);
     return [s, r.d + center(s)];
   };
+  // ---- 踏切（--crossings: 踏切の位置だけを取り直して src/route/routes/<course>-crossings.ts を書く。建物などの JSON は書き換えない）----
+  if (args.has('crossings')) { await makeCrossings(route, proj, toS); return; }
   const S0 = route.extent.from - 100, S1 = route.extent.to + 100;
   console.log(`中心線 ${line.length} 点、駅 OSM ${cSt.map(c => (c / 1000).toFixed(2)).join(' / ')} km → ゲーム ${sSt.map(s => (s / 1000).toFixed(2)).join(' / ')} km`);
 

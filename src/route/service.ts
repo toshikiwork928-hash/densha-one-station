@@ -250,11 +250,11 @@ export function setDestinations(services: ServiceSpec[], toward: 'namba' | 'waka
     v.destination = d; v.destinationKana = k;
   }
 }
-/** 空港急行（8300系 8両が既定、6両も選べる。停車駅は急行と同じ、最高速度 100km/h） */
+/** 空港急行（8300系 8両が既定、6両も選べる。停車駅は急行と同じ、最高速度 110km/h） */
 export const airportService = (stops: number[], timetable: ServiceSpec['timetable']): ServiceSpec => ({
   id: 'airport', name: '空港急行', cars: 8, units: [4, 4], kind: 'commuter-new',
   kindOptions: ['commuter-new', 'commuter-old'], formationOptions: [[4, 4], [4, 2]],
-  lineLimit: 100, stops, timetable,
+  lineLimit: 110, stops, timetable,
 });
 /** 編成の車種の並びのキー（キャッシュ用。例 'southern-10000+commuter-old'） */
 export const kindsKey = (svc: ServiceSpec): string => svc.unitKinds?.join('+') ?? svc.kind;

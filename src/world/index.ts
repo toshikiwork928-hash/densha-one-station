@@ -12,6 +12,7 @@ import { buildCoast } from './coast';
 import { buildStructures } from './structures';
 import { buildCatenary } from './catenary';
 import { buildCrossings } from './crossings';
+import { buildCuttings } from './cuttings';
 import { buildTown } from './town-jp';
 import { createCab } from './cab';
 import { createPlayerTrain, type PlayerTrain } from './player-train';
@@ -19,7 +20,7 @@ import { createOvertaking } from './overtaking';
 import { buildCoastalLandmarks } from './coastal-landmarks';
 import { buildHagoromoTrain } from './hagoromo-train';
 import { buildNambaTerminal } from './namba-terminal';
-import { buildMisakiParkTrain } from './misaki-park-train';
+import { buildMisakiParkTrain, buildMisakiYard } from './misaki-park-train';
 import { buildSuminoeDepot, buildSuminoeDepotTrains } from './suminoe-depot';
 import { buildKoyaPlatforms, buildKoyaTraffic } from './koya-traffic';
 import { buildNambaParked } from './namba-parked';
@@ -49,6 +50,7 @@ export function buildWorld(ctx: GameContext): World {
   buildCoastalLandmarks(ctx);
   buildHagoromoTrain(ctx); // 羽衣3番線に停車中の 2000系（描画のみ）
   buildMisakiParkTrain(ctx); // みさき公園5番線（多奈川線）に停車中の 7100系 2両（描画のみ）
+  buildMisakiYard(ctx); // みさき公園の保守用の留置線（黄色い保守用車両・資材）
   buildCatenary(ctx); // rng 不使用
   buildBackdrop(ctx);
   buildCoast(ctx); // OSM の海岸線のあるコースだけ（rng 不使用）
@@ -59,6 +61,7 @@ export function buildWorld(ctx: GameContext): World {
   buildSignals(ctx); // [A] 閉そく信号機（rng 不使用）
   const oncoming = createOncoming(ctx);
   buildCrossings(ctx, oncoming);
+  buildCuttings(ctx);
   // 堺〜なんば専用（上り 'namba' と下り 'namba-up'。座標は上りのもの、world/namba-frame.ts）。ctx.rng を消費しない（他の路線の生成順に影響しない）
   const nctx = nambaFrame(ctx);
   if (nctx) {

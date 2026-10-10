@@ -86,9 +86,12 @@ export function buildCrossings(ctx: GameContext, oncoming: OncomingSystem): void
   for (const c of list) {
     const w = c.roadWidth ?? 6, g = T.groundY(c.s);
     // 路面（線路上はレール面まで持ち上げる）
+    // 周囲の山（route.relief）がある所は、道路も山の斜面に沿わせる（山あいの踏切で道路が空中や地中に伸びない）
     const prof = (s: number): [number, number][] => {
       const roadY = T.groundY(s) + .03, railY = T.trackY(s) + .36;
-      return [[-160, roadY], [L0 - 6.5, roadY], [L0 - 2.6, railY], [L1 + 2.6, railY], [L1 + 6.5, roadY], [164, roadY]];
+      const at = (l: number): [number, number] => [l, roadY + T.reliefY(s, l)];
+      if (c.foot) return [[L0 - 12, roadY], [L0 - 2.6, railY], [L1 + 2.6, railY], [L1 + 12, roadY]]; // 歩行者専用: 線路の脇までの短い通路
+      return [at(-160), at(-80), at(-40), at(-20), [L0 - 6.5, roadY], [L0 - 2.6, railY], [L1 + 2.6, railY], [L1 + 6.5, roadY], at(20), at(40), at(80), at(164)];
     };
     scene.add(gridAlong(track, c.s - w / 2, c.s + w / 2, 1, prof, roadMat));
     // 踏切板（ゴム）
@@ -100,6 +103,7 @@ export function buildCrossings(ctx: GameContext, oncoming: OncomingSystem): void
       const p = track.at(c.s, l, 0); lines.add('l', P.box, M(p.x, g + .045, p.z, -t.phi, .35, .02, w * .5 - .2, 0, 0), 0xffffff);
     }
     for (const side of [-1, 1]) for (let l = -150; l < 154; l += 2) {
+      if (c.foot) break; // 歩行者専用の踏切には道路の外側線を描かない
       if (l > L0 - 3 && l < L1 + 3) continue;
       const p = track.at(c.s + side * (w / 2 - .25), l, 0);
       lines.add('l', P.box, M(p.x, g + .045, p.z, -t.phi, 1.9, .02, .12), 0xffffff);
@@ -125,7 +129,8 @@ export function buildCrossings(ctx: GameContext, oncoming: OncomingSystem): void
     const car = buildCar([0xd8dde2, 0x2b2f36, 0x9a2020, 0x3a5a8a, 0xf0f0f0][rts.length % 5]);
     car.position.copy(track.at(c.s - w / 4, L0 - 12.5, 0)); car.position.y = g + .03;
     car.rotation.y = -track.trackAt(c.s).phi - Math.PI / 2; // 線路へ向く
-    car.visible = false; cg.add(car);
+    car.visible = false;
+    if (!c.foot) cg.add(car); // 歩行者専用の踏切には車を出さない
     cullByDistance(ctx, cg, 1000);
     rts.push({ id: c.id, s: c.s, w, active: false, t: 0, arm: 0, emitT: 0, arms, lensA, lensB, glowA, glowB, glowMat, car });
   }

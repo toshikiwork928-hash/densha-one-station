@@ -100,7 +100,7 @@ export const izumisano: Route = {
   stations,
   services: [
     { id: 'local', name: '普通', cars: 4, units: [4], kind: 'commuter-new', kindOptions: ['commuter-new', 'commuter-old', 'commuter-1000'], formationOptions: [[4], [4, 2], [6]], lineLimit: 90, useLoop: true, stops: [0, 1, 2, 3, 4, 5, 6], timetable: IT.local },
-    { id: 'express', name: '急行', cars: 6, units: [4, 2], kind: 'commuter-old', kindOptions: ['commuter-old', 'commuter-new', 'commuter-1000', 'commuter-9000'], formationOptions: [[4, 2], [4, 4], [6]], lineLimit: 100, stops: [0, 2, 6], timetable: IT.express },
+    { id: 'express', name: '急行', cars: 6, units: [4, 2], kind: 'commuter-old', kindOptions: ['commuter-old', 'commuter-new', 'commuter-1000', 'commuter-9000'], formationOptions: [[4, 2], [4, 4], [6]], lineLimit: 110, stops: [0, 2, 6], timetable: IT.express },
     airportService([0, 2, 6], IT.airport),
     { id: 'southern', name: '特急サザン', cars: 8, units: [4, 4], kind: 'southern-10000', unitKinds: ['southern-10000', 'commuter-old'], lineLimit: 110, stops: [0, 6], timetable: IT.southern },
     { id: 'limited', name: '特急ラピートβ', cars: 6, units: [6], kind: 'limited', lineLimit: 110, stops: [0, 6], timetable: IT.limited },

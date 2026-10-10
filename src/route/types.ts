@@ -11,7 +11,22 @@ export interface Gradient { from: number; to: number; permil: number }
 /** 速度制限区間（先頭基準。to は後部通過分を含めた解除位置） */
 export interface SpeedLimit { from: number; to: number; kmh: number; /** バナー用の種別名 */ label?: string }
 
+/** 地上駅の駅舎とホーム間の連絡の実際の構成（world/stations.ts が描く。出典は駅ごとの Wikipedia「駅構造」。未指定は標準の駅舎）
+ *  ホームは下りホーム（和歌山方面行き。下り本線の左）と上りホーム（なんば方面行き）。駅舎の位置はホーム上の端（なんば寄り・和歌山市寄り）か中央 */
+export interface StationStructure {
+  /** 駅舎のあるホーム（both = ホームごとに駅舎・改札がある） */
+  building: 'down' | 'up' | 'both';
+  /** 駅舎のホーム上の位置（ends = 両端に1棟ずつ） */
+  end?: 'namba' | 'wakayama' | 'center' | 'ends';
+  /** ホーム間の連絡: footbridge = 跨線橋、underpass = 連絡地下道、crossing = 構内踏切（route.crossings に歩行者踏切を置く）、none = 行き来できない（ホームごとに改札） */
+  link?: 'footbridge' | 'underpass' | 'crossing' | 'none';
+  /** 駅舎の外観（wood-western = 洋風木造駅舎。淡輪） */
+  style?: 'wood-western';
+}
+
 export interface Station {
+  /** 駅舎・ホーム間の連絡の構成（地上の相対式・custom の駅） */
+  structure?: StationStructure;
   /** 沿岸線の駅固有意匠。線路運行は loop / island に従う。 */
   layout?: 'relative' | 'island' | 'loop' | 'hagoromo' | 'hamadera' | 'custom';
   /** layout 'custom' の駅のホーム（world/custom-stations.ts が描く）。island = 中心 lat・幅 width の島式、side = 線路 lat の side 側の片面ホーム。
@@ -134,6 +149,9 @@ export interface ServiceSpec {
   /** 列車の本来の行先（行先表示・放送）。未指定ならコースの終点駅名。かなは destinationKana */
   destination?: string;
   destinationKana?: string;
+  /** 選んだ区間の終点の駅名ごとの行先 [名前, かな]（終点がここにあれば destination の代わりに使う。game/state.ts の resetState が反映）。
+   *  例: 急行・サザンの和歌山市まで（みさき公園〜和歌山港コース）は「和歌山市」行 */
+  destinationByEnd?: Record<string, [string, string]>;
   /** 停車駅（stations の index）。それ以外は通過 */
   stops: number[];
   /** 停車駅ごとの定刻到着・発車 [s]（stations の index をキー） */
@@ -282,7 +300,7 @@ export interface Route {
   /** [A] 閉そく信号（自線左側）。aspect は A のロジックが決める */
   signals?: { id: string; s: number }[];
   /** [C] 踏切（中心位置 s） */
-  crossings?: { id: string; s: number; roadWidth?: number }[];
+  crossings?: { id: string; s: number; roadWidth?: number; /** 歩行者専用の踏切（待機する車を出さない。道幅は 3m 前後） */ foot?: boolean }[];
   /** [C] トンネル・高架などの構造物区間 */
   structures?: { kind: 'tunnel' | 'viaduct' | 'bridge'; from: number; to: number; /** 高架の壁（高欄）を低くする（壁のない高架） */ open?: boolean;
     /** 橋梁: 上下線が別々の単線橋（線路ごとの床版・主桁・橋脚） */ split?: boolean;
@@ -304,8 +322,12 @@ export interface Route {
   timeOfDay?: TimeOfDay;
   /** 種別適用後: 自列車の走行線（ServiceSpec.lane。route/service.ts が設定） */
   activeLane?: LatProfile;
+  /** 切土の擁壁（world/cuttings.ts）。side = 線路の左（-1）・右（+1）（下りの向きの横位置の符号）。offset = 外側の線路からの距離 [m]（既定 6.5）、height = 壁の高さ [m]（既定 4.5） */
+  cuttings?: { from: number; to: number; side: -1 | 1; offset?: number; height?: number }[];
   /** 種別適用後: いま選んでいる種別（route/service.ts が設定。種別ごとに区間の一覧を変えるのに使う） */
   activeServiceId?: ServiceId;
+  /** 和歌山方面へ向かう列車（対向列車・追い抜き）の種別ごとの行先 [名前, かな]。未指定の種別は route/service.ts の WAKAYAMA_DEST（普通は羽倉崎） */
+  wakayamaDest?: Partial<Record<ServiceId, [string, string]>>;
   /** 全線通しとは別の始発・終着の区間（例: 急行・サザンの和歌山市行き）。from・to は駅 index。
    *  指定した種別でどちらも停車駅のときだけ有効。asAll なら全線通しの区間そのものをこの区間にし、無ければ全線通しの前に区間として加わる。
    *  上りの路線へは引き継がない（上りの路線データで指定する） */

@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import type { Station } from '../route/types';
-import { buildIsland, buildStation } from './stations';
+import { buildFootbridge, buildIsland, buildStation } from './stations';
 import { GeoBatch, M, P } from './batch';
 import { getTerrain } from './terrain';
 import { trackSpan } from '../route/service';
@@ -20,6 +20,11 @@ export function buildCustomStation(ctx: GameContext, sta: Station, prev: string,
     const st: Station = { ...sta, platform: { ...sta.platform, from: p.from ?? sta.platform.from, to: p.to ?? sta.platform.to } };
     if (p.kind === 'island') buildIsland(ctx, st, prev, next, p.lat, p.width, { stairs: p.stairs ?? true, roof: p.roof });
     else { buildStation(ctx, st, prev, next, { lat: p.lat, side: p.side, minimal: !main, elevatedDy: dy }); main = false; }
+  }
+  // 跨線橋（樽井）: 片面ホームと島式ホームの階段室と、線路の上を渡る通路
+  if (sta.structure?.link === 'footbridge') {
+    const lats = list.filter(p => !p.external).map(p => p.kind === 'island' ? p.lat : p.lat + (p.side === 'L' ? -4.1 : 4.1));
+    if (lats.length > 1) buildFootbridge(ctx, sta, lats);
   }
   // みさき公園: 盛土の下の地下道・駅舎2か所・ホームの階段/エスカレーター/エレベーター（world/misaki-park.ts）
   if (isMisakiPark(sta)) { buildMisakiParkStation(ctx, sta); return; }

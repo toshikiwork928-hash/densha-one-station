@@ -49,6 +49,21 @@ export function misakiExtraTracks(stopS: number, from: number): ExtraTrack[] {
     { id: 'misaki-t5', lat: t5, from: t5[0][0], to: r(end), bumpers: [r(end)], ownDeck: false, bank: true },
     // 分岐の渡り線（上り本線 → 5番線・多奈川線）。ホームの先 230〜310m
     { id: 'misaki-cross', lat: [[r(230), MISAKI.T3], [r(310), MISAKI.T3 + DIVERGE.gap]], from: r(230), to: r(310), ownDeck: false, bank: true },
+    // 保守用の留置線（和歌山市寄り、下り本線の左）。運転席からの画像で、黄色い保守用車両と資材置き場が線路の脇に並ぶ（位置・本数・長さは不明。ゲーム用の概形）
+    ...misakiYardTracks(stopS, from),
+  ];
+}
+
+/** 保守用の留置線2本（下り本線 T2 から左へ分かれる）。架線は張らない */
+export const YARD_LAT = { a: -19, b: -25 } as const;
+function misakiYardTracks(stopS: number, from: number): ExtraTrack[] {
+  const r = (d: number) => stopS + d;
+  const a: [number, number][] = [[r(340), MISAKI.T2], [r(430), YARD_LAT.a], [r(720), YARD_LAT.a]];
+  const b: [number, number][] = [[r(430), YARD_LAT.a], [r(500), YARD_LAT.b], [r(690), YARD_LAT.b]];
+  void from;
+  return [
+    { id: 'misaki-yard-1', lat: a, from: r(340), to: r(720), bumpers: [r(720)], ownDeck: false, bank: true, noWire: true },
+    { id: 'misaki-yard-2', lat: b, from: r(430), to: r(690), bumpers: [r(690)], ownDeck: false, bank: true, noWire: true },
   ];
 }
 
@@ -62,6 +77,7 @@ export const tanagawaLat = (d: number): number => {
 /** 景観（OSM の建物・木）を置かない範囲: 駅と盛土、多奈川線の盛土の帯 */
 export function misakiReserved(stopS: number): NonNullable<Route['reserved']> {
   const out: NonNullable<Route['reserved']> = [{ from: stopS - 300, to: stopS + 300, lat0: -62, lat1: 62 }];
+  out.push({ from: stopS + 300, to: stopS + 760, lat0: -52, lat1: -10 }); // 保守用の留置線と資材置き場
   for (let d = 300; d < TANAGAWA_END + 40; d += 80) {
     const a = tanagawaLat(d), b = tanagawaLat(d + 80);
     out.push({ from: stopS + d, to: stopS + d + 80, lat0: Math.min(a, b) - 50, lat1: Math.max(a, b) + 50 });
@@ -86,7 +102,8 @@ export function addMisakiPark(route: Route, stationIndex: number, arrival: boole
   for (const v of route.services ?? []) {
     const local = v.id === 'local', mine = misakiLane(stopS, from);
     // 1番線（T1、島式Aの右、ドア右）は普通、2番線（T2、島式Aの左、ドア左）は特急サザン。ゲーム用の割り当て（docs/spec-south-courses.md）
-    v.lane = local ? [...(v.lane ?? []), ...mine] : v.lane;
+    // 走行線は s の昇順でなければならない（profileLat）。コースの始端（みさき公園が始発）では、1番線へ入る点（s 0〜）が既存の点より前に来る
+    v.lane = local ? [...(v.lane ?? []), ...mine].sort((p, q) => p[0] - q[0]) : v.lane;
     v.trackNames = { ...v.trackNames, [stationIndex]: local ? '1番線' : '2番線' };
     v.platformSides = { ...v.platformSides, [stationIndex]: local ? 'R' : 'L' };
     // 分岐器の制限（泉佐野と同じ 45km/h）。到着は T1 へ入る分岐器、出発は T1 から本線へ戻る分岐器

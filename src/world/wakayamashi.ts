@@ -171,10 +171,39 @@ export function buildWakayamashi(ctx: GameContext): void {
       m.position.copy(p); m.rotation.y = -t.phi + ry; root.add(m);
     }
   }
-  // --- 駅前の大型施設（OSM の建物の位置・大きさに近い箱。名称・看板は持たない。JR ホームの奥）
-  boxAt(12412, -56, 0, 32, 13, 165, 0xcfcac0);
-  boxAt(12412, -56, 13, 33, .6, 166, 0x8d949a);
-  for (let s = 12335; s < 12490; s += 6) boxAt(s, -39.9, 3, .1, 8, 3.2, 0x39485a, 's');
+  // --- キーノ和歌山（南海・和歌山市の再開発。2020年開業。JR ホームの奥、駅の北側）
+  // 資料: 商業棟・オフィス棟（南海和歌山市駅ビル・鉄骨7階）・ホテル（カンデオホテルズ南海和歌山・地上12階）・公益施設棟（市民図書館）・駐車場棟からなる。
+  // OSM の「キーノ和歌山」は s 12402・横 -44 の約 169m × 50m（4階）。棟ごとの位置・高さ・形は不明で、ゲーム用の概形（docs/plan-south-polish.md 1章）。
+  {
+    const FL = 3.9; // 1階分の高さ
+    const glass = 0x2f4a5c, concrete = 0xd9d5ca, band = 0xb9b4a6, roofGray = 0x7c8389;
+    /** 棟: s0〜s1、lat0〜lat1、floors 階。壁と屋上の縁、窓の帯（線路側の面と両端の面）を描く */
+    const block = (s0: number, s1: number, l0: number, l1: number, floors: number, col: number, win = true) => {
+      const H = floors * FL, sc = (s0 + s1) / 2, lc = (l0 + l1) / 2;
+      boxAt(sc, lc, 0, l1 - l0, H, s1 - s0, col);
+      boxAt(sc, lc, H, l1 - l0 + .6, .5, s1 - s0 + .6, roofGray);
+      if (!win) return;
+      for (let k = 0; k < floors; k++) {
+        const y = k * FL + 1.0;
+        boxAt(sc, l1 + .06, y, .1, FL - 1.5, s1 - s0 - 3, glass, 's'); // 線路側（右）の窓帯
+        boxAt(s0 - .06, lc, y, l1 - l0 - 3, FL - 1.5, .1, glass, 's'); // なんば寄りの端
+        boxAt(s1 + .06, lc, y, l1 - l0 - 3, FL - 1.5, .1, glass, 's'); // 和歌山港寄りの端
+        boxAt(sc, l1 + .1, k * FL + FL - .45, .14, .3, s1 - s0, band, 's'); // 階の境の帯
+      }
+    };
+    block(12322, 12486, -76, -40, 4, concrete);                       // 商業棟（4階）
+    block(12430, 12486, -76, -54, 12, 0xe8e6df);                      // ホテル（地上12階）。商業棟の南西端から立ち上がる
+    block(12488, 12518, -72, -42, 7, 0xe3e0d6);                       // オフィス棟（南海和歌山市駅ビル 7階）
+    block(12330, 12384, -104, -78, 4, 0xe9e4d6);                      // 公益施設棟（市民図書館 4階）
+    // 立体駐車場: 床スラブを重ね、外周に低い壁。車は入れない
+    {
+      const s0 = 12392, s1 = 12436, l0 = -104, l1 = -80, n = 5;
+      for (let k = 0; k <= n; k++) boxAt((s0 + s1) / 2, (l0 + l1) / 2, k * 3, l1 - l0, .3, s1 - s0, 0xb8b5ad);
+      for (const [ss, ll] of [[s0, l0], [s1, l0], [s0, l1], [s1, l1], [(s0 + s1) / 2, l0], [(s0 + s1) / 2, l1]]) boxAt(ss, ll, 0, .5, n * 3, .5, 0xa7a49c);
+      boxAt((s0 + s1) / 2, l1, 0, .1, n * 3, s1 - s0, 0x8e8c85, 's');
+    }
+    // 施設名の看板は置かない（ユーザー指示 2026-10-10）
+  }
 
   // --- 跨線橋（JR ホーム〜ホーム1〜ホーム2。架線の上を越える）
   {

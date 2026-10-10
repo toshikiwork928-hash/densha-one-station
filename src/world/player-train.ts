@@ -25,7 +25,7 @@ export function createPlayerTrain(ctx: GameContext): PlayerTrain {
     const svc = ctx.service;
     const kind = svc?.kind ?? 'commuter-new', units = svc?.units;
     const n = svc?.cars ?? Math.max(2, Math.round(route.trainLength / carLenOf(kind)));
-    const key = `${svc ? kindsKey(svc) : kind}:${units?.join('+') ?? n}:${svc?.name ?? ''}`;
+    const key = `${svc ? kindsKey(svc) : kind}:${units?.join('+') ?? n}:${svc?.name ?? ''}:${destOf(route, svc)}`;
     if (key === built) return;
     built = key;
     for (const c of cars) group.remove(c.object);

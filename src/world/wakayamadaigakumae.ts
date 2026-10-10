@@ -139,11 +139,7 @@ export function buildWakayamadaigakumae(ctx: GameContext): void {
     box(DK.deck.s, e.l0 - 1.4, 3.8, 3.4, .2, 12, C.roof);
     box(DK.deck.s, e.l0 - .08, .1, .1, 3.5, 9, 0x1c2227);
     for (const dz of [-5.2, 5.2]) box(DK.deck.s + dz, e.l0 - 2.4, .1, .22, 3.7, .22, C.white);
-    // 看板: 東の面（駅前）の上部と、線路側の面（北寄りで橋上駅舎の陰にならない位置）
-    const tex = signTex('ふじと台ステーションビル エスタシオン', 2048, 160, '#f2eadb', '#7c2f20', 108);
-    const fr = mkFrame(sc, 0);
-    plane(fr, tex, 40, 3.1, e.l0 - .12, TOP - 1.3, 0, -Math.PI / 2);
-    plane(fr, tex, 26, 2.0, e.l1 + .12, TOP - 1.2, 21, Math.PI / 2);
+    // 施設名の看板は置かない（ユーザー指示 2026-10-10。駅名標だけ）
   }
   // 東のバス乗り場（OSM のバス停「和歌山大学前駅東口」・タクシー乗り場の付近。東館の南）と交番
   {
@@ -319,8 +315,7 @@ export function buildWakayamadaigakumae(ctx: GameContext): void {
     // 太陽光パネルの屋根（屋上駐車場の北側）: 傾けたパネルの列と支柱
     for (let x = -54 + 2.1, k = 0; x < 54; x += 4.2, k++) lbox(F, x, H + 3.4, -90, 4.0, .14, 120, k % 2 ? C.solarB : C.solar, 'body', .17);
     for (let x = -50; x < 54; x += 13.6) for (let z = -144; z <= -36; z += 27) lbox(F, x, H, z, .34, 3.6, .34, C.metal);
-    // 看板帯（線路側の面の上部。施設名の表示）とブリッジの入口（2 階の高さ）
-    plane(F, signTex('イオンモール和歌山', 1536, 160, '#f2eadb', '#5a1f3c', 104), 44, 3.4, W / 2 + .09, H - 2.0, 6, Math.PI / 2);
+    // ブリッジの入口（2 階の高さ）。施設名の看板は置かない（ユーザー指示 2026-10-10）
     const entrZ = -(DK.deck.s - m.s);
     lbox(F, W / 2 + 1.8, 0, entrZ, 3.6, 10.6, 26, C.glass, 'w');
     lbox(F, W / 2 + 2.0, 10.6, entrZ, 4.4, .45, 28, C.roofLight);
