@@ -225,11 +225,38 @@ function ledSouthernMat(label: string, dest: string): THREE.MeshBasicMaterial {
   return m;
 }
 
-function ledMat(label: string, dest: string): THREE.MeshBasicMaterial {
-  const key = `${label}|${dest}`;
+function ledMat(label: string, dest: string, typeFraction = .47): THREE.MeshBasicMaterial {
+  const key = `${typeFraction}:${label}|${dest}`;
   let m = ledMats.get(key);
-  if (!m) { m = new THREE.MeshBasicMaterial({ map: ledTexture(label, dest), toneMapped: false }); ledMats.set(key, m); }
+  if (!m) { m = new THREE.MeshBasicMaterial({ map: ledTexture(label, dest, typeFraction), toneMapped: false }); ledMats.set(key, m); }
   return m;
+}
+
+const sideDisplayPlane = new THREE.PlaneGeometry(1, 1);
+const sideDisplayFrame = new THREE.BoxGeometry(1, 1, 1);
+const sideDisplayFrameMat = new THREE.MeshBasicMaterial({ color: 0x242424 });
+
+/** 側面は左右それぞれ外向きの面に貼り、文字の鏡像を避ける。 */
+function addSideDisplays(body: THREE.Group, kind: TrainKind, label: string, dest: string) {
+  const split = kind === 'commuter-1000' || kind === 'limited';
+  const combined = kind === 'commuter-old' || kind === 'commuter-9000' || kind === 'commuter-new' || kind === 'southern-12000';
+  if (!split && !combined) return;
+  const x = kind === 'limited' ? 1.43 : 1.46, y = kind === 'limited' ? 3.12 : 3.21;
+  const signs = split
+    ? [{ z: kind === 'limited' ? 0 : -4.5, w: .78, mat: ledMatPart('type', label, dest) },
+      { z: 4.5, w: 1.05, mat: ledMatPart('dest', label, dest) }]
+    : [{ z: 0, w: kind === 'commuter-new' || kind === 'southern-12000' ? 1.55 : 1.20,
+      mat: ledMat(label, dest, kind === 'commuter-new' || kind === 'southern-12000' ? 1 / 3 : .47) }];
+  for (const side of [-1, 1]) for (const sign of signs) {
+    const z = split ? -side * sign.z : sign.z;
+    const frame = new THREE.Mesh(sideDisplayFrame, sideDisplayFrameMat);
+    frame.position.set(side * x, y, z); frame.scale.set(.035, .29, sign.w + .07);
+    frame.name = 'side-display-frame'; body.add(frame);
+    const panel = new THREE.Mesh(sideDisplayPlane, sign.mat);
+    panel.rotation.y = side * Math.PI / 2;
+    panel.position.set(side * (x + .021), y, z); panel.scale.set(sign.w, .23, 1);
+    panel.name = 'side-display'; body.add(panel);
+  }
 }
 
 /** front / rear = 編成の先頭・最後尾、mid = 中間車、jointFront / jointRear = ユニット連結部の運転台付き車（灯火・行先は消灯） */
@@ -239,7 +266,7 @@ const blankLed = new THREE.MeshBasicMaterial({ color: 0x060606 });
 /** 優等列車（急行・特急・サザン）の表示。標識灯は普通 = 前から見て左のみ、優等 = 両方点灯 */
 const isExpress = (label: string) => /急|特|サザン/.test(label);
 
-function makeCar(kit: KindKit, kind: CarKind, role: Role, led: THREE.Material, led2: THREE.Material | undefined, express: boolean): { car: THREE.Group; setDoors: TrainCar['setDoors'] } {
+function makeCar(kit: KindKit, kind: CarKind, role: Role, led: THREE.Material, led2: THREE.Material | undefined, express: boolean, trainKind: TrainKind, label: string, dest: string): { car: THREE.Group; setDoors: TrainCar['setDoors'] } {
   const g = kit.geo(kind), car = new THREE.Group(), body = new THREE.Group();
   const closed = kind === 'head' ? kit.side.head : kit.side.mid;
   // 外板は +X 側 / -X 側の2グループ（材質配列 [+X, -X]）。+X = 車の進行方向右。後ろ向きの運転台付き車（body を PI 回転）は左右が入れ替わる
@@ -252,6 +279,7 @@ function makeCar(kit: KindKit, kind: CarKind, role: Role, led: THREE.Material, l
   const lit = role === 'front' || role === 'rear';
   if (g.led) body.add(new THREE.Mesh(g.led, lit ? led : blankLed));
   if (g.led2) body.add(new THREE.Mesh(g.led2, lit && led2 ? led2 : blankLed));
+  addSideDisplays(body, trainKind, label, dest);
   if (kind === 'head') {
     // 前: 前照灯点灯（尾灯は付けない）、後: 尾灯点灯・前照灯は消灯色
     if (role === 'front' && g.head) body.add(new THREE.Mesh(g.head, shared.headOn));
@@ -288,10 +316,10 @@ function makeCar(kit: KindKit, kind: CarKind, role: Role, led: THREE.Material, l
 export const createTrainSet: CreateTrainSet = (kind, cars, renderer, opts = {}) => {
   const label = opts.label ?? TRAIN_KINDS[kind].service, dest = opts.dest ?? '堺';
   const shown = label === '特急サザン' ? 'サザン' : label, express = isExpress(label);
-  // 前面の表示器: 8300系・2300系は左に種別・右に行先の2面、10000系は赤地の種別と白地の行先の1面、それ以外は1面に種別と行先
-  const leds = (k: TrainKind) => k === 'commuter-new' || k === 'commuter-2300' || k === 'commuter-1000'
+  // 前面の表示器: 8300系・1000系・12000系・2300系は左に種別・右に行先の2面。
+  const leds = (k: TrainKind) => k === 'commuter-new' || k === 'commuter-2300' || k === 'commuter-1000' || k === 'southern-12000'
     ? { led: ledMatPart('type', shown, dest), led2: ledMatPart('dest', shown, dest) }
-    : k === 'southern-10000' || k === 'southern-12000' ? { led: ledSouthernMat(label, dest), led2: undefined } : { led: ledMat(shown, dest), led2: undefined };
+    : k === 'southern-10000' ? { led: ledSouthernMat(label, dest), led2: undefined } : { led: ledMat(shown, dest), led2: undefined };
   const units = opts.units?.length ? opts.units : defaultUnits(kind, Math.max(1, cars));
   const out: TrainCar[] = [];
   units.forEach((m, u) => {
@@ -301,7 +329,7 @@ export const createTrainSet: CreateTrainSet = (kind, cars, renderer, opts = {}) 
     formation(m).forEach((k, i) => {
       const lastCar = i === m - 1;
       const role: Role = i === 0 ? (first ? 'front' : 'jointFront') : lastCar ? (last ? 'rear' : 'jointRear') : 'mid';
-      const c = makeCar(kit, m === 1 ? 'head' : k, role, led, led2, express);
+      const c = makeCar(kit, m === 1 ? 'head' : k, role, led, led2, express, uk, shown, dest);
       out.push({ object: c.car, length: len, setDoors: c.setDoors });
     });
   });

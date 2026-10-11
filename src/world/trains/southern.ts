@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { GeoBatch, M, P } from '../batch';
 import {
-  Y0, adder, addEndWall, addSingleArm, addUnderfloor, capGeo, cv, faceSheet, roundRings, shellGeo, sideSheet, sweepBand,
+  Y0, adder, addEndWall, addSingleArm, addTaperedSkirt, addUnderfloor, capGeo, cv, faceSheet, roundRings, shellGeo, sideSheet, sweepBand,
   type CarKind, type CarParts, type Ring, type SheetMaps, type V2,
 } from './common';
 import { mergeLed } from './commuter';
@@ -117,15 +117,15 @@ export function paintSouthernFace(): SheetMaps {
   return s.textures();
 }
 
-/** 行先表示（種別 = 赤地に白、行先 = 白地に黒の1面）。label '特急サザン' は「サザン」と表示 */
+/** 行先表示（種別 = 赤地に白、行先 = 黒地に白の1面）。label '特急サザン' は「サザン」と表示 */
 export function ledSouthernTexture(label: string, dest: string): THREE.CanvasTexture {
   const [k, g] = cv(512, 128), shown = label === '特急サザン' ? 'サザン' : label;
   g.fillStyle = '#0b0b0b'; g.fillRect(0, 0, 512, 128);
   g.fillStyle = '#d4202a'; g.fillRect(8, 8, 200, 112);
-  g.fillStyle = '#f4f4f0'; g.fillRect(212, 8, 292, 112);
+  g.fillStyle = '#0b0b0b'; g.fillRect(212, 8, 292, 112);
   g.textAlign = 'center'; g.textBaseline = 'middle';
   g.fillStyle = '#ffffff'; g.font = `800 62px ${FONT}`; g.fillText(shown, 108, 66, 176);
-  g.fillStyle = '#16181c'; g.font = `700 66px ${FONT}`; g.fillText(dest, 358, 68, 268);
+  g.fillStyle = '#ffffff'; g.font = `700 66px ${FONT}`; g.fillText(dest, 358, 68, 268);
   const t = new THREE.CanvasTexture(k); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 
@@ -159,7 +159,7 @@ export function buildSouthernCar(kind: CarKind, Lb: number): CarParts {
     // ワイパー（前面窓の下）
     for (const sx of [-1, 1]) add(sx * .74, 2.2, z - .02, .4, .025, .025, 0x111111, 0, 0, sx * .3);
     // 裾（銀）・連結器・ホース
-    add(0, .8, zf + .02, 2.0, .38, .16, 0xc2c7ce, -.12);
+    addTaperedSkirt(b, zf, 1.30, 1.20, .66, .56, 0x8e9399);
     add(0, .88, zf - .13, .3, .24, .5, 0x22252a);
     for (const sx of [-.7, -.5, .5, .7]) b.add('paint', P.cyl, M(sx, 1.0, zf - .09, 0, .07, .3, .07), 0x1c1e21);
     marks = { l: mkL.geometry('l')!, r: mkR.geometry('l')! };

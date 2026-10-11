@@ -77,11 +77,13 @@ export function build12000Car(kind: CarKind, Lb: number): CarParts {
   const rings: Ring[] = [...(head ? roundRings(zf, R_S, 1) : [{ z: -hz, inset: 0 }]), { z: hz, inset: 0 }];
   const shell = shellGeo(HALF, rings, YTOP_S, Lb), b = new GeoBatch(), add = adder(b), lit = new GeoBatch();
   const glows: THREE.Vector3[] = [], marksL = new GeoBatch(), marksR = new GeoBatch();
-  let face: THREE.BufferGeometry | undefined, led: THREE.BufferGeometry | undefined;
+  let face: THREE.BufferGeometry | undefined, led: THREE.BufferGeometry | undefined, led2: THREE.BufferGeometry | undefined;
   if (head) {
     face = capGeo(HALF, { z: zf, inset: R_S }, YTOP_S, HW_S, -1);
     const z = zf - .01;
     led = mergeLed([[.82, 3.42, .58]], z - .05, .23);
+    led2 = mergeLed([[-.82, 3.42, .58]], z - .05, .23);
+    for (const sx of [-1, 1]) add(sx * .82, 3.42, z - .025, .64, .29, .03, 0x101215);
     add(0, 3.46, z - .03, .65, .24, .04, 0x252a2e);
     for (const sx of [-1, 1]) {
       add(sx * .20, 3.46, z - .06, .20, .16, .03, 0x89949b);
@@ -114,5 +116,5 @@ export function build12000Car(kind: CarKind, Lb: number): CarParts {
   for (const z of [-4, 4]) add(0, YTOP_S + .13, z, 1.7, .26, 2.8, 0xcdd1d6);
   add(0, YTOP_S + .03, 0, .4, .06, Lb - 1.4, 0xa9aeb4);
   if (head) addSingleArm(b, hz - 2.1, YTOP_S - .02);
-  return { shell, face, paint: b.geometry('paint')!, glass: undefined, led, head: lit.geometry('l') ?? undefined, marks: { l: marksL.geometry('l')!, r: marksR.geometry('l')! }, glows };
+  return { shell, face, paint: b.geometry('paint')!, glass: undefined, led, led2, head: lit.geometry('l') ?? undefined, marks: { l: marksL.geometry('l')!, r: marksR.geometry('l')! }, glows };
 }

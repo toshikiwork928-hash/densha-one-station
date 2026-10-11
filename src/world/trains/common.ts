@@ -193,15 +193,35 @@ export function capGeo(half: V2[], rg: Ring, ytop: number, hw: number, facing: -
   return g;
 }
 
+/** 種別幕の配色。行先部分は黒地に白文字。 */
+function serviceColors(label: string): { background: string; text: string; underline?: string } {
+  if (label === '回送') return { background: '#fff', text: '#ed2913' };
+  if (label === '空港急行') return { background: '#0b0b0b', text: '#fff', underline: '#ed2913' };
+  if (/ラピート/.test(label)) return { background: '#243caf', text: '#fff' };
+  if (/サザン|特急/.test(label)) return { background: '#e60018', text: '#fff' };
+  if (/準急/.test(label)) return { background: '#174fa6', text: '#fff' };
+  if (/急行|快速/.test(label)) return { background: '#ed2913', text: '#fff' };
+  return { background: '#0b0b0b', text: '#fff' };
+}
+
+function paintService(g: CanvasRenderingContext2D, label: string, w: number, h: number) {
+  const col = serviceColors(label);
+  const shown = /ラピート/.test(label) ? 'ラピート' : label === '特急サザン' ? 'サザン' : label;
+  g.fillStyle = col.background; g.fillRect(0, 0, w, h);
+  if (col.underline) { g.fillStyle = col.underline; g.fillRect(0, h * .86, w, h * .14); }
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = col.text; g.font = `800 ${Math.round(h * .72)}px ${FONT}`;
+  g.fillText(shown, w / 2, h * (col.underline ? .44 : .52), w * .90);
+}
+
 /** 行先表示（LED風）: 種別 + 行先 */
-export function ledTexture(label: string, dest: string): THREE.CanvasTexture {
+export function ledTexture(label: string, dest: string, typeFraction = .47): THREE.CanvasTexture {
   const [k, g] = cv(512, 128);
   g.fillStyle = '#0b0b0b'; g.fillRect(0, 0, 512, 128);
-  const col: Record<string, string> = { 普通: '#e8e8e8', 急行: '#ff5a3a', 空港急行: '#ff8a2a', 特急: '#ff4a6a', 特急ラピート: '#ff4a6a', 特急ラピートα: '#ff4a6a', 特急ラピートβ: '#ff4a6a', 特急サザン: '#ff3b3b', サザン: '#ff3b3b', 準急: '#5ad06a', 快速: '#ff9a2a' };
-  const kc = col[label] ?? '#ffb347';
+  const typeWidth = Math.round(512 * typeFraction), destWidth = 512 - typeWidth;
+  paintService(g, label, typeWidth, 128);
   g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillStyle = kc; g.font = `800 58px ${FONT}`; g.fillText(label, 78, 66, 140);
-  g.fillStyle = '#f4f4f0'; g.font = `700 64px ${FONT}`; g.fillText(dest, 330, 68, 330);
+  g.fillStyle = '#fff'; g.font = `700 92px ${FONT}`; g.fillText(dest, typeWidth + destWidth / 2, 66, destWidth - 20);
   // ドット感
   g.fillStyle = 'rgba(0,0,0,.45)';
   for (let x = 0; x < 512; x += 4) g.fillRect(x, 0, 1, 128);
@@ -212,10 +232,7 @@ export function ledTexture(label: string, dest: string): THREE.CanvasTexture {
 /** 種別だけを表示する表示器（8300系の前面左） */
 export function ledTypeTexture(label: string): THREE.CanvasTexture {
   const [k, g] = cv(256, 64);
-  g.fillStyle = '#0b0b0b'; g.fillRect(0, 0, 256, 64);
-  const col: Record<string, string> = { 普通: '#e8e8e8', 急行: '#ff5a3a', 空港急行: '#ff8a2a', 特急: '#ff4a6a', 特急ラピート: '#ff4a6a', 特急ラピートα: '#ff4a6a', 特急ラピートβ: '#ff4a6a', 特急サザン: '#ff3b3b', サザン: '#ff3b3b', 準急: '#5ad06a', 快速: '#ff9a2a' };
-  g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillStyle = col[label] ?? '#ffb347'; g.font = `800 46px ${FONT}`; g.fillText(label, 128, 34, 220);
+  paintService(g, label, 256, 64);
   g.fillStyle = 'rgba(0,0,0,.45)';
   for (let x = 0; x < 256; x += 4) g.fillRect(x, 0, 1, 64);
   for (let y = 0; y < 64; y += 4) g.fillRect(0, y, 256, 1);
