@@ -30,7 +30,7 @@ export function attachEnvSystem(ctx: GameContext): EnvSystem {
 
   // 既存の背景色は霧色と共有。スカイドームが上に描かれる
   const branchSide = seaSideOf(ctx.route);
-  const coastalEast = ctx.route.coastalLandmarks?.length ? new THREE.Vector2(-branchSide, 0) : undefined;
+  const coastalEast = ctx.route.coastalScenery !== false && ctx.route.coastalLandmarks?.length ? new THREE.Vector2(-branchSide, 0) : undefined;
   const sky = createSkyDome(scene, QUALITY_SPEC[settings.quality].cloudOctaves, ctx.route.theme, coastalEast); // 沿岸は東の低丘だけ、山岳線は従来の稜線
   const precip = createPrecip(scene);
   const shield = createWindshield();

@@ -17,7 +17,7 @@ import { YARD } from './wakayamashi';
 interface Parked { line: string; kind: TrainKind; units: number[]; dest: string; label: string; /** 先頭の位置（車止めの手前）[m] */ front: number; doorsRight?: boolean }
 const END = WK.depot.bump - 4;
 const PARKED: Parked[] = [
-  { line: 'k3', kind: 'commuter-old', units: [2], dest: '加太', label: '普通', front: WK.bump3 - 4, doorsRight: true },
+  { line: 'k3', kind: 'commuter-old', units: [2], dest: '加太', label: '普通', front: 12516, doorsRight: true },
   { line: 'd1', kind: 'commuter-old', units: [4], dest: '回送', label: '回送', front: END },
   { line: 'd1', kind: 'commuter-new', units: [4], dest: '回送', label: '回送', front: END - 84 },
   { line: 'd2', kind: 'commuter-1000', units: [6], dest: '回送', label: '回送', front: END - 6 },

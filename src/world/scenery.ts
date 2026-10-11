@@ -282,7 +282,7 @@ export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot
       const big = rnd() < .35;
       const model = pick(big ? M.trees : M.bushes), k = (big ? KIT_SCALE.trees * .8 : KIT_SCALE.bushes) * (.7 + rnd() * .4);
       const tl = latOf(side, 8.6 + rnd() * 1.4);
-      if (level(s, tl)) put(model, s, tl, rnd() * 6, k);
+      if (level(s, tl) && !T.riverNear(s, tl, 4)) put(model, s, tl, rnd() * 6, k);
     }
   }
   // 街並み側が決めた木（庭木・屋敷林・山林）

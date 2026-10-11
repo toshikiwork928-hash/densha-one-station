@@ -245,7 +245,7 @@ export function gridAlong(track: Track, s0: number, s1: number, step: number, co
  * 地面が水面より高い所は地面が面を隠すので、岸の線は地面の形（溝）で決まる
  */
 export function waterAlong(track: Track, s0: number, s1: number, step: number, cols: (s: number) => [number, number][],
-  level: number, mat: THREE.Material): THREE.Mesh | null {
+  level: number, mat: THREE.Material, wetMask?: (s: number, lat: number) => boolean): THREE.Mesh | null {
   const n = Math.max(2, Math.ceil((s1 - s0) / step) + 1);
   const rows: { x: number; z: number; r: [number, number][] }[] = [];
   for (let i = 0; i < n; i++) { const s = Math.min(s0 + i * step, s1), t = track.trackAt(s); rows.push({ x: t.x, z: t.z, r: cols(s) }); }
@@ -254,6 +254,14 @@ export function waterAlong(track: Track, s0: number, s1: number, step: number, c
   for (let i = 0; i < n - 1; i++) {
     const [rx0, rz0] = rxz(i), [rx1, rz1] = rxz(i + 1);
     for (let j = 1; j < m - 2; j++) { // 両端の列（遠方の縁）は水にしない
+      const sa = Math.min(s0 + i * step, s1);
+      const sb = Math.min(s0 + (i + 1) * step, s1);
+      if (wetMask && (
+        !wetMask(sa, rows[i].r[j][0]) ||
+        !wetMask(sa, rows[i].r[j + 1][0]) ||
+        !wetMask(sb, rows[i + 1].r[j][0]) ||
+        !wetMask(sb, rows[i + 1].r[j + 1][0])
+      )) continue;
       const lo = Math.min(rows[i].r[j][1], rows[i].r[j + 1][1], rows[i + 1].r[j][1], rows[i + 1].r[j + 1][1]);
       if (lo >= level) continue;
       const A = rows[i], B = rows[i + 1], k = pos.length / 3;
@@ -355,7 +363,7 @@ export function buildTerrain(ctx: GameContext): Terrain {
         out.lerp(mud, Math.min(1, dip[j] / 3) * .85); // 岸の斜面は土の色
       });
       g.name = 'ground'; scene.add(g);
-      const w = waterAlong(track, p0, p1, 5, denseCols([]), waterY, river);
+      const w = waterAlong(track, p0, p1, 5, denseCols([]), waterY, river, (s, lat) => T.riverNear(s, lat));
       if (w) { w.name = 'river'; w.userData.noShadow = true; scene.add(w); }
     }
   };

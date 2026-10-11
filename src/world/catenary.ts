@@ -27,6 +27,7 @@ type BeamStyle = 'truss' | 'pipe' | 'h' | 'lattice';
 interface Support { s: number; i: number; kind: Kind; stg: number; mw: number; pl: number; pr: number }
 interface Off { dl: number; dy: number }
 interface Run {
+  hidden?: (s: number) => boolean;
   /** 線路中心の横位置（偏位を含まない） */
   lat(s: number): number;
   /** 引留め付近の逃がし（横・上） */
@@ -328,6 +329,7 @@ export function buildCatenary(ctx: GameContext): void {
   const zero: Off = { dl: 0, dy: 0 };
   const OVERLAPS = [2050, 6650, 9000].filter(o => o > S0 + 200 && o < S1 - 200);
   for (const c of route.tracks) {
+    const hidden = (s: number) => route.hiddenTracks?.some(h => h.track === c && s >= h.from && s <= h.to) ?? false;
     const side = c < MID ? -1 : 1;
     const cuts = OVERLAPS.map(o => supIdx(o)).filter(k => k > 1 && k < sups.length - 2);
     let start = 0, prevCut = -1;
@@ -340,6 +342,7 @@ export function buildCatenary(ctx: GameContext): void {
       const begA = prevCut >= 0 ? sups[prevCut].s : -Infinity, begB = prevCut >= 0 ? sups[prevCut + 1].s : -Infinity;
       runs.push({
         lat: (s) => c + islandOffset(route, c, s), s0: a, s1: bS,
+        hidden,
         off: (s) => {
           if (s > endA) { const u = (s - endA) / (endB - endA); return { dl: side * .38 * u, dy: .3 * u }; }
           if (s < begB) { const u = (begB - s) / (begB - begA); return { dl: -side * .38 * u, dy: .3 * u }; }
@@ -452,7 +455,7 @@ export function buildCatenary(ctx: GameContext): void {
   for (const sp of sups) {
     const b = chunks.at(sp.s), F = frame(sp.s);
     b.parent = F;
-    const present = runs.filter(r => sp.s >= r.s0 - .01 && sp.s <= r.s1 + .01).map(r => wireAt(r, sp)).sort((p, q) => p.lat - q.lat);
+    const present = runs.filter(r => sp.s >= r.s0 - .01 && sp.s <= r.s1 + .01 && !r.hidden?.(sp.s)).map(r => wireAt(r, sp)).sort((p, q) => p.lat - q.lat);
     // 近い電線（オーバーラップ・分岐器の並走）をまとめる
     const groups: WirePt[][] = [];
     for (const w of present) {
@@ -517,6 +520,7 @@ export function buildCatenary(ctx: GameContext): void {
       let pc: THREE.Vector3 | null = null, pm: THREE.Vector3 | null = null;
       for (let k = 0; k <= n; k++) {
         const u = k / n, s = A.s + span * u, o = r.off(s);
+        if (r.hidden?.(s)) { pc = pm = null; continue; }
         const chord = T.curvature(s) * u * (1 - u) * span * span / 2; // 弦（曲線の内側へ寄る）
         const lat = r.lat(s) + A.stg + (B.stg - A.stg) * u + chord + o.dl;
         const c = track.at(s, lat, CW + o.dy), m = track.at(s, lat, A.mw + (B.mw - A.mw) * u + o.dy - sag * 4 * u * (1 - u));

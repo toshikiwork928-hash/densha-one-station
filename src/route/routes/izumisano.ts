@@ -64,7 +64,6 @@ const crossings = [
   { id: 'kaizuka-north', s: 2031, roadWidth: 7 },
   { id: 'kaizuka-residential', s: 2226, roadWidth: 5 },
   { id: 'kaizuka-approach', s: 2349, roadWidth: 5 },
-  { id: 'kaizuka-south', s: 3142, roadWidth: 7 },
   { id: 'nishikinohama-south', s: 4740, roadWidth: 5 },
   { id: 'tsuruhara-south', s: 5563, roadWidth: 5 },
   { id: 'iharanosato-north', s: 5763, roadWidth: 5 },
@@ -91,11 +90,20 @@ export const izumisano: Route = {
   segments: [
     { type: 'straight', length: 1250 }, { type: 'arc', radius: 300 / (.28449), angle: .28449, turn: 'L' },
     { type: 'straight', length: 1480 }, { type: 'arc', radius: 120 / (.05934), angle: .05934, turn: 'L' },
-    { type: 'straight', length: 1600 }, { type: 'arc', radius: 120 / (.06109), angle: .06109, turn: 'R' },
+    { type: 'straight', length: 400 },
+    { type: 'arc', radius: 1050, angle: 550 / 1050, turn: 'L' },
+    { type: 'arc', radius: 650, angle: 300 / 650, turn: 'R' },
+    { type: 'straight', length: 350 },
+    { type: 'arc', radius: 120 / (.06109), angle: .06109, turn: 'R' },
     { type: 'straight', length: 2080 }, { type: 'arc', radius: 200 / (.1885), angle: .1885, turn: 'R' },
     { type: 'straight', length: 1650 },
   ],
-  elevation0: 9, gradients: [{ from: 500, to: 860, permil: -25 }, { from: 7160, to: 7520, permil: 25 }],
+  elevation0: 9, gradients: [
+    { from: 500, to: 860, permil: -25 },
+    { from: 2990, to: 3230, permil: 25 },
+    { from: 4160, to: 4400, permil: -25 },
+    { from: 7160, to: 7520, permil: 25 },
+  ],
   limits: [{ from: 1250, to: 1670, kmh: 85, label: '曲線制限' }, { from: 6950, to: 7270, kmh: 85, label: '曲線制限' }],
   stations,
   services: [
@@ -111,9 +119,17 @@ export const izumisano: Route = {
   deckJoin: [{ from: 7650, to: 8600 }],
   scenery: { cityZones: [{ from: -Infinity, to: 650 }, { from: 1150, to: Infinity }] },
   oncoming: stopScenes(stations, STOP_SCENES), signals, crossings,
-  // 橋2か所は OSM の水面が線路を横切る所（汎用の桁橋。川の名前（1700 の方）・橋の構造・高さ・長さは不明）。
-  // 範囲は OSM の水面が線路上で占める s（1697〜1717、5062〜5080）に前後 20m 強を足した
-  structures: [{ kind: 'viaduct', from: -400, to: 860 }, { kind: 'bridge', from: 1675, to: 1740 }, { kind: 'bridge', from: 5040, to: 5100 }, { kind: 'viaduct', from: 7160, to: 8600 }],
+  // 貝塚〜二色浜は OSM の高架区間・近木川交差と前面展望を基にした概形。
+  // 高架高6m・取り付き勾配25‰・橋長45mはゲーム用の近似。
+  structures: [
+    { kind: 'viaduct', from: -400, to: 860 },
+    { kind: 'bridge', from: 1675, to: 1740 },
+    { kind: 'viaduct', from: 2990, to: 4080 },
+    { kind: 'bridge', from: 4080, to: 4125 },
+    { kind: 'viaduct', from: 4125, to: 4400 },
+    { kind: 'bridge', from: 5040, to: 5100 },
+    { kind: 'viaduct', from: 7160, to: 8600 },
+  ],
   extraTracks: IZUMISANO_EXTRA,
   terminalApproach: false,
 };

@@ -186,7 +186,7 @@ const services: ServiceSpec[] = [
 export const izumisanoMisaki: Route = {
   id: 'izumisano-misaki', lineId: 'shiokaze', theme: 'coast', name: '南海本線 泉佐野 → みさき公園',
   lineLimit: 90, startS: START, startClock: 10 * 3600, trainLength: 120, seaSide: 1,
-  segments, elevation0: 9, gradients,
+  segments, elevation0: 9, gradients, groundFollowsTrack: true,
   limits: curveLimits(),
   stations, services,
   prevName: '井原里', nextName: '孝子', signs: stations.slice(1).flatMap(st => approachSigns(st.stopS)),
