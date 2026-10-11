@@ -40,6 +40,27 @@ export interface OsmData {
   landmarks: (string | number)[][];
 }
 
+export type WaterMask = (s: number, lat: number, margin?: number) => boolean;
+
+export function waterMaskOf(data: OsmData | null): WaterMask | null {
+  const areas = data?.areas.filter(a => a[0] === 'water')
+    .map(a => (a[1] as number[]).slice()) ?? [];
+  if (!areas.length) return null;
+  return (s, lat, margin = 0) => areas.some(p => {
+    let inside = false, near = false;
+    for (let i = 0, j = p.length - 2; i < p.length; j = i, i += 2) {
+      const dx = p[j] - p[i], dy = p[j + 1] - p[i + 1];
+      const t = Math.max(0, Math.min(1,
+        ((s - p[i]) * dx + (lat - p[i + 1]) * dy) /
+        (dx * dx + dy * dy || 1)));
+      if (Math.hypot(s - p[i] - t * dx, lat - p[i + 1] - t * dy) <= margin) near = true;
+      if ((p[i + 1] > lat) !== (p[j + 1] > lat) &&
+          s < dx * (lat - p[i + 1]) / dy + p[i]) inside = !inside;
+    }
+    return inside || near;
+  });
+}
+
 /** データと、その座標のもとになったコース。データ本体は選んだコースが必要とする区間だけ dynamic import で読む（loadOsmFor） */
 const DATASETS: { id: string; base: Route; load: () => Promise<OsmData>; /** 水面だけの手作りデータ（建物・道路なし）。街並みは作らず、川の溝（橋の下）にだけ使う */ waterOnly?: boolean }[] = [
   { id: 'namba', base: namba, load: async () => (await import('../data/osm/namba.json')).default as unknown as OsmData },

@@ -7,6 +7,7 @@ import { buildSceneryBatches, type SceneryItem } from './scenery-batch';
 import { tramBlocks } from './hankai-tram';
 import { getTerrain } from './terrain';
 import { hasOsmScenery, osmCoastFor } from './osm-town';
+import type { WaterMask } from './osm-town';
 import { isMountain } from './mountain-terrain';
 import type { TreeSpot } from './town-jp';
 import { ChunkedBatch, M, P } from './batch';
@@ -220,7 +221,7 @@ export function prepareSceneryModels(loaded: LoadedAssets): SceneryModels {
 }
 
 // 沿線に配置。各カテゴリはモデル配列からランダムに選ぶ
-export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot[] = []): void {
+export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot[] = [], water: WaterMask | null = null): void {
   const { rng: rnd, route, track: { trackAt } } = ctx, T = getTerrain(ctx);
   const TS0 = route.extent.from, TS1 = route.extent.to;
   const L0 = Math.min(...route.tracks), L1 = Math.max(...route.tracks);
@@ -282,7 +283,8 @@ export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot
       const big = rnd() < .35;
       const model = pick(big ? M.trees : M.bushes), k = (big ? KIT_SCALE.trees * .8 : KIT_SCALE.bushes) * (.7 + rnd() * .4);
       const tl = latOf(side, 8.6 + rnd() * 1.4);
-      if (level(s, tl) && !T.riverNear(s, tl, 4)) put(model, s, tl, rnd() * 6, k);
+      const radius = Math.hypot(model.size.x, model.size.z) * k / 2;
+      if (level(s, tl) && !T.riverNear(s, tl, 4) && !water?.(s, tl, radius)) put(model, s, tl, rnd() * 6, k);
     }
   }
   // 街並み側が決めた木（庭木・屋敷林・山林）

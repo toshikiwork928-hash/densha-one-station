@@ -34,6 +34,7 @@ import { buildWakayamadaigakumae } from './wakayamadaigakumae';
 import { downFrame } from './down-frame';
 import { buildIzumisanoAirport } from './izumisano-airport';
 import { buildHagurazakiDepot, buildHagurazakiDepotTrains } from './hagurazaki-depot';
+import { osmFor, waterMaskOf } from './osm-town';
 
 export interface World {
   oncoming: OncomingSystem;
@@ -58,6 +59,7 @@ export function buildWorld(ctx: GameContext): World {
   buildStations(ctx);
   buildEndBlock(ctx);
   const town = buildTown(ctx); // 独自乱数（ctx.rng 不使用）
+  const water = waterMaskOf(osmFor(ctx.route));
   buildSignals(ctx); // [A] 閉そく信号機（rng 不使用）
   const oncoming = createOncoming(ctx);
   buildCrossings(ctx, oncoming);
@@ -96,7 +98,7 @@ export function buildWorld(ctx: GameContext): World {
     player,
     async loadAssets() {
       const { loaded, failed, total } = await loadAllAssets((done, n) => ctx.events.emit('assetsProgress', { done, total: n }));
-      placeScenery(ctx, prepareSceneryModels(loaded), town.trees);
+      placeScenery(ctx, prepareSceneryModels(loaded), town.trees, water);
       if (failed) console.warn(`素材 ${failed}/${total} 件の読込に失敗。簡易モデルで代替`);
       return failed;
     },
