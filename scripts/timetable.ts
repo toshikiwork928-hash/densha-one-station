@@ -253,9 +253,9 @@ export const IT_UP: Record<Id, ServiceSpec['timetable']> = ${body(up)};
   process.exit(0);
 }
 // 時間帯ごとの普通の時刻表（待避で停車時間が変わる）。全コースの普通（時間帯のパターンを持つもの）
-{
+function writeLocal(): void {
   const lines: string[] = [];
-  for (const route of [shiokaze, shiokazeUp, kishiwadaUp, izumisano, izumisanoUp, throughUp, through, namba, nambaUp]) {
+  for (const route of [shiokaze, shiokazeUp, kishiwada, kishiwadaUp, izumisano, izumisanoUp, throughUp, through, namba, nambaUp]) {
     const local = route.services?.find(v => v.id === 'local');
     if (!local?.waitsByTime) continue;
     const byTod: string[] = [];
@@ -304,6 +304,9 @@ export const NB_UP: Record<Id, ServiceSpec['timetable']> = {
 };
 `);
 }
+// --local-only は時間帯ごとの普通の時刻表（待避の変更を反映）だけ更新（2026-11-05 の実ダイヤの待避）
+if (process.argv.includes('--local-only')) { writeLocal(); writeSouthLocal(); process.exit(0); }
+writeLocal();
 if (nambaOnly) process.exit(0);
 const dn = table(shiokaze), upT = table(shiokazeUp);
 const body = (r: Record<string, string>) => `{

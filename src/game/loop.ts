@@ -298,8 +298,8 @@ export function createGame(ctx: GameContext): Game {
   function syncClock(e?: { timeOfDay: keyof typeof START_CLOCK }) {
     const tod = e?.timeOfDay ?? ctx.envState.timeOfDay; // 環境側より先に呼ばれるので payload を優先
     const c = START_CLOCK[tod] ?? START_CLOCK.noon;
-    if ((c === route.startClock && route.timeOfDay === tod) || (st.state !== 'title' && st.state !== 'result')) return;
-    route.startClock = c;
+    if (route.timeOfDay === tod || (st.state !== 'title' && st.state !== 'result')) return;
+    route.startClock = c; // 実ダイヤのあるコースは reset（resetState → applyRealDiagram）が実際の列車の発車時刻にする
     route.timeOfDay = tod;
     if (st.state === 'title') reset(); // 時刻表・待避を時間帯のものにして、HUD・時刻表・行路表を描き直す
   }

@@ -1,4 +1,5 @@
 // 時間帯ごとのダイヤのパターン（平日）。普通の待避・待ち合わせと、複々線の走行中の追い越しを駅名で指定する（2026-10-07 のユーザー指定）。
+// 2026-11-05 から、南海本線の待避は実ダイヤ（route/real-diagram.ts の realWaitsOf）を使う。下の駅名の指定は、実ダイヤの無いコースと、走行中の追い越し（passes）にだけ使う。
 //   昼（デイタイム）: 和歌山方面の普通は高石で特急の通過待ち・泉大津で空港急行と接続。なんば方面は泉大津で空港急行と接続・高石で特急の通過待ち
 //   朝ラッシュ: なんば行きの普通は岸和田を出て泉大津で急行、浜寺公園で急行と特急に抜かれ、粉浜〜岸里玉出で後続の優等に抜かれる。和歌山方面は粉浜〜住吉大社で抜かれ（岸里玉出の前後は下りが1線のため）、堺1番線で急行を待ち合わせ、浜寺公園で急行の通過待ち、高石で特急の通過待ち、泉大津で急行と接続
 //   夕ラッシュ: 和歌山方面は粉浜あたりで抜かれ、浜寺公園で急行の通過待ち、泉大津で特急の通過待ちと急行の待ち合わせ。
@@ -9,6 +10,7 @@ import { serviceOf } from './service';
 import type { Route, RunPass, ServiceId, TimeOfDay, Wait } from './types';
 import { LOCAL_TT } from './routes/local-timetables';
 import { SOUTH_LOCAL_TT } from './routes/south-local-timetables';
+import { realWaitsOf } from './real-diagram';
 
 const TIMES: TimeOfDay[] = ['morning', 'noon', 'evening', 'night'];
 type WaitDef = [station: string, passedBy: ServiceId];
@@ -29,7 +31,10 @@ export function setLocalPatterns(route: Route, p: { waits?: Partial<Record<TimeO
   const onlySouthern = hasSouthern && !route.services!.some(v => v.id === 'limited');
   const hasAirport = route.services!.some(v => v.id === 'airport');
   // 急行も同じく急行と空港急行が交互（パターンで空港急行と明示したものはそのまま、次は急行）
-  local.waitsByTime = Object.fromEntries(TIMES.map(t => {
+  // 実ダイヤのあるコースは、実際の代表の普通の待避（相手の種別もそのまま。2026-11-05 のユーザー指定で、下の駅名の指定に代えて使う）
+  const real = realWaitsOf(route.id);
+  if (real) local.waitsByTime = Object.fromEntries(TIMES.map(t => [t, (real[t] ?? []).map(([n, by]): Wait => ({ station: at(n), passedBy: by }))]));
+  else local.waitsByTime = Object.fromEntries(TIMES.map(t => {
     let k = 0, kk = 0;
     return [t, (p.waits?.[t] ?? []).map(([n, by]): Wait => {
       let id: ServiceId = by;

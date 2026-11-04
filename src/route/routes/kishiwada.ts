@@ -177,4 +177,5 @@ for (const v of kishiwadaUp.services!) {
 setDestinations(kishiwadaUp.services!, 'namba');
 
 // 時間帯ごとの普通の待避（route/day-patterns.ts）。岸和田 → 泉大津は泉大津が終着（到着前の放送で案内）
+setLocalPatterns(kishiwada, {}); // 待避は実ダイヤ
 setLocalPatterns(kishiwadaUp, { waits: within(kishiwadaUp, NAMBA_WAITS) });

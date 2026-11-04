@@ -10,6 +10,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { ROUTES } from '../src/route/index';
 import { applyService } from '../src/route/service';
 import { START_CLOCK } from '../src/core/config';
+import { realDayOf } from '../src/route/real-diagram';
 import type { Route, TimeOfDay } from '../src/route/types';
 
 (globalThis as any).window = {};
@@ -188,11 +189,17 @@ async function main() {
       for (const tod of timeOfDays) {
         const r = structuredClone(r0); r.timeOfDay = tod;
         let courseMax = 0;
+        const durOf: Record<string, number> = {};
         for (const sv of r0.services ?? []) {
           const rs = structuredClone(r0); rs.timeOfDay = tod; applyService(rs, sv.id);
-          courseMax = Math.max(courseMax, ...rs.stations.map(s => s.scheduledArrival));
+          durOf[sv.id] = Math.max(...rs.stations.map(s => s.scheduledArrival));
+          courseMax = Math.max(courseMax, durOf[sv.id]);
         }
-        const start = START_CLOCK[tod], winStart = start - 600, winEnd = start + courseMax + 600;
+        // 自列車は実ダイヤの列車の発車時刻から走る（route/real-diagram.ts）。その列車たちが走る時間（発車〜到着。ゲームの方が長ければゲームの所要時間）の前後10分。
+        // 実ダイヤの無いコースは、時間帯の開始時刻から最長の所要時間まで
+        const real = realDayOf(r, tod)?.trains ?? [];
+        const winStart = real.length ? Math.min(...real.map(e => e.start)) - 600 : START_CLOCK[tod] - 600;
+        const winEnd = real.length ? Math.max(...real.map(e => e.start + Math.max(e.arr, durOf[e.svc] ?? 0))) + 600 : START_CLOCK[tod] + courseMax + 600;
         const toS = timetableSOf(r, K), routeMin = Math.min(r.extent.from, r.extent.to), routeMax = Math.max(r.extent.from, r.extent.to);
         const result: TimedTrain[] = [];
         for (const tr of oncoming) {

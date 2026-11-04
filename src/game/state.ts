@@ -2,6 +2,7 @@
 import { NOTCH_INITIAL } from '../core/config';
 import type { SignalAspect } from '../core/events';
 import { applyService, selectableServices } from '../route/service';
+import { applyRealDiagram, realDayOf, realTrainFor } from '../route/real-diagram';
 import { applyPlayerVehicles } from '../route/player-vehicles';
 import type { Route, ServiceId, TrainKind } from '../route/types';
 import type { TrainState } from '../sim/train';
@@ -145,6 +146,11 @@ export function stagesOf(route: Route): Stage[] {
     }
     list.push({ id: 'all', from: a, to: b, label: '全線通し' });
   }
+  // 実ダイヤのあるコースは、その時間帯に実際の列車が走る区間だけ（例: 日中の和歌山港行の急行は無いので、急行は和歌山市までの区間だけ）
+  if (realDayOf(route)) {
+    const real = list.filter(s => realTrainFor(route, route.activeServiceId as ServiceId, s.from, s.to));
+    if (real.length) return real;
+  }
   return list;
 }
 
@@ -196,6 +202,7 @@ export function resetState(st: GameState, route: Route): void {
   if (stage) sel.stageId = stage.id; // 種別により存在しない区間（例: 特急の全線通し）は先頭区間へ
   const from = stage?.from ?? 0, end = stage?.to ?? route.stations.length - 1;
   applyDestinations(route, end);
+  applyRealDiagram(route, sel.service, from, end); // 開始時刻と時刻表を実際の列車に合わせる
   const s0 = from === 0 ? route.startS : route.stations[from].stopS;
   const late = stage ? lateStartFor(stage, sel.mode) : 0;
   Object.assign(st, {

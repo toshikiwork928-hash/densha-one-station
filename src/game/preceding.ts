@@ -63,13 +63,13 @@ export function buildPrecedingKeys(route: Route, service?: ServiceId): Preceding
   // 反対種別の待避で普通の時刻が伸びても、目の前の本線上で競合させない。
   const player = route.services?.find(x => x.id === service);
   const waits = local?.waits?.filter(w => !!service && sameClass(w.passedBy, service) && w.station > 0 && w.station < route.stations.length - 1) ?? [];
-  // 待避駅より手前で自列車も停車する駅（普通と同じ本線に停車）では、普通の発車を自列車の到着より80秒以上前にして、目の前で詰まらせない。
-  // 待避駅が無い（終着まで先着する）ときは全線で、自列車が着く・通過する80秒前までに普通を発車させておく（途中で追いつかない）
+  // 待避駅より手前で自列車も停車する駅（普通と同じ本線に停車）では、普通の発車を自列車の到着より110秒以上前にして、目の前で詰まらせない（2026-11-05 に 80 → 110 秒。実ダイヤの待避で、自列車が停まる駅のすぐ先に待避駅がある所で、自動運転の早着でも停止信号に当たらない）。
+  // 待避駅が無い（終着まで先着する）ときは全線で、自列車が着く・通過する110秒前までに普通を発車させておく（途中で追いつかない）
   const lastWait = waits.length ? Math.max(...waits.map(w => w.station)) : route.stations.length;
   const nLast = route.stations.length - 1;
   const clearAdvance = Math.max(0, ...Object.keys(player?.timetable ?? {}).map(Number).filter(i => i > 0 && i < lastWait && local?.stops.includes(i) && (depT[i] ?? arrT[i]) != null && player?.timetable[i])
     // 終着駅は着いた時刻（そこで本線から外れる）、途中駅は発車時刻
-    .map(i => (i === nLast ? arrT[i] + 30 : depT[i]) - (player!.timetable[i].arr - 80)));
+    .map(i => (i === nLast ? arrT[i] + 30 : depT[i]) - (player!.timetable[i].arr - 110)));
   const advance = Math.max(clearAdvance, ...waits.map(w => (arrT[w.station] ?? 0) - (player?.timetable[w.station]?.arr ?? 0) + 60), 0);
   if (advance > 0) {
     for (const key of keys) if (key.t > -1e5) key.t -= advance;

@@ -18,7 +18,8 @@
     "crossings:south": "esbuild scripts/build-crossings.ts --bundle --platform=node --format=esm --external:three --outfile=node_modules/.cache/build-crossings.mjs --log-level=warning --loader:.css=empty && node node_modules/.cache/build-crossings.mjs",
     "osm:scenery": "esbuild scripts/osm-scenery.ts --bundle --platform=node --format=esm --external:three --outfile=node_modules/.cache/osm-scenery.mjs --log-level=warning --loader:.css=empty && node node_modules/.cache/osm-scenery.mjs",
     "geometry:south": "esbuild scripts/route-geometry.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/route-geometry.mjs --log-level=warning && node node_modules/.cache/route-geometry.mjs --chain=south",
-    "geometry:misaki-wakayamako": "esbuild scripts/slice-south-geometry.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/slice-south-geometry.mjs --log-level=warning && node node_modules/.cache/slice-south-geometry.mjs"
+    "geometry:misaki-wakayamako": "esbuild scripts/slice-south-geometry.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/slice-south-geometry.mjs --log-level=warning && node node_modules/.cache/slice-south-geometry.mjs",
+    "real:diagram": "esbuild scripts/real-diagram.ts --bundle --platform=node --format=esm --external:three --outfile=node_modules/.cache/real-diagram.mjs --log-level=warning --loader:.css=empty && node node_modules/.cache/real-diagram.mjs"
   },
   "dependencies": {
     "three": "^0.170.0"

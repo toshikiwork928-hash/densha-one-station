@@ -165,4 +165,5 @@ for (const v of izumisanoUp.services!) {
   }
 }
 setDestinations(izumisanoUp.services!, 'namba');
+setLocalPatterns(izumisano, {}); // 待避は実ダイヤ（終着の泉佐野の待ち合わせの放送）
 setLocalPatterns(izumisanoUp, { waits: within(izumisanoUp, NAMBA_WAITS) });

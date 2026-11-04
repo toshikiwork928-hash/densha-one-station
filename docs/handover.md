@@ -97,8 +97,15 @@ scripts/           検証・データ生成（Node で esbuild して実行）
 - **時刻表**: `npm run timetable` が種別ごとの自動運転から到着・通過時刻を計算して `routes/*-timetable.ts` を作る（走行時間 +5%）
 - 急行（和歌山市方面）は春木を通過し、空港急行は春木に停車する。春木の修正後は `npm run timetable -- --kishiwada-through-express-only` で泉大津〜岸和田・堺〜岸和田の上下急行だけ再計算する。
 - TOPの種別ボタン、キーボード・ゲームパッド、保存済み選択の復元は `selectableServices` を共有。特急は実際の停車駅をコース両端とする場合だけ選べる。泉大津発着のサザン・ラピートβは選べない。待避・対向列車用の種別定義は残す。
-- **時間帯**: 開始時刻は 朝 7:30・日中 10:00・夕 17:30・夜 21:30（`core/config.ts` の `START_CLOCK`）
-- **自列車側の待避・待ち合わせ・接続・走行中の追い越し**（`route/day-patterns.ts`）: **ユーザーが指定したもの。変更しないこと**（不具合の修正で位置を変えるときもユーザーに確認する）
+- **時間帯**: 基準の開始時刻は 朝 7:30・日中 10:00・夕 17:30・夜 21:30（`core/config.ts` の `START_CLOCK`）。南海本線の14コースは、実ダイヤの列車の発車時刻から始まる（下の「実ダイヤの自列車」）
+- **実ダイヤの自列車**（2026-11-05、`route/real-diagram.ts`。ユーザーが決めた3点は docs/real-timetable-plan.md 7.0）
+  - データ: `src/data/real-diagram.json`。`npm run real:diagram` が `docs/real-timetable/*.json` の代表列車（開始時刻の前後60分）から作る。鉄道運用Hub（CC BY 4.0）
+  - 選べる種別・区間: その時間帯に実際の列車がある種別だけ（`selectableServices`）、区間も実際に走る区間だけ（`stagesOf`）。例: 日中の急行、夜のラピートβ、普通の和歌山港行は選べない
+  - 開始時刻: `resetState` → `applyRealDiagram` が、選んだ区間を走る実際の列車の発車時刻を `route.startClock` にする。対向列車は `startClock + t` で動くので実ダイヤと合う
+  - 時刻表: 最高速度は変えず、駅の時刻（`scheduledArrival`・`dwell`）を実際の発車に合わせる。待避駅は早く着いて待つ、ほかの駅は到着を遅らせる、ゲームの方が遅い所はゲームの時刻のまま。終着の到着は Hub に無いので推定。種別の `timetable` は元の値（自動運転の最速 +5%）のまま残し、先行の仮想の普通（`game/preceding.ts`）はこちらを基準にする（自列車が早く走っても追いつかない）
+  - 普通の待避: 実際の代表の普通の待避（`realWaitsOf`。始発駅の待ち・待避線の無い駅・推定の通過待ちは除く）。`setLocalPatterns` の駅名の指定は、実ダイヤの無いコースと走行中の追い越しだけに使う。普通の時間帯の時刻表は `npm run timetable -- --local-only` で作り直す
+  - 対向列車: `npm run oncoming:meets -- --timetable` の収録範囲は、実際の列車たちが走る時間（発車〜到着）の前後10分。実ダイヤを作り直したら、`real:diagram` → `timetable -- --local-only` → `oncoming:meets -- --timetable` → `verify:oncoming`・`verify:routes` の順に流す
+- **自列車側の待避・待ち合わせ・接続・走行中の追い越し**（`route/day-patterns.ts`）: 2026-11-05 にユーザーの指定で、南海本線の待避は実ダイヤ（上）に置き換えた。走行中の追い越し（passes）と実ダイヤの無いコースの指定は、ユーザーが指定したもの。変えるときはユーザーに確認する
 - 普通は待避線のある駅で、待避・待ち合わせがある時だけ待避線に入る。ただし待避線の外側にしかホームがない駅（浜寺公園の堺方面）は常に待避線
 - 自列車を抜く列車（`game/overtake.ts` + `world/overtaking.ts`）、複々線の走行中の追い越し（`world/run-pass.ts`、描画だけ）、先行列車（`game/preceding.ts`）
 - **対向列車**（`world/oncoming.ts`）
@@ -110,8 +117,9 @@ scripts/           検証・データ生成（Node で esbuild して実行）
   - 単線の高野線は `game/meet.ts` の交換駅・出発信号・構内進入完了までの占有を維持する。桜ヶ丘は従来の1編成。両者も `verify:oncoming` の検証対象。
   - 泉佐野以南の4コース（`izumisano-misaki` と上り、`misaki-wakayamako` と上り）も同じ `oncoming-timetable.json` を使う。更新手順: (1) `node_modules/.cache/unyohub` に Hub の原データがあるか確認（無ければ `npm run oncoming:meets -- --timetable --refresh` で取得。間隔・User-Agent は既存の仕組み） (2) `npm run timetable -- --south-only` と `-- --misaki-wakayamako-only` で自列車の時刻表を作る（コースの最長所要時間が対向列車の収録範囲を決めるので、先に流す） (3) `npm run oncoming:meets -- --timetable` (4) `npm run verify:oncoming`。4コースの駅の距離はコースの営業キロ（スクリプトの KMS）で、既存コースの距離（KM）とは別。和歌山港線内の対向列車は出さない（上下の線を重ねて描く区間のため）。詳細は spec-south-courses.md の14・15章、調査は south-timetable-research.md。
   - 泉佐野以南の自列車のダイヤ: 実際の所要時間の下限は `scripts/timetable.ts` の `REAL_FLOORS`（Hub の平日時刻表の中央値）。尾崎の待ち合わせは `izumisano-misaki.ts` の `OZAKI_WAITS_*`、時間帯ごとの普通の時刻表は `south-local-timetables.ts`（生成）。
+  - 対向列車どうしの間隔（300m）は、後続が先行の最後尾の位置で同じ線を通り、いまも同じ線にいるときに保つ（`sameLaneAhead`。2026-11-05 に、岸和田の島式ホームのように線路が横へ振れる所で、分かれる後続・止まっている後続を取り違えないよう直した）。コースの始発駅の番線（泉佐野の T1 など）から区間外へ出る列車は、その線のまま
   - 開発用: `window.__oncomingDebug()` で列車番号・種別・横位置・停車駅・安全上の遅れ秒を確認できる。一時停止中は時計を進めず、再開始では運行と車両表示を初期化する。
-- **実ダイヤの時刻で自列車を走らせる計画**（未実装）: 調査資料は `docs/real-timetable-plan.md`、抽出データは `docs/real-timetable/*.json`（全14コース・4時間帯・全種別の実際の列車と代表の1本の案）。実装の前にユーザーに確かめることは ROADMAP.md の 5.5。
+- 実ダイヤの調査資料は `docs/real-timetable-plan.md`、抽出データは `docs/real-timetable/*.json`（全14コース・4時間帯・全種別の実際の列車と代表の1本の案）。残りは ROADMAP.md の 5.5。
 - 高野線のモブ（なんば付近を走る電車）: `world/koya-traffic.ts`。同じ向きは 80 秒以上・出現位置の前方 500m を空ける。開発用 `window.__koyaDebug()`
 - なんばの留置: `world/namba-parked.ts`（車止め側の端を自列車の停止位置 `NAMBA_STOP` にそろえる。高野線1番線は除く）
 
@@ -143,7 +151,7 @@ dev サーバー（`npm run dev`、または `.claude/launch.json` の `densha`�
 4. master のアプリと `pub` の中身が一致するか比べる（`legacy`・`.github`・公開側だけの画像を除いて `diff -r`）
 5. `pub` で `npm ci && npm run build` が通るか確かめる（`dist/` は commit しない）
 6. commit して `main` に push → Actions（Deploy to GitHub Pages）の成功を確認 → 公開ページの `assets/index-*.js` の名前が今回のビルドと同じか確認
-- 公開済みの最新（2026-11-04）: 本体 master `b5ff5ab` = 公開用 main `654603e`（公開 JS `assets/index-COs4dRoe.js`）。これより後の本体のコミットは文書だけ。公開用のコミットメッセージの末尾に、対応する本体のコミットを書く
+- 公開済みの最新（2026-11-04）: 本体 master `6084f53` = 公開用 main `f1baf36`（公開 JS `assets/index-DEV8oYV2.js`）。これより後の本体のコミットは文書だけ。公開用のコミットメッセージの末尾に、対応する本体のコミットを書く
 - 公開用リポジトリに本体を経由しないコミットが入っていて差分が当たらないときは、その内容が本体に入っていることを確かめてから、本体のアプリの中身（`git archive <今回> apps/densha-one-station`）で公開用を丸ごと置き換える（`legacy/`・`.github/`・`docs/image-*.webp` は残す）。2026-11-04 はこの方法で同期した
 
 ## 9. 守ること・ユーザーの好み

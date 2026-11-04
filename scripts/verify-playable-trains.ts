@@ -1,5 +1,6 @@
 // 追加車両の選択・保存復元・方向別併結と既存運行の回帰検証。
 // node_modules/.bin/esbuild scripts/verify-playable-trains.ts --bundle --platform=node --format=esm --external:three --outfile=node_modules/.cache/verify-playable-trains.mjs
+import { applyRealDiagram } from '../src/route/real-diagram';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { shiokaze, shiokazeUp } from '../src/route/routes/shiokaze';
@@ -47,8 +48,10 @@ for (const source of [...coastal, mountain, mountainUp]) {
   for (const spec of source.services ?? []) {
     // 追加前からの適用手順と既定車両の線路・停止位置・時刻を比較する。
     const baseline = structuredClone(source);
-    applyVehicles(baseline, {}); applyService(baseline, spec.id);
     const current = context(source, spec.id);
+    if (current.state.sel.service !== spec.id) continue; // この時間帯（既定は日中）に実際に走らない種別（実ダイヤ）は選べない
+    applyVehicles(baseline, {}); applyService(baseline, spec.id);
+    applyRealDiagram(baseline, spec.id, current.state.fromIndex, current.state.endIndex); // 時刻・開始時刻は実ダイヤの列車に合わせる
     assert.deepEqual(operation(current.route), operation(baseline), `${source.id}/${spec.id} 既定運行`);
     assert.equal(serviceOf(current.route, spec.id)!.kind, spec.kind);
     assert.deepEqual(serviceOf(current.route, spec.id)!.units, spec.units);
@@ -59,6 +62,7 @@ for (const source of coastal) {
   for (const id of ['local', 'express', 'airport'] as const) {
     if (!source.services?.some(s => s.id === id)) continue;
     const c = context(source, id, { [id]: { kind: 'commuter-1000', units: [4, 2] } });
+    if (c.state.sel.service !== id) continue; // 日中に実際に走らない種別（実ダイヤ）
     assert.equal(serviceOf(c.route, id)!.kind, 'commuter-1000');
     assert.deepEqual(serviceOf(c.route, id)!.units, [6], `${source.id}/${id} 1000系6両単独`);
     assert.equal(c.route.trainLength, 120);
@@ -84,6 +88,7 @@ for (const source of coastal) {
   }
   const original = source.services?.find(s => s.id === 'southern');
   if (!original) continue;
+  if (context(source, 'southern').state.sel.service !== 'southern') continue; // 日中にこのコースを走るサザンが実ダイヤに無い
   const reservedAt = original.unitKinds!.indexOf('southern-10000');
   for (const freeKind of ['commuter-new', 'commuter-9000'] as const) {
     const chosen: VehicleSel = { southern: { kind: 'southern-12000', units: [4, 4], freeKind } };

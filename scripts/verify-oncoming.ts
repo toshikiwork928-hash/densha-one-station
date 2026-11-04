@@ -14,7 +14,7 @@ import type { CounterTrain } from '../src/world/oncoming-timetable';
     createRadialGradient: () => ({ addColorStop() {} }), fillRect() {}, fillStyle: '',
   }) }),
 };
-const { createCounterTraffic, COUNTER_BLOCK_GAP, counterTimetable, makeCounterPlans } = await import('../src/world/oncoming-timetable');
+const { createCounterTraffic, sameLaneAhead, COUNTER_BLOCK_GAP, counterTimetable, makeCounterPlans } = await import('../src/world/oncoming-timetable');
 const { coastalThirdTracks } = await import('../src/world/coastal-stations');
 
 type Tod = keyof typeof START_CLOCK;
@@ -63,7 +63,8 @@ function sameLaneAt(traffic: ReturnType<typeof createCounterTraffic>, a: Counter
 /** 車体が離れていても、近接する前後端が同じ線路にいる場合は閉そく間隔を検査する。 */
 function sharesLane(traffic: ReturnType<typeof createCounterTraffic>, rear: CounterTrain, front: CounterTrain): boolean {
   return traffic.sameTrack(rear, front) || sameLaneAt(traffic, rear, front)
-    || Math.abs(traffic.laneAt(rear, rear.head) - traffic.laneAt(front, front.head + front.length)) < 3.4;
+    // 後続が先行の最後尾の位置で同じ線を通り、いまも同じ線にいる（world/oncoming-timetable.ts の conflict と同じ。2026-11-05）
+    || sameLaneAhead(traffic.laneAt, rear, front);
 }
 
 function trainTrace(traffic: ReturnType<typeof createCounterTraffic>, t: CounterTrain) {

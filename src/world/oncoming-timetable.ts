@@ -96,6 +96,14 @@ function terminalPattern(d: number): number {
 }
 
 /** 描画を持たない共通運行。全編成を運行し、近い編成だけ描画側へ渡す。 */
+/** 後続（head の大きい方）が先行の最後尾の位置で同じ線を通り、いまも同じ線にいるか（conflict と verify-oncoming で共通） */
+export function sameLaneAhead(laneAt: (o: CounterTrain, s: number) => number, a: CounterTrain, b: CounterTrain): boolean {
+  const rear = a.head > b.head ? a : b, front = rear === a ? b : a, tail = front.head + front.length;
+  const here = laneAt(rear, rear.head), there = laneAt(rear, tail);
+  // 自分の線がまっすぐ続く（横位置の差 0.5m 未満）。待避線の分岐の途中（横位置が振れ始めた所）は含めない
+  return Math.abs(there - laneAt(front, tail)) < 3.4 && (Math.abs(here - there) < .5 || Math.abs(here - laneAt(front, rear.head)) < 3.4);
+}
+
 export function createCounterTraffic(route: Route, tod: TimeOfDay, consist: (code: string, ordinal: number, playerTowardNamba: boolean) => Consist, player?: ServiceId) {
   const playerTowardNamba = serviceOf(route, 'local')?.destination === 'なんば';
   const main = route.oncoming.find(o => !o.stop && !o.follow && o.lat !== route.oncomingLocal?.lat)?.lat ?? 4;
@@ -138,6 +146,8 @@ export function createCounterTraffic(route: Route, tod: TimeOfDay, consist: (cod
         return main + islandOffset(route, main, s);
       }
       if (path.profile && s >= path.profile[0][0] && s <= path.profile.at(-1)![0]) return profileLat(path.profile, s);
+      // コースの始発駅の番線（泉佐野の T1 など）を区間外へ出ていく列車は、その線のまま（区間の端で本線の位置へ飛ばない）
+      if (path.profile && path.station === 0 && s < path.profile[0][0]) return profileLat(path.profile, path.profile[0][0]);
       if (path.zone && s >= path.zone.inFrom && s <= path.zone.outTo) return o.lat + islandOffset(route, o.lat, s) - path.zone.lat * loopShape(path.zone, s);
     }
     return o.lat + islandOffset(route, o.lat, s);
@@ -152,8 +162,11 @@ export function createCounterTraffic(route: Route, tod: TimeOfDay, consist: (cod
       return Math.abs(laneAt(a, to) - laneAt(b, to)) < 3.4;
     }
     // 別線の列車の「将来通る分岐器」を現在の車体重なりと混同しない。
-    const rear = a.head > b.head ? a : b, front = rear === a ? b : a;
-    return Math.abs(laneAt(rear, rear.head) - laneAt(front, front.head + front.length)) < 3.4;
+    // 後続が先行の最後尾の位置で先行と同じ線を通り、いまも同じ線にいる（自分の線が先行の最後尾まで同じ横位置で続くか、先行の線の延長にいる）なら同じ線。
+    // 待避線・別の番線に止まっている後続が、この先で通る分岐器にいる先行と同じ線とは見ない（2026-11-05）。
+    // 以前は後続の先頭と先行の最後尾という離れた2点の横位置を比べていた。駅の中で線路が横へ振れる所（岸和田の島式ホーム）では、
+    // 手前で別の線へ分かれる後続を同じ線と見て、間隔を詰めてから気づいていた
+    return sameLaneAhead(laneAt, a, b);
   };
   const floorOf = (o: CounterTrain) => {
     let floor = -Infinity;
