@@ -13,10 +13,10 @@ import { namba } from '../src/route/routes/namba';
 import { shiokaze } from '../src/route/routes/shiokaze';
 import { kishiwada } from '../src/route/routes/kishiwada';
 import { izumisano } from '../src/route/routes/izumisano';
-import { izumisanoMisaki } from '../src/route/routes/izumisano-misaki';
-import { misakiWakayamako } from '../src/route/routes/misaki-wakayamako';
+import { IZUMISANO_MISAKI_PLATFORM_LEN, izumisanoMisaki } from '../src/route/routes/izumisano-misaki';
+import { MISAKI_WAKAYAMAKO_PLATFORM_LEN, misakiWakayamako } from '../src/route/routes/misaki-wakayamako';
 import { profileLat } from '../src/route/service';
-import type { Route } from '../src/route/types';
+import type { LatProfile, Route } from '../src/route/types';
 
 interface Course {
   route: Route;
@@ -32,6 +32,9 @@ interface Course {
   twoPass?: boolean;
   /** 海岸線（natural=coastline）・砂浜・防波堤・桟橋も取り、海の多角形（data.coast）を作る。右側（進行方向）が海のコース */
   coast?: boolean;
+  /** OSM の駅の点の代わりに、OSM のホーム（railway=platform）の中心をゲームのホームの中心に合わせる駅（ホームの長さを実際に合わせた駅。
+   *  OSM の駅の点はホームの中心から 40〜50m ずれていることがある）。ホームは --platforms で取ってキャッシュに置く */
+  platformAnchors?: string[];
 }
 
 const COURSES: Record<string, Course> = {
@@ -72,7 +75,7 @@ const COURSES: Record<string, Course> = {
     bbox: [34.30, 135.14, 34.43, 135.34],
     railName: '南海本線',
     stations: ['泉佐野', '羽倉崎', '吉見ノ里', '岡田浦', '樽井', '尾崎', '鳥取ノ荘', '箱作', '淡輪', 'みさき公園'],
-    mainExtras: [], twoPass: true, coast: true,
+    mainExtras: [], twoPass: true, coast: true, platformAnchors: Object.keys(IZUMISANO_MISAKI_PLATFORM_LEN),
   },
   // みさき公園〜和歌山港（データの座標は 'misaki-wakayamako' = みさき公園 → 和歌山港）。和歌山港線は railName の正規表現で含める
   'misaki-wakayamako': {
@@ -80,11 +83,20 @@ const COURSES: Record<string, Course> = {
     bbox: [34.19, 135.10, 34.34, 135.20],
     railName: '南海本線|和歌山港線',
     stations: ['みさき公園', '孝子', '和歌山大学前', '紀ノ川', '和歌山市', '和歌山港'],
-    mainExtras: [], twoPass: true,
+    mainExtras: [], twoPass: true, platformAnchors: Object.keys(MISAKI_WAKAYAMAKO_PLATFORM_LEN),
   },
 };
 
 const RANGE = 320; // 取得・出力する横の範囲 [m]
+/**
+ * OSM に階数の無い高層の建物（外形は低層部を含む1つの多角形）。低層部の階数と、塔の階数・外形に対する塔の大きさ（長さ・幅の割合）。
+ * 塔の位置・大きさは不明なので外形の中心に置くゲーム用の概形。階数の出典は docs/spec-sakai-namba.md
+ */
+const TOWERS: Record<number, { podium: number; levels: number; len: number; wid: number }> = {
+  218234493: { podium: 4, levels: 26, len: .55, wid: .7 }, // ホテル・アゴーラ リージェンシー堺（26階建て）
+};
+/** 駅のペデストリアンデッキとして描く範囲: 駅の中心から s の差 [m] */
+const DECK_NEAR = 250;
 const args = new Map(process.argv.slice(2).map(a => { const [k, v] = a.replace(/^--/, '').split('='); return [k, v ?? '1']; }));
 const courseId = args.get('course') ?? 'namba';
 const C = COURSES[courseId];
@@ -101,39 +113,115 @@ async function fetchOsm(): Promise<OsmEl[]> {
   }
   const [s, w, n, e] = C.bbox, bb = `${s},${w},${n},${e}`;
   const st = C.stations.flatMap(x => x.split('|')).join('|');
-  const A = `around.rail:${RANGE}`;
-  const q = `[out:json][timeout:240];
+  // 線路からの距離（around）で絞る問い合わせは、混んでいるサーバーで時間切れになる（建物などが 0 件で返ることもある）。
+  // そこで、先に線路だけを取り、線路に沿って約 1.2km ごとの小さな矩形（線路の点から約 350m 広げる）で問い合わせて、要素をまとめる（重複は type と id で除く）。
+  // 線路から RANGE の外の要素は、変換のとき（toSL）に捨てる。矩形ごとの結果も別のキャッシュに置き、失敗した矩形だけ取り直せる
+  const railQ = `[out:json][timeout:120];
+way["railway"="rail"]["name"~"${C.railName}"](${bb});
+out tags geom;
+node["railway"="station"]["name"~"^(${st})$"](${bb});
+out;`;
+  const railCache = `${cacheDir}/${courseId}.raw.rail.json`;
+  const railEls = existsSync(railCache) && !args.has('refresh-tiles') ? JSON.parse(readFileSync(railCache, 'utf8')).elements as OsmEl[] : await overpass(railQ, railCache, '線路と駅', x => x.some(q => q.tags?.railway === 'rail'));
+  const pts = railEls.filter(x => x.tags?.railway === 'rail').flatMap(x => x.geometry ?? []).sort((a, b) => a.lat - b.lat || a.lon - b.lon);
+  const boxes: [number, number, number, number][] = [];
+  const PAD_LAT = .0034, PAD_LON = .0040, CELL = .011;
+  // 線路の点を約 1.2km の格子に分け、点のある格子ごとに矩形を作る（格子の点の範囲 + 余白）
+  const cells = new Map<string, { a: number; b: number; c: number; d: number }>();
+  for (const g of pts) {
+    const k = `${Math.floor(g.lat / CELL)},${Math.floor(g.lon / CELL)}`, v = cells.get(k);
+    if (v) { v.a = Math.min(v.a, g.lat); v.b = Math.min(v.b, g.lon); v.c = Math.max(v.c, g.lat); v.d = Math.max(v.d, g.lon); } else cells.set(k, { a: g.lat, b: g.lon, c: g.lat, d: g.lon });
+  }
+  // 線路の way はコースの範囲の外まで延びることがあり、範囲で切ると南北・東西が逆の（空の）矩形になる。その矩形は問い合わせない（サーバーは 400・504 を返す）
+  for (const v of cells.values()) {
+    const bx: [number, number, number, number] = [Math.max(s, v.a - PAD_LAT), Math.max(w, v.b - PAD_LON), Math.min(n, v.c + PAD_LAT), Math.min(e, v.d + PAD_LON)];
+    if (bx[0] < bx[2] && bx[1] < bx[3]) boxes.push(bx);
+  }
+  const all = new Map<string, OsmEl>();
+  for (const el of railEls) all.set(`${el.type}/${el.id}`, el);
+  /** 矩形を取る。取れないとき（重い市街地）は4つに分けて取り直す（2段まで）。分けた矩形には建物が無いこともあるので 0 件も受け入れる */
+  const fetchBox = async (bx: number[], label: string, depth: number): Promise<OsmEl[]> => {
+    const tb = bx.map(x => x.toFixed(5)).join(','), tc = `${cacheDir}/${courseId}.raw.b${tb.replace(/,/g, '_')}.json`;
+    if (existsSync(tc) && !args.has('refresh-tiles')) return JSON.parse(readFileSync(tc, 'utf8')).elements as OsmEl[];
+    try {
+      return await overpass(query(tb), tc, label, x => depth > 0 || x.length > 0, depth < 2 ? 2 : undefined); // 線路の近くの矩形には必ず道路がある。0 件は打ち切られた結果
+    } catch (e) {
+      if (depth >= 2) throw e;
+      console.log(`${label}: 4つに分けて取り直す`);
+      const [a, b2, c, d] = bx, mlat = (a + c) / 2, mlon = (b2 + d) / 2, out: OsmEl[] = [];
+      for (const [i, q] of [[a, b2, mlat, mlon], [a, mlon, mlat, d], [mlat, b2, c, mlon], [mlat, mlon, c, d]].entries()) out.push(...await fetchBox(q, `${label}-${i + 1}`, depth + 1));
+      return out;
+    }
+  };
+  for (const [k, bx] of boxes.entries()) for (const el of await fetchBox(bx, `建物・道路など ${k + 1}/${boxes.length}`, 0)) all.set(`${el.type}/${el.id}`, el);
+  // 多角形のリレーション（森・公園・水面など）は、矩形の外まで全体の形を返して重いので、矩形ごとには取らず、線路の近くのものをコース全体で1回だけ取る
+  const relQ = `[out:json][timeout:240];
 way["railway"="rail"]["name"~"${C.railName}"](${bb})->.rail;
-node["railway"="station"]["name"~"^(${st})$"](${bb})->.st;
 (
-  way(${A})["building"];
-  relation(${A})["building"];
-  way(${A})["highway"~"^(motorway|motorway_link|trunk|primary|secondary|tertiary|unclassified|residential|living_street|trunk_link|primary_link|secondary_link|tertiary_link)$"];
-  way(${A})["leisure"~"^(park|garden|pitch|playground|sports_centre)$"];
-  relation(${A})["leisure"~"^(park|garden|pitch|sports_centre)$"];
-  way(${A})["landuse"~"^(grass|forest|cemetery|recreation_ground|religious|railway)$"];
-  relation(${A})["landuse"~"^(grass|forest|cemetery|recreation_ground|religious)$"];
-  way(${A})["natural"~"^(wood|water|scrub)$"];
-  relation(${A})["natural"~"^(wood|water|scrub)$"];
-  way(${A})["waterway"~"^(river|canal|riverbank)$"];
-  relation(${A})["waterway"="riverbank"];
-  way(${A})["railway"~"^(tram|light_rail)$"];
-  way(${A})["amenity"="parking"];
-  way(${A})["amenity"~"^(place_of_worship|school|grave_yard)$"];
-  relation(${A})["amenity"="place_of_worship"];
+  relation(around.rail:${RANGE})["building"];
+  relation(around.rail:${RANGE})["leisure"~"^(park|garden|pitch|sports_centre)$"];
+  relation(around.rail:${RANGE})["landuse"~"^(grass|forest|cemetery|recreation_ground|religious)$"];
+  relation(around.rail:${RANGE})["natural"~"^(wood|water|scrub)$"];
+  relation(around.rail:${RANGE})["waterway"="riverbank"];
+  relation(around.rail:${RANGE})["amenity"="place_of_worship"];
 );
-out geom;
-.rail out tags geom;
-.st out;`;
-  const url = args.get('endpoint') ?? 'https://overpass-api.de/api/interpreter';
-  console.log(`Overpass へ問い合わせ: ${url}`);
-  const res = await fetch(url, { method: 'POST', body: new URLSearchParams({ data: q }), headers: { 'User-Agent': 'densha-one-station scenery builder (personal, non-commercial)' } });
-  if (!res.ok) throw new Error(`Overpass ${res.status}: ${(await res.text()).slice(0, 300)}`);
-  const json = await res.json() as { elements: OsmEl[] };
-  mkdirSync(cacheDir, { recursive: true });
-  writeFileSync(cache, JSON.stringify(json));
-  console.log(`取得 ${json.elements.length} 要素 → ${cache}`);
-  return json.elements;
+out geom;`;
+  const relCache = `${cacheDir}/${courseId}.raw.rel.json`;
+  const rels = existsSync(relCache) && !args.has('refresh-tiles') ? JSON.parse(readFileSync(relCache, 'utf8')).elements as OsmEl[] : await overpass(relQ, relCache, '多角形のリレーション');
+  for (const el of rels) all.set(`${el.type}/${el.id}`, el);
+  const elements = [...all.values()];
+  if (elements.filter(x => x.tags?.building).length < 50) throw new Error(`建物が足りない（${elements.length} 要素）`);
+  writeFileSync(cache, JSON.stringify({ elements }));
+  console.log(`矩形 ${boxes.length} 個、まとめて ${elements.length} 要素 → ${cache}`);
+  return elements;
+
+  function query(tb: string) {
+  const H = 'motorway|motorway_link|trunk|primary|secondary|tertiary|unclassified|residential|living_street|trunk_link|primary_link|secondary_link|tertiary_link';
+  return `[out:json][timeout:180];
+(
+  way["building"](${tb});
+  way["highway"~"^(${H})$"](${tb});
+  way["highway"]["tunnel"~"^(yes|culvert|building_passage)$"](${tb});
+  way["highway"]["layer"~"^-"](${tb});
+  way["highway"~"^(footway|pedestrian)$"]["bridge"]["layer"~"^[1-9]"](${tb});
+  way["leisure"~"^(park|garden|pitch|playground|sports_centre)$"](${tb});
+  way["landuse"~"^(grass|forest|cemetery|recreation_ground|religious|railway)$"](${tb});
+  way["natural"~"^(wood|water|scrub)$"](${tb});
+  way["waterway"~"^(river|canal|riverbank)$"](${tb});
+  way["railway"~"^(tram|light_rail)$"](${tb});
+  way["amenity"="parking"](${tb});
+  way["amenity"~"^(place_of_worship|school|grave_yard)$"](${tb});
+);
+out geom;`;
+  }
+}
+
+/**
+ * Overpass へ問い合わせてキャッシュに書く。混んでいる（429・502・504）ときは別のサーバー・時間をおいて最大 --rounds 巡（既定 3）。
+ * 混んでいるサーバーは、エラーにせず途中までの結果（線路と駅だけなど）を返すことがある。remark があるか ok が偽の結果は捨てる（キャッシュを上書きしない）。
+ * --min-time=YYYY-MM-DD のときは、データの時点がそれより古いサーバーの結果も捨てる（ミラーのデータは古いことがある）
+ */
+async function overpass(q: string, cache: string, what: string, ok: (els: OsmEl[]) => boolean = () => true, maxRounds?: number): Promise<OsmEl[]> {
+  const endpoints = args.has('endpoint') ? [args.get('endpoint')!] : ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
+  const rounds = Math.min(maxRounds ?? Infinity, Number(args.get('rounds') ?? 3)), minTime = args.get('min-time') ?? '';
+  let last = '';
+  for (let round = 0; round < rounds; round++) for (const url of endpoints) {
+    try {
+      console.log(`Overpass へ問い合わせ（${what}）: ${url}`);
+      const res = await fetch(url, { method: 'POST', body: new URLSearchParams({ data: q }), headers: { 'User-Agent': 'densha-one-station scenery builder (personal, non-commercial)' }, signal: AbortSignal.timeout(200_000) }); // 応答の無いサーバーで止まらない
+      if (!res.ok) throw new Error(`Overpass ${res.status}: ${(await res.text()).slice(0, 120)}`);
+      const json = await res.json() as { elements: OsmEl[]; remark?: string; osm3s?: { timestamp_osm_base?: string } };
+      if (json.remark) throw new Error(`途中で打ち切られた: ${json.remark.slice(0, 120)}`);
+      if (!ok(json.elements)) throw new Error(`結果が足りない（${json.elements.length} 要素）`);
+      const at = json.osm3s?.timestamp_osm_base ?? '';
+      if (minTime && at < minTime) throw new Error(`データの時点が古い（${at}）`);
+      mkdirSync('node_modules/.cache/osm', { recursive: true });
+      writeFileSync(cache, JSON.stringify(json));
+      console.log(`取得 ${json.elements.length} 要素（OSM の時点 ${json.osm3s?.timestamp_osm_base ?? '不明'}）→ ${cache}`);
+      return json.elements;
+    } catch (e) { last = String(e); console.log(`失敗: ${last}`); await new Promise(r => setTimeout(r, 8000 + round * 30000)); }
+  }
+  throw new Error(`${what}を取得できなかった: ${last}`);
 }
 
 /** 海岸線・砂浜・防波堤・桟橋の取得。コースの bbox より北・西へ広げる（海側の海岸線を取りこぼさない）。建物などの生データとは別のキャッシュ */
@@ -152,21 +240,7 @@ async function fetchCoast(): Promise<OsmEl[]> {
   way["man_made"~"^(breakwater|groyne|pier)$"](${bb});
 );
 out geom;`;
-  const endpoints = args.has('endpoint') ? [args.get('endpoint')!] : ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
-  let last = '';
-  for (let round = 0; round < 3; round++) for (const url of endpoints) {
-    try {
-      console.log(`Overpass へ問い合わせ（海岸線）: ${url}`);
-      const res = await fetch(url, { method: 'POST', body: new URLSearchParams({ data: q }), headers: { 'User-Agent': 'densha-one-station scenery builder (personal, non-commercial)' } });
-      if (!res.ok) throw new Error(`Overpass ${res.status}: ${(await res.text()).slice(0, 120)}`);
-      const json = await res.json() as { elements: OsmEl[] };
-      mkdirSync(cacheDir, { recursive: true });
-      writeFileSync(cache, JSON.stringify(json));
-      console.log(`取得 ${json.elements.length} 要素 → ${cache}`);
-      return json.elements;
-    } catch (e) { last = String(e); console.log(`失敗: ${last}`); await new Promise(r => setTimeout(r, 8000)); }
-  }
-  throw new Error(`海岸線を取得できなかった: ${last}`);
+  return overpass(q, cache, '海岸線');
 }
 
 // ---------------- 平面座標（中心付近の等距離近似, m） ----------------
@@ -416,7 +490,7 @@ function joinLines(parts: G[][], keyOf: (i: number) => string = () => '', firsts
 function mergeRoads(els: OsmEl[]): OsmEl[] {
   const roads = els.filter(e => e.type === 'way' && e.tags?.highway && e.geometry && e.geometry.length > 1);
   const rest = els.filter(e => !roads.includes(e));
-  const keyOf = (e: OsmEl) => { const t = e.tags!; return `${roadClass(t)}|${t.name ?? ''}|${isElevated(t) ? 1 : 0}|${t.lanes ?? ''}`; };
+  const keyOf = (e: OsmEl) => { const t = e.tags!; return `${roadClass(t)}|${t.name ?? ''}|${isElevated(t) ? 1 : 0}|${t.bridge === 'yes' ? 1 : 0}|${t.lanes ?? ''}`; };
   const keys = roads.map(keyOf);
   const firsts: number[] = [];
   const lines = joinLines(roads.map(r => r.geometry!), i => keys[i], firsts);
@@ -424,7 +498,17 @@ function mergeRoads(els: OsmEl[]): OsmEl[] {
   console.log(`道路 ${roads.length} 本 → つないで ${merged.length} 本`);
   return [...rest, ...merged];
 }
-const roadClass = (t: Record<string, string>) => /^motorway/.test(t.highway) ? 0 : /^(trunk|primary)/.test(t.highway) ? 1 : /^(secondary|tertiary)/.test(t.highway) ? 2 : 3;
+/** 道路の等級: 0 都市高速 / 1 幹線 / 2 主要 / 3 生活 / 4 歩道・通路（線路をくぐるトンネルの分だけ取る） */
+const roadClass = (t: Record<string, string>) => /^motorway/.test(t.highway) ? 0 : /^(trunk|primary)/.test(t.highway) ? 1 : /^(secondary|tertiary)/.test(t.highway) ? 2 : /^(footway|path|cycleway|steps|pedestrian|track|service|bridleway)$/.test(t.highway) ? 4 : 3;
+/** 道路の幅 [m]（OSM の width・lanes、無ければ等級から）。くぐる道路の幅もこれ */
+const roadWidth = (t: Record<string, string>) => {
+  const lanes = parseFloat(t.lanes ?? ''), width = parseFloat(t.width ?? ''), cls = roadClass(t);
+  return width > 0 ? width : cls === 4 ? ROAD_W[t.highway] ?? 2.5 : lanes > 0 ? lanes * 3.2 + 2 : cls === 1 ? 16 : cls === 2 ? 9 : 5;
+};
+/** ペデストリアンデッキ・高い所を通る歩道（歩道で、橋・層 1 以上） */
+const isDeckWay = (t: Record<string, string>) => /^(footway|pedestrian)$/.test(t.highway ?? '') && !!t.bridge && Number(t.layer ?? 0) >= 1;
+/** 線路をくぐる道路（トンネル・地下の層）か */
+const isUnderpass = (t: Record<string, string>) => !!t.highway && (/^(yes|culvert|building_passage)$/.test(t.tunnel ?? '') || Number(t.layer ?? 0) < 0);
 /** 都市高速（阪神高速など）は高架として別に描く */
 const isElevated = (t: Record<string, string>) => /^motorway/.test(t.highway ?? '');
 
@@ -554,17 +638,175 @@ node(around.rail:40)["railway"~"^(level_crossing|crossing)$"]->.cr;
 .cr out;
 way(bn.cr)["highway"];
 out tags geom;`;
-  const url = args.get('endpoint') ?? 'https://overpass-api.de/api/interpreter';
-  console.log(`Overpass へ問い合わせ（踏切）: ${url}`);
-  const res = await fetch(url, { method: 'POST', body: new URLSearchParams({ data: q }), headers: { 'User-Agent': 'densha-one-station scenery builder (personal, non-commercial)' } });
-  if (!res.ok) throw new Error(`Overpass ${res.status}: ${(await res.text()).slice(0, 300)}`);
-  const json = await res.json() as { elements: OsmEl[] };
-  mkdirSync(cacheDir, { recursive: true });
-  writeFileSync(cache, JSON.stringify(json));
-  return json.elements;
+  return overpass(q, cache, '踏切');
 }
 
 const ROAD_W: Record<string, number> = { trunk: 9, primary: 8, secondary: 7, tertiary: 6, unclassified: 5, residential: 5, living_street: 4, service: 4, track: 3.5, cycleway: 3, footway: 2.5, path: 2.5, pedestrian: 3, steps: 2.5 };
+
+/** 線路の橋（bridge=yes の線路）、線路と交わる川（waterway）、線路と交わる道路の上下関係（bridge / tunnel / layer）を s で一覧にする */
+async function scanStructures(route: Route, proj: (p: V, maxDist?: number) => { c: number; d: number } | null, toS: (c: number) => number) {
+  const els = await fetchOsm();
+  const sOf = (g: { lat: number; lon: number }) => { const r = proj(xy(g.lat, g.lon), 400); return r ? { s: toS(r.c), d: r.d } : null; };
+  // 線路の橋: 橋の線路の点の s の範囲。近い範囲（20m 以内）はまとめる
+  const rails = els.filter(e => e.type === 'way' && e.tags?.railway === 'rail' && new RegExp(C.railName).test(e.tags.name ?? '') && e.geometry);
+  const spans: { s0: number; s1: number; layers: Set<string>; kinds: Set<string> }[] = [];
+  for (const w of rails) {
+    const br = w.tags!.bridge ?? (w.tags!.tunnel ? 'tunnel:' + w.tags!.tunnel : ''); if (!br) continue;
+    const ss = w.geometry!.map(sOf).filter((x): x is { s: number; d: number } => !!x && Math.abs(x.d) < 40).map(x => x.s);
+    if (ss.length < 2) continue;
+    spans.push({ s0: Math.min(...ss), s1: Math.max(...ss), layers: new Set([w.tags!.layer ?? '']), kinds: new Set([br]) });
+  }
+  spans.sort((a, b) => a.s0 - b.s0);
+  const merged: typeof spans = [];
+  for (const q of spans) { const l = merged[merged.length - 1]; if (l && q.s0 <= l.s1 + 20) { l.s1 = Math.max(l.s1, q.s1); q.layers.forEach(x => l.layers.add(x)); q.kinds.forEach(x => l.kinds.add(x)); } else merged.push({ ...q }); }
+  console.log('線路の橋・トンネル（OSM。s は営業キロ + START のゲームの s）:');
+  for (const m of merged) console.log(`  s=${Math.round(m.s0)}〜${Math.round(m.s1)}（${Math.round(m.s1 - m.s0)}m） layer=${[...m.layers].join('/')} ${[...m.kinds].join('/')}`);
+  // 線路と交わる線（川・道路）: 中心線の右側と左側へ点が移る所（|d| が小さい点で符号が変わる）を交差とする
+  /** 交差の s と、交差する線が s 軸となす角 [度]（符号付き。+ は進行方向の右へ向かうほど s が増える向き） */
+  const crossingsAng = (g: { lat: number; lon: number }[]) => {
+    const out: { s: number; ang: number }[] = []; let prev: { s: number; d: number } | null = null;
+    for (const p of g) { const q = sOf(p); if (!q) { prev = null; continue; } if (prev && Math.sign(prev.d) !== Math.sign(q.d) && Math.abs(prev.d) < 80 && Math.abs(q.d) < 80) out.push({ s: prev.s + (q.s - prev.s) * Math.abs(prev.d) / (Math.abs(prev.d) + Math.abs(q.d)), ang: Math.round(Math.atan2(q.s - prev.s, q.d - prev.d) * 180 / Math.PI) }); prev = q; }
+    return out;
+  };
+  const crossings = (g: { lat: number; lon: number }[]) => crossingsAng(g).map(x => x.s);
+  console.log('線路と交わる川:');
+  const rivers: string[] = [];
+  for (const w of els.filter(e => e.type === 'way' && e.tags?.waterway && e.geometry)) for (const { s, ang } of crossingsAng(w.geometry!)) rivers.push(`  s=${String(Math.round(s)).padStart(6)} ang=${ang} ${w.tags!.waterway} ${w.tags!.name ?? ''} width=${w.tags!.width ?? ''} tunnel=${w.tags!.tunnel ?? ''} culvert=${w.tags!.culvert ?? ''} osm/${w.id}`);
+  console.log(rivers.sort().join('\n'));
+  // 平面交差か: 道路の点が線路の点と同じ座標（OSM で節点を共有 = 踏切）。共有しなければ立体交差か、OSM の描き漏れ。
+  // game = ゲームの踏切（route.crossings）が 15m 以内にあるか
+  console.log('線路と交わる道路（共有点 = 線路と節点を共有する平面交差、game = ゲームの踏切が 15m 以内にある）:');
+  const railKeys = new Set(rails.flatMap(w => w.geometry!.map(g => `${g.lat},${g.lon}`)));
+  const lines: string[] = [];
+  for (const w of els.filter(e => e.type === 'way' && e.tags?.highway && e.geometry)) for (const { s, ang } of crossingsAng(w.geometry!)) {
+    const tg = w.tags!, shared = w.geometry!.some(g => railKeys.has(`${g.lat},${g.lon}`));
+    const game = (route.crossings ?? []).some(c => Math.abs(c.s - s) < 15), st = (route.structures ?? []).find(x => s > x.from - 6 && s < x.to + 6);
+    lines.push(`  s=${String(Math.round(s)).padStart(6)} ang=${String(ang).padStart(4)} ${shared ? '共有点' : '------'} ${game ? 'game' : '----'} ${st ? st.kind.padEnd(7) : '       '} ${tg.highway} ${tg.name ?? ''} bridge=${tg.bridge ?? ''} tunnel=${tg.tunnel ?? ''} layer=${tg.layer ?? ''} osm/${w.id}`);
+  }
+  console.log(lines.sort().join('\n'));
+  findUnderpasses(els, proj, toS, () => 0);
+}
+
+/**
+ * 線路をくぐる道路（tunnel=yes / culvert / building_passage、または layer が負の道路）。線路の下のトンネルは 10m ほどの短い way で、
+ * OSM の中心線（上下線の平均）と数m ずれて片側だけに収まることがあるので、横切るかでなく、線路の中心線から 18m 以内の点があるかで決める。
+ * s は中心線を横切る点（横切らなければ中心線に最も近い点）。近い（12m 以内）ものは1つにまとめる（車道と横の歩道のトンネル）。
+ * 道路はトンネルを出てすぐ曲がることがあるので、トンネルの両端からつながる道路を両側へ PATH_LEN [m] ずつたどった線（道路の中心線）も持つ。
+ * 掘り下げと擁壁はこの線に沿う（world/underpass.ts）。toSL が無い（--scan）ときは線を作らない
+ */
+const PATH_LEN = 180;
+function findUnderpasses(els: OsmEl[], proj: (p: V, maxDist?: number) => { c: number; d: number } | null, toS: (c: number) => number, center: (s: number) => number,
+  toSL?: (lat: number, lon: number, far?: boolean) => V | null, railBridges: [number, number][] = []): (number | number[])[][] {
+  const rows: { s: number; lat: number; w: number; cls: number; id: number; name: string; geo: G[] }[] = [];
+  // 線路の橋（bridge=yes の線路）の下を通る道路も、くぐる道路とする（トンネルの印が無く、線路と節点を共有しない道路。泉佐野の手前の s 7105 など）。
+  // ゲームの高架・橋の区間は world/underpass.ts が除く
+  const railKeys = new Set(els.filter(e => e.type === 'way' && e.tags?.railway === 'rail').flatMap(e => (e.geometry ?? []).map(g => `${g.lat},${g.lon}`)));
+  const underBridge = (el: OsmEl) => {
+    if (!railBridges.length || !el.tags?.highway || el.tags.bridge || roadClass(el.tags) === 0 || el.geometry!.some(g => railKeys.has(`${g.lat},${g.lon}`))) return false;
+    let prev: { s: number; d: number } | null = null;
+    for (const g of el.geometry!) {
+      const r = proj(xy(g.lat, g.lon), 400), q = r && { s: toS(r.c), d: r.d };
+      if (q && prev && Math.sign(prev.d) !== Math.sign(q.d) && Math.abs(prev.d) < 80 && Math.abs(q.d) < 80) {
+        const s = prev.s + (q.s - prev.s) * Math.abs(prev.d) / (Math.abs(prev.d) + Math.abs(q.d));
+        if (railBridges.some(([a, b]) => s > a - 3 && s < b + 3)) return true;
+      }
+      prev = q;
+    }
+    return false;
+  };
+  for (const el of els) {
+    if (el.type !== 'way' || !el.geometry || el.geometry.length < 2 || !(isUnderpass(el.tags ?? {}) || underBridge(el))) continue;
+    const q = el.geometry.map(g => proj(xy(g.lat, g.lon), 400)).map(r => r && { s: toS(r.c), d: r.d });
+    if (q.some(p => !p)) continue;
+    const pts = q as { s: number; d: number }[];
+    let s = NaN;
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const a = pts[i], b = pts[i + 1];
+      if (Math.sign(a.d) !== Math.sign(b.d)) { s = a.s + (b.s - a.s) * Math.abs(a.d) / (Math.abs(a.d) + Math.abs(b.d)); break; }
+    }
+    if (Number.isNaN(s)) { const m = pts.reduce((x, y) => Math.abs(y.d) < Math.abs(x.d) ? y : x); if (Math.abs(m.d) > 18) continue; s = m.s; }
+    rows.push({ s, lat: center(s), w: roadWidth(el.tags!), cls: roadClass(el.tags!), id: el.id, name: el.tags!.name ?? '', geo: el.geometry });
+  }
+  rows.sort((p, q) => p.s - q.s);
+  const out: typeof rows = [];
+  for (const r of rows) {
+    const l = out[out.length - 1];
+    if (l && Math.abs(r.s - l.s) < 12) { if (r.w > l.w && r.cls <= l.cls) { l.w = r.w; l.cls = r.cls; l.name = r.name; l.geo = r.geo; } else if (r.cls === 4) l.w += 1; continue; }
+    out.push({ ...r });
+  }
+  // 道路のつながり（節点の座標 → その点を含む way と位置）
+  const ways = els.filter(e => e.type === 'way' && e.tags?.highway && e.geometry && e.geometry.length > 1 && !e.tags.bridge);
+  const key = (g: G) => `${g.lat},${g.lon}`, index = new Map<string, { g: G[]; i: number }[]>();
+  for (const w of ways) w.geometry!.forEach((g, i) => { const a = index.get(key(g)) ?? []; a.push({ g: w.geometry!, i }); index.set(key(g), a); });
+  const bearing = (a: G, b: G) => { const p = xy(a.lat, a.lon), q = xy(b.lat, b.lon); return Math.atan2(q[1] - p[1], q[0] - p[0]); };
+  const dist = (a: G, b: G) => { const p = xy(a.lat, a.lon), q = xy(b.lat, b.lon); return Math.hypot(q[0] - p[0], q[1] - p[1]); };
+  /** line の末尾から、つながる道路のうち向きの変わりの小さいもの（75 度まで）をたどって伸ばす */
+  const extend = (line: G[], start: G[]) => {
+    const used = new Set<G[]>([start]);
+    let len = 0;
+    for (let guard = 0; guard < 40 && len < PATH_LEN; guard++) {
+      const tail = line[line.length - 1], inB = bearing(line[line.length - 2], tail);
+      let best: { g: G[]; i: number; d: number } | null = null, bd = 75 * Math.PI / 180;
+      for (const c of index.get(key(tail)) ?? []) {
+        if (used.has(c.g)) continue;
+        for (const d of [1, -1]) {
+          const nx = c.g[c.i + d]; if (!nx) continue;
+          let da = Math.abs(bearing(tail, nx) - inB); if (da > Math.PI) da = 2 * Math.PI - da;
+          if (da < bd) { bd = da; best = { g: c.g, i: c.i, d }; }
+        }
+      }
+      if (!best) break;
+      used.add(best.g);
+      for (let k = best.i + best.d; k >= 0 && k < best.g.length && len < PATH_LEN; k += best.d) { len += dist(line[line.length - 1], best.g[k]); line.push(best.g[k]); }
+    }
+  };
+  const res: (number | number[])[][] = [];
+  for (const r of out) {
+    let path: number[] = [];
+    if (toSL) {
+      const fwd = r.geo.slice(), back = r.geo.slice().reverse();
+      extend(fwd, r.geo); extend(back, r.geo);
+      const line = [...back.slice(r.geo.length).reverse(), ...fwd];
+      const pts = densify(line, 5).map(g => toSL(g.lat, g.lon, true)).filter((p): p is V => !!p);
+      path = simplify(pts, .4).flatMap(([s, l]) => [r1(s), r1(l)]);
+    }
+    res.push([r1(r.s), r1(r.lat), r1(r.w), r.cls, path]);
+  }
+  console.log(`線路をくぐる道路 ${out.length} か所: ${out.map((r, k) => `s=${Math.round(r.s)}(${r.cls === 4 ? '歩道' : '車道'} 幅${r.w} ${r.name}osm/${r.id} 線 ${(res[k][4] as number[]).length / 2} 点)`).join(' ')}`);
+  return res;
+}
+
+/** OSM のホーム（railway=platform / public_transport=platform）を駅ごとに、s の範囲・線路の左右・長さで一覧にし、ゲームのホーム（platform.from〜to）と並べる。
+ *  ゲームの踏切（route.crossings）と、除外された OSM の踏切（.crossings.json）もホームとの位置関係を出す */
+async function listPlatforms(route: Route, proj: (p: V, maxDist?: number) => { c: number; d: number } | null, toS: (c: number) => number) {
+  const [s, w, n, e] = C.bbox, bb = `${s},${w},${n},${e}`;
+  // around（線路からの距離）の問い合わせは混んだサーバーで空になることがあるので、範囲（bbox）で取り、線路から 40m 以内は下で絞る
+  const q = `[out:json][timeout:120];
+(
+  way["railway"="platform"](${bb});
+  way["public_transport"="platform"]["train"](${bb});
+  relation["railway"="platform"](${bb});
+);
+out tags geom;`;
+  const cache = `node_modules/.cache/osm/${courseId}.platforms.json`;
+  const els = existsSync(cache) && !args.has('refresh') ? JSON.parse(readFileSync(cache, 'utf8')).elements as OsmEl[] : await overpass(q, cache, 'ホーム');
+  const rows: { s0: number; s1: number; d: number; ref: string; name: string }[] = [];
+  for (const el of els) {
+    const geo = el.type === 'way' ? el.geometry ?? [] : (el.members ?? []).flatMap(m => m.geometry ?? []);
+    const ps = geo.map(g => proj(xy(g.lat, g.lon), 200)).filter((p): p is { c: number; d: number } => !!p && Math.abs(p.d) < 40);
+    if (ps.length < 2) continue;
+    const ss = ps.map(p => toS(p.c));
+    rows.push({ s0: Math.min(...ss), s1: Math.max(...ss), d: ps.reduce((a, p) => a + p.d, 0) / ps.length, ref: el.tags?.ref ?? el.tags?.['railway:track_ref'] ?? '', name: el.tags?.name ?? '' });
+  }
+  rows.sort((a, b) => a.s0 - b.s0);
+  const cross = existsSync(`node_modules/.cache/osm/${courseId}.crossings.json`) ? JSON.parse(readFileSync(`node_modules/.cache/osm/${courseId}.crossings.json`, 'utf8')) as { s: number; kind: string; hw: string }[] : [];
+  for (const st of route.stations) {
+    const near = rows.filter(r => r.s1 > st.platform.from - 150 && r.s0 < st.platform.to + 150);
+    console.log(`${st.name}: ゲームのホーム s=${st.platform.from}〜${st.platform.to}（停止位置 ${st.stopS}）`);
+    for (const r of near) console.log(`  OSM ホーム s=${Math.round(r.s0)}〜${Math.round(r.s1)}（${Math.round(r.s1 - r.s0)}m） ${r.d < 0 ? '左' : '右'} d=${r.d.toFixed(1)} ${r.ref} ${r.name}`);
+    for (const c of cross.filter(c => c.s > st.platform.from - 120 && c.s < st.platform.to + 120)) console.log(`  OSM 踏切 s=${c.s} ${c.kind} ${c.hw}${(route.crossings ?? []).some(g => Math.abs(g.s - c.s) < 15) ? '（ゲームにあり）' : '（ゲームに無い）'}`);
+  }
+}
 
 async function makeCrossings(route: Route, proj: (p: V, maxDist?: number) => { c: number; d: number } | null, toS: (c: number) => number) {
   const els = await fetchCrossings();
@@ -618,6 +860,25 @@ async function main() {
   const proj = projector(line);
   // 駅の中心の位置 → ゲームの s（ホームの中心）
   const cSt = stationPts.map(p => proj(p)!.c);
+  // ホームの中心を基準にする駅: 駅の点から 300m 以内・線路から 40m 以内の OSM のホームの範囲（c）の中央
+  const pcache = `node_modules/.cache/osm/${courseId}.platforms.json`;
+  if (C.platformAnchors?.length) {
+    if (!existsSync(pcache)) throw new Error(`${pcache} が無い。先に --platforms で OSM のホームを取る`);
+    const pels = JSON.parse(readFileSync(pcache, 'utf8')).elements as OsmEl[];
+    C.stations.forEach((names, i) => {
+      if (!names.split('|').some(nm => C.platformAnchors!.includes(nm))) return;
+      let lo = Infinity, hi = -Infinity;
+      for (const el of pels) {
+        const geo = el.type === 'way' ? el.geometry ?? [] : (el.members ?? []).flatMap(m => m.geometry ?? []);
+        const ps = geo.map(g => proj(xy(g.lat, g.lon), 200)).filter((q): q is { c: number; d: number } => !!q && Math.abs(q.d) < 40 && Math.abs(q.c - cSt[i]) < 300);
+        if (ps.length < 2) continue;
+        lo = Math.min(lo, ...ps.map(q => q.c)); hi = Math.max(hi, ...ps.map(q => q.c));
+      }
+      if (lo > hi) { console.warn(`${names}: OSM のホームが見つからない（駅の点のまま）`); return; }
+      console.log(`${names}: 基準を駅の点 ${cSt[i].toFixed(0)} からホームの中心 ${((lo + hi) / 2).toFixed(0)} へ（ホーム ${(hi - lo).toFixed(0)}m）`);
+      cSt[i] = (lo + hi) / 2;
+    });
+  }
   const sSt = route.stations.map(st => (st.platform.from + st.platform.to) / 2);
   const toS = (c: number) => {
     if (c <= cSt[0]) return sSt[0] + (c - cSt[0]);
@@ -625,7 +886,8 @@ async function main() {
     return sSt[sSt.length - 1] + (c - cSt[cSt.length - 1]);
   };
   // ゲーム側の本線群の中心の横位置
-  const mains = [...Object.entries(route.trackProfiles ?? {}).filter(([k]) => route.tracks.includes(Number(k))).map(([, p]) => p),
+  // 横位置の変化（trackProfiles）の無い線は一定の横位置（片方の線だけ変化を持つコースで、中心が片側へずれないように）
+  const mains = [...(route.trackProfiles ? route.tracks.map((c): LatProfile => route.trackProfiles![String(c)] ?? [[0, c]]) : []),
     ...(route.extraTracks ?? []).filter(x => C.mainExtras.includes(x.id)).map(x => ({ p: x.lat, from: x.from, to: x.to }))];
   const center = (s: number) => {
     const ls: number[] = [];
@@ -645,6 +907,15 @@ async function main() {
   };
   // ---- 踏切（--crossings: 踏切の位置だけを取り直して src/route/routes/<course>-crossings.ts を書く。建物などの JSON は書き換えない）----
   if (args.has('crossings')) { await makeCrossings(route, proj, toS); return; }
+  // ---- 橋・川・立体交差の一覧（--scan: 線路の橋、線路と交わる川、線路と交わる道路の上下関係を s で表にする。書き込みはしない）----
+  if (args.has('scan')) { await scanStructures(route, proj, toS); return; }
+  // ---- ホームの照合（--platforms: OSM の railway=platform の s の範囲と横の側を、ゲームのホームの範囲と並べる。書き込みはしない）----
+  if (args.has('platforms')) { await listPlatforms(route, proj, toS); return; }
+  // ---- 任意の点をコースの座標へ写す（--points=緯度,経度;緯度,経度…。専用モジュールの位置決め用。書き込みはしない）----
+  if (args.has('points')) {
+    for (const pt of args.get('points')!.split(';')) { const [la, lo] = pt.split(',').map(Number), r = toSL(la, lo, true); console.log(`${pt} → s=${r?.[0].toFixed(1)} lat=${r?.[1].toFixed(1)}`); }
+    return;
+  }
   const S0 = route.extent.from - 100, S1 = route.extent.to + 100;
   console.log(`中心線 ${line.length} 点、駅 OSM ${cSt.map(c => (c / 1000).toFixed(2)).join(' / ')} km → ゲーム ${sSt.map(s => (s / 1000).toFixed(2)).join(' / ')} km`);
 
@@ -731,19 +1002,74 @@ async function main() {
   const rings0 = (el: OsmEl): G[][] => el.type === 'way' ? (el.geometry && same(el.geometry[0], el.geometry[el.geometry.length - 1]) ? [el.geometry] : []) : rings(el);
   const coast = C.coast ? await makeCoast() : undefined;
 
+  const flat = (p: V[]) => p.flatMap(([s, l]) => [r1(s), r1(l)]);
+  // ---- 立体交差と川（OSM の bridge / layer / waterway）----
+  // 線路の橋（bridge=yes の線路。上下線はまとめる）。道路が線路をまたぐ橋、線路が川をまたぐ橋は、ここから分かる
+  const bridgeSpans: [number, number][] = (() => {
+    const sp: [number, number][] = [];
+    for (const w of rails) {
+      if (!w.tags?.bridge || !w.geometry) continue;
+      const ss = w.geometry.map(g => { const r = proj(xy(g.lat, g.lon), 400); return r && Math.abs(r.d) < 40 ? toS(r.c) : null; }).filter((x): x is number => x != null);
+      if (ss.length >= 2) sp.push([Math.min(...ss), Math.max(...ss)]);
+    }
+    sp.sort((a, b) => a[0] - b[0]);
+    const m: [number, number][] = [];
+    for (const q of sp) { const l = m[m.length - 1]; if (l && q[0] <= l[1] + 20) l[1] = Math.max(l[1], q[1]); else m.push([...q]); }
+    return m;
+  })();
+  /** 折れ線が線路の中心線を横切る点（s）。横切らなければ空 */
+  const crossAt = (g: { lat: number; lon: number }[]): number[] => {
+    const out: number[] = []; let prev: { s: number; d: number } | null = null;
+    for (const p of g) { const r = proj(xy(p.lat, p.lon), 400); if (!r) { prev = null; continue; } const q = { s: toS(r.c), d: r.d }; if (prev && Math.sign(prev.d) !== Math.sign(q.d) && Math.abs(prev.d) < 80 && Math.abs(q.d) < 80) out.push(prev.s + (q.s - prev.s) * Math.abs(prev.d) / (Math.abs(prev.d) + Math.abs(q.d))); prev = q; }
+    return out;
+  };
+  /** 線路をまたぐ道路橋（bridge=yes、layer 1 以上、線路を横切る）。高架の道路として描く */
+  const isRoadOverTrack = (el: OsmEl) => !!el.tags?.highway && el.tags.bridge === 'yes' && Number(el.tags.layer ?? 0) >= 1 && !!el.geometry && crossAt(el.geometry).length > 0;
+  /** 橋の下を通る川の水面（waterway の線を川幅で膨らませた多角形）。川幅は OSM に無いので、線路の橋の長さの半分（8〜70m）。ゲーム用の概形 */
+  const riverPolys: [string, number[]][] = [];
+  for (const el of els) {
+    if (el.type !== 'way' || !el.geometry || !/^(river|canal)$/.test(el.tags?.waterway ?? '') || /culvert|tunnel/.test(el.tags?.tunnel ?? '') || el.tags?.culvert) continue;
+    const xs = crossAt(el.geometry);
+    const sp = bridgeSpans.find(q => xs.some(x => x > q[0] - 25 && x < q[1] + 25));
+    if (!sp) continue;
+    const w = Math.max(8, Math.min(70, (sp[1] - sp[0]) * .5));
+    const pts = densify(el.geometry, 20).map(g => toSL(g.lat, g.lon, true)).filter((p): p is V => !!p);
+    if (pts.length < 2) continue;
+    const L: V[] = [], R: V[] = [];
+    pts.forEach((p, i) => {
+      const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
+      const dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len;
+      L.push([p[0] + nx * w / 2, p[1] + ny * w / 2]); R.push([p[0] - nx * w / 2, p[1] - ny * w / 2]);
+    });
+    let ring: V[] = [...L, ...R.reverse()];
+    if (area(ring) < 0) ring = ring.reverse();
+    const clipped = clipBand(ring, -RANGE, RANGE);
+    if (clipped.length < 3) continue;
+    riverPolys.push([el.tags!.name ?? '', flat(clipped)]);
+  }
+  if (riverPolys.length) console.log(`橋の下の川 ${riverPolys.length} 本を水面にする: ${riverPolys.map(r => r[0] || '(名前なし)').join('、')}`);
+  const underpasses = findUnderpasses(els, proj, toS, center, toSL, bridgeSpans);
+
   const B: number[][] = [], roads: [number, number, string, number[]][] = [], green: [string, number[]][] = [], landmarks: [string, number, number][] = [];
   const counts: Record<string, number> = {};
   const inS = (p: V[]) => p.some(([s]) => s >= S0 && s <= S1);
-  const flat = (p: V[]) => p.flatMap(([s, l]) => [r1(s), r1(l)]);
   // 都市高速の本線の点（ランプの高い側の判定）
   const mwNodes = new Set(els.filter(e => e.type === 'way' && e.tags?.highway === 'motorway').flatMap(e => (e.geometry ?? []).map(g => `${g.lat},${g.lon}`)));
-  const highways: [number, number[]][] = [];
+  const highways: [number, number[]][] = [], decks: [number, number[]][] = [];
+  // 川・水路の線（デッキと歩道橋を見分ける）
+  const waterLines = els.filter(e => e.type === 'way' && e.geometry && (e.tags?.waterway || e.tags?.natural === 'water')).map(e => e.geometry!);
+  const crossesWater = (g: G[]) => {
+    const X = (a: G, b: G, c: G, d: G) => { const o = (p: G, q: G, r: G) => Math.sign((q.lon - p.lon) * (r.lat - p.lat) - (q.lat - p.lat) * (r.lon - p.lon)); return o(a, b, c) !== o(a, b, d) && o(c, d, a) !== o(c, d, b); };
+    for (let i = 0; i + 1 < g.length; i++) for (const w of waterLines) for (let k = 0; k + 1 < w.length; k++) if (X(g[i], g[i + 1], w[k], w[k + 1])) return true;
+    return false;
+  };
   for (const el of mergeRoads(els)) {
     const t = el.tags ?? {};
     if (el.type === 'node') continue;
     if (t.railway === 'tram' || t.railway === 'light_rail') continue;
     if (t.railway === 'rail') continue;
-    const isArea = !t.building && !t.highway, farOk = isArea || isElevated(t);
+    const roadBridge = isRoadOverTrack(el);
+    const isArea = !t.building && !t.highway, farOk = isArea || isElevated(t) || roadBridge;
     for (const ring of rings(el)) {
       const raw = (isArea ? densify(ring, 20) : ring).map(g => toSL(g.lat, g.lon, farOk));
       if (raw.some(p => !p)) { if (!t.highway) continue; }
@@ -756,32 +1082,58 @@ async function main() {
         if (Math.abs(o.cl - center(o.cs)) < 9) continue; // 線路の上（駅舎・高架下）は除く
         const type = buildingType(t, fp);
         if (type === 'g' && fp < 40) continue;
-        const lv = levelsOf(t, type, fp);
+        const tw = TOWERS[el.id];
+        const lv = tw ? tw.podium : levelsOf(t, type, fp);
         B.push([r1(o.cs), r1(o.cl), r1(o.len), r1(o.wid), Math.round(o.ang * 180 / Math.PI), lv, type.charCodeAt(0)]);
+        if (tw) B.push([r1(o.cs), r1(o.cl), r1(o.len * tw.len), r1(o.wid * tw.wid), Math.round(o.ang * 180 / Math.PI), tw.levels, type.charCodeAt(0)]);
         counts['b' + type] = (counts['b' + type] ?? 0) + 1;
         if (t.name && (lv >= 8 || fp > 3000 || type === 'r')) landmarks.push([t.name, r1(o.cs), r1(o.cl)]);
+      } else if (t.highway && isDeckWay(t)) {
+        // ペデストリアンデッキ（駅の近くの、高い所を通る歩道。川を渡る歩道橋は除く）
+        const p = (raw.filter(x => !!x) as V[]);
+        if (p.length < 2 || !inS(p) || crossesWater(ring) || !route.stations.some(st => p.some(([s]) => Math.abs(s - (st.platform.from + st.platform.to) / 2) < DECK_NEAR))) continue;
+        decks.push([r1(Math.max(3, Math.min(8, parseFloat(t.width ?? '') || 4))), flat(simplify(p, .5))]);
+        counts.deck = (counts.deck ?? 0) + 1;
       } else if (t.highway) {
         const segs: V[][] = []; let cur: V[] = [];
         for (const p of raw) { if (p && Math.abs(p[1]) <= RANGE + 40) cur.push(p); else { if (cur.length > 1) segs.push(cur); cur = []; } }
         if (cur.length > 1) segs.push(cur);
         const lanes = parseFloat(t.lanes ?? ''), width = parseFloat(t.width ?? '');
-        if (isElevated(t)) {
+        if (isElevated(t) || roadBridge) {
           // 高架の都市高速: 本線は高さ 12m、ランプは本線につながる側が高く、もう一方は地上
-          const ring2 = ring, n = ring2.length, hiA = mwNodes.has(`${ring2[0].lat},${ring2[0].lon}`), hiB = mwNodes.has(`${ring2[n - 1].lat},${ring2[n - 1].lon}`);
-          const main = t.highway === 'motorway';
+          const ring2 = roadBridge ? densify(ring, 10) : ring, rawE = roadBridge ? ring2.map(g => toSL(g.lat, g.lon, true)) : raw, n = ring2.length, hiA = mwNodes.has(`${ring2[0].lat},${ring2[0].lon}`), hiB = mwNodes.has(`${ring2[n - 1].lat},${ring2[n - 1].lon}`);
+          const main = t.highway === 'motorway' && !roadBridge;
           const cum = [0]; for (let i = 1; i < n; i++) cum.push(cum[i - 1] + Math.hypot(...(xy(ring2[i].lat, ring2[i].lon).map((v, k) => v - xy(ring2[i - 1].lat, ring2[i - 1].lon)[k]) as V)));
           const Lt = cum[n - 1] || 1, H = 12;
-          const hAt = (i: number) => main || (hiA && hiB) ? H : hiA ? H * Math.max(0, 1 - cum[i] / Math.min(Lt, 300)) : hiB ? H * Math.max(0, 1 - (Lt - cum[i]) / Math.min(Lt, 300)) : H;
+          // 道路橋は、両端を地上へ下ろす（5%の勾配。端は地上の道路につながる）
+          const hAt = (i: number) => roadBridge ? Math.min(10, .05 * Math.min(cum[i], Lt - cum[i])) : main || (hiA && hiB) ? H : hiA ? H * Math.max(0, 1 - cum[i] / Math.min(Lt, 300)) : hiB ? H * Math.max(0, 1 - (Lt - cum[i]) / Math.min(Lt, 300)) : H;
           const w = width > 0 ? width : lanes > 0 ? lanes * 3.5 + 3 : main ? 10 : 7;
           let cur: number[] = [];
           const flush = () => { if (cur.length >= 6) highways.push([r1(w), cur]); cur = []; };
-          raw.forEach((p, i) => { if (p && Math.abs(p[1]) <= RANGE + 200) cur.push(r1(p[0]), r1(p[1]), r1(hAt(i))); else flush(); });
+          if (roadBridge) {
+            // 道路橋: OSM の橋の way は橋だけ（取り付けの道は地上の way）なので、両端を同じ向きに 120m 延ばし、延長の端を地上にして 5% で上げる
+            const base = ring2.map(g => toSL(g.lat, g.lon, true)).filter((p): p is V => !!p);
+            if (base.length >= 2) {
+              const dir = (a: V, b: V): V => { const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1; return [dx / L, dy / L]; };
+              const [ux, uy] = dir(base[0], base[1]), [vx, vy] = dir(base[base.length - 2], base[base.length - 1]), e = base[base.length - 1];
+              const all: V[] = [];
+              for (let d = 120; d > 0; d -= 10) all.push([base[0][0] - ux * d, base[0][1] - uy * d]);
+              all.push(...base);
+              for (let d = 10; d <= 120; d += 10) all.push([e[0] + vx * d, e[1] + vy * d]);
+              const cm = [0]; for (let i = 1; i < all.length; i++) cm.push(cm[i - 1] + Math.hypot(all[i][0] - all[i - 1][0], all[i][1] - all[i - 1][1]));
+              const LL = cm[cm.length - 1] || 1;
+              all.forEach((p, i) => { if (Math.abs(p[1]) <= RANGE + 200) cur.push(r1(p[0]), r1(p[1]), r1(Math.min(10, .05 * Math.min(cm[i], LL - cm[i])))); else flush(); });
+              flush();
+            }
+            counts.hw = (counts.hw ?? 0) + 1;
+            continue;
+          }
+          rawE.forEach((p, i) => { if (p && Math.abs(p[1]) <= RANGE + 200) cur.push(r1(p[0]), r1(p[1]), r1(hAt(i))); else flush(); });
           flush();
           counts.hw = (counts.hw ?? 0) + 1;
           continue;
         }
-        const cls = roadClass(t);
-        const w = width > 0 ? width : lanes > 0 ? lanes * 3.2 + 2 : cls === 1 ? 16 : cls === 2 ? 9 : 5;
+        const cls = roadClass(t), w = roadWidth(t);
         for (const sg of segs) {
           const p = simplify(sg, 1.2);
           if (!inS(p)) continue;
@@ -815,6 +1167,7 @@ async function main() {
       }
     }
   }
+  for (const [name, pts] of riverPolys) { green.push(['water', pts]); if (name) landmarks.push([name, pts[0], pts[1]]); }
   B.sort((a, b) => a[0] - b[0]);
   const out = {
     source: '© OpenStreetMap contributors（ODbL 1.0）。OpenStreetMap API / Overpass API で取得し、コースの座標へ写して簡略化',
@@ -825,10 +1178,14 @@ async function main() {
     roads,
     /** 高架の都市高速: [幅 m, s,lat,高さ の並び] */
     highways,
+    /** 駅のペデストリアンデッキ: [幅 m, s,lat の並び]（高さは描画側。world/osm-town.ts） */
+    decks,
     /** 面: [種類, s,lat の並び（反時計回り）] */
     areas: green,
     /** 名前のある主な施設: [名前, s, lat] */
     landmarks,
+    /** 線路をくぐる道路: [s, lat, 幅 m, 等級, 道路の中心線 s,lat の並び]。線路の下を掘り下げて描く（world/underpass.ts） */
+    underpasses,
     /** 海岸線（C.coast のコースだけ）: sea = 海の多角形 [[外周 s,lat の並び（反時計回り）, 島の穴…], …]、lines = 海岸線 [s,lat の並び]（進行方向に対し海は左 = lat の大きい側）、
      *  beach = 砂浜の多角形、works = 防波堤(b)・桟橋(p) [種類, 閉じた輪か, s,lat の並び] */
     ...(coast ? { coast } : {}),

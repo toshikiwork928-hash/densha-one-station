@@ -1,7 +1,7 @@
 // 車掌放送の文面。DOM・音声に依存しない純関数（読み上げは audio/announce.ts）。
 // 駅名は読み間違いを避けるため、かな（カタカナに直して）で渡す
 import type { Route, ServiceSpec, Station } from '../route/types';
-import { sameClass, serviceOf } from '../route/service';
+import { serviceOf } from '../route/service';
 
 /** ひらがなをカタカナへ（音声エンジンの漢字辞書・分かち書きに頼らない） */
 export const toKatakana = (s: string): string => s.replace(/[ぁ-ゖ]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60));
@@ -41,16 +41,23 @@ export function departText(route: Route, index: number, afterWait: boolean, svc?
 }
 
 /** 乗り換え案内（到着前の放送）。towardNamba = なんば方面の列車。固有名詞は読み間違いを避けてカタカナ */
-const TRANSFERS: Record<string, (towardNamba: boolean) => string> = {
+/** 乗り換え案内（駅名 → 文。towardNamba = なんば方面へ行く列車、dest = 列車の行先） */
+const TRANSFERS: Record<string, (towardNamba: boolean, dest: string) => string> = {
   新今宮: () => 'JR線はお乗り換えです。',
   天下茶屋: n => n ? 'コウヤ線、地下鉄サカイスジ線、阪急キョウト・キタセンリ方面はお乗り換えください。' : '地下鉄サカイスジ線、阪急キョウト・キタセンリ方面はお乗り換えください。',
   羽衣: () => 'タカシノハマ線はお乗り換えください。',
+  貝塚: () => 'ミズマ線はお乗り換えください。',
+  みさき公園: () => 'タナガワ線はお乗り換えください。',
+  紀ノ川: () => 'カダ線はお乗り換えください。',
+  // 和歌山港へ行く列車（急行・サザン）は和歌山港線をそのまま走るので、加太線と JR 和歌山線だけを案内する
+  和歌山市: (_, dest) => dest === '和歌山港' ? 'カダ線、JRワカヤマ線はお乗り換えください。' : 'カダ線、ワカヤマコウ線、JRワカヤマ線はお乗り換えください。',
+  和歌山港: () => 'ナンカイフェリーはお乗り換えください。',
 };
 export function transferPhrase(route: Route, index: number, svc?: ServiceSpec): string {
   const f = TRANSFERS[route.stations[index].name];
   if (!f) return '';
   const dest = svc?.destination ?? route.stations[route.stations.length - 1].name;
-  return f(dest === 'なんば' || dest === '難波');
+  return f(dest === 'なんば' || dest === '難波', dest);
 }
 
 /** 駅の手前（800m）の放送。終点の手前は御礼を添える。普通が待避する駅では、到着前にも待ち合わせ・通過待ちを案内する */
@@ -71,17 +78,4 @@ export function waitPhrase(route: Route, svc: ServiceSpec | undefined, index: nu
   const passes = list.filter(p => !last && !p.stops.includes(index)).map(p => p.name), meets = list.filter(p => last || p.stops.includes(index)).map(p => p.name);
   const parts = [passes.length ? `${passes.join('と')}の通過待ち` : '', meets.length ? `${meets.join('と')}の待ち合わせ` : ''].filter(Boolean);
   return `当駅で${parts.join('と')}をします。`;
-}
-
-/** 急行・特急が、普通が待ち合わせている駅（自分を待っている）に停車するとき: 乗り換え案内。追い越すだけの駅では言わない */
-export function connectPhrase(route: Route, svc: ServiceSpec | undefined, index: number): string {
-  const local = serviceOf(route, 'local');
-  if (!svc || svc.id === 'local' || !svc.stops.includes(index)) return '';
-  return local?.waits?.some(w => w.station === index && sameClass(w.passedBy, svc.id)) ? '当駅で普通車にお乗り換えになれます。' : '';
-}
-
-/** 到着後の放送（駅名のあとに待避・乗り換え案内）。番線は到着前の放送で案内済みなので言わない */
-export function arriveText(route: Route, svc: ServiceSpec | undefined, index: number): string {
-  const sta = route.stations[index];
-  return `${spoken(sta)}、${spoken(sta)}です。${waitPhrase(route, svc, index)}${connectPhrase(route, svc, index)}`;
 }

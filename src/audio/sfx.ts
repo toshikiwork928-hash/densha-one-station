@@ -13,7 +13,7 @@ import { createStation, type StationSfx } from './station';
 import { createAlarms, type Alarms } from './alarms';
 import { createAmbience, type Ambience } from './ambience';
 import { createAnnouncer } from './announce';
-import { approachText, arriveText, departText } from './announce-text';
+import { approachText, departText } from './announce-text';
 import { createSettings, renderSettingsUi, type SettingsStore } from './settings';
 
 interface Parts {
@@ -119,10 +119,7 @@ export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
     if (e.stage !== 'announce') return;
     announce(approachText(ctx.route, e.index, ctx.service));
   });
-  events.on('arrive', e => {
-    if (e.judgement.kind === 'overrun') return;
-    announcer.say(arriveText(ctx.route, ctx.service, e.index), 1.2);
-  });
+  // 駅に着いたとき（ゴールを含む）は放送しない（ユーザー指示。待ち合わせ・待避は到着前の放送で案内する）
   events.on('stateChange', e => {
     fromDwell = e.from === 'dwell' && e.to === 'run';
     if (e.to === 'dwell') dwellMelody = false;

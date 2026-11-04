@@ -238,6 +238,7 @@ export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot
     // 描画専用線も分岐端まで敷地を確保。樹冠の幅と前後方向の張り出しを含む。
     if (thirds.some(t => s > t.from - radius && s < t.to + radius && Math.abs(lat - t.lat(s)) < radius + 2.1)) return;
     if (tramBlocks(route, s - radius, s + radius, lat - radius, lat + radius)) return; // 阪堺線の跨線橋・高師浜線の高架支線の通り道
+    if ([[0, 0], [-radius, 0], [radius, 0], [0, -radius], [0, radius]].some(([ds, dl]) => T.cutDepth(s + ds, lat + dl) > .05)) return; // 線路をくぐる道路の掘り下げ（world/underpass.ts）
     const t = trackAt(s);
     items.push({ model, pl: { p: new THREE.Vector3(t.x + t.rx * lat, y ?? T.groundY(s) + T.reliefY(s, lat), t.z + t.rz * lat), yaw: -t.phi + yaw, k } });
   };

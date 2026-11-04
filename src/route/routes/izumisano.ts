@@ -9,6 +9,7 @@ import { airportService, loopZone, setDestinations } from '../service';
 import { stopScenes, type StopScene } from '../oncoming-stops';
 import { IT, IT_UP } from './izumisano-timetable';
 import { NAMBA_WAITS, setLocalPatterns, within } from '../day-patterns';
+import { MIZUMA_RESERVED } from './mizuma';
 
 const LOOP: StationLoop = { lat: -9.2, turnoutLength: 90, turnoutLimitKmh: 45 };
 const DISTANCES = [0, 900, 2600, 4400, 5300, 6400, 8000];
@@ -119,6 +120,8 @@ export const izumisano: Route = {
   deckJoin: [{ from: 7650, to: 8600 }],
   scenery: { cityZones: [{ from: -Infinity, to: 650 }, { from: 1150, to: Infinity }] },
   oncoming: stopScenes(stations, STOP_SCENES), signals, crossings,
+  // 水間鉄道の貝塚駅（world/mizuma.ts）の敷地には OSM の建物・木を置かない
+  reserved: MIZUMA_RESERVED,
   // 貝塚〜二色浜は OSM の高架区間・近木川交差と前面展望を基にした概形。
   // 高架高6m・取り付き勾配25‰・橋長45mはゲーム用の近似。
   structures: [

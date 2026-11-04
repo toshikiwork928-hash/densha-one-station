@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import type { TrainKind } from '../route/types';
-import { DEPOT, ladderLat, yardBranchS, yardLat } from '../route/routes/hagurazaki-depot';
+import { DEPOT, ladderLat, yardBranchS, yardLat, depotS } from '../route/routes/hagurazaki-depot';
 import { GeoBatch, M, onLight, P } from './batch';
 import { cullByDistance } from './cull';
 import { placeCar } from './emu';
@@ -111,14 +111,14 @@ export function buildHagurazakiDepot(ctx: GameContext): void {
   // 洗浄線の屋根（留置線 3・4番の上。柱は線路の間）
   {
     const c = (yardLat(3) + yardLat(4)) / 2, cols = [yardLat(2) - DEPOT.pitch / 2, yardLat(4) - DEPOT.pitch / 2];
-    boxAt('r', 2735, c, 6.2, DEPOT.pitch * 3 + .6, .3, 70, 0x8b949c);
-    for (let s = 2704; s <= 2766; s += 15.5) for (const l of cols) boxAt('c', s, l, 0, .4, 6.3, .4, 0xaeb0a8);
-    boxAt('c', 2735, c, 0, DEPOT.pitch * 3 - 1, .05, 70, 0x9a9990);
+    boxAt('r', depotS(2735), c, 6.2, DEPOT.pitch * 3 + .6, .3, 70, 0x8b949c);
+    for (let s = depotS(2704); s <= depotS(2766); s += 15.5) for (const l of cols) boxAt('c', s, l, 0, .4, 6.3, .4, 0xaeb0a8);
+    boxAt('c', depotS(2735), c, 0, DEPOT.pitch * 3 - 1, .05, 70, 0x9a9990);
   }
   // 事務・乗務員棟と倉庫（梯子線の北東側の空き地）
-  boxAt('c', 2412, -52, 0, 11, 6, 40, 0xe2ded4); boxAt('s', 2412, -52, 6, 11.6, .35, 40.6, 0x7b8790); boxAt('s', 2412, -46.4, 2.6, .1, 1.2, 36, 0x39485a);
-  boxAt('c', 2468, -50, 0, 9, 4.6, 24, 0xcfc9bb); boxAt('s', 2468, -50, 4.6, 9.6, .3, 24.6, 0x7b8790);
-  boxAt('c', 2500, -63, 0, 7, 3.4, 12, 0xb9b5a8); boxAt('s', 2500, -63, 3.4, 7.4, .25, 12.4, 0x6d7a86);
+  boxAt('c', depotS(2412), -52, 0, 11, 6, 40, 0xe2ded4); boxAt('s', depotS(2412), -52, 6, 11.6, .35, 40.6, 0x7b8790); boxAt('s', depotS(2412), -46.4, 2.6, .1, 1.2, 36, 0x39485a);
+  boxAt('c', depotS(2468), -50, 0, 9, 4.6, 24, 0xcfc9bb); boxAt('s', depotS(2468), -50, 4.6, 9.6, .3, 24.6, 0x7b8790);
+  boxAt('c', depotS(2500), -63, 0, 7, 3.4, 12, 0xb9b5a8); boxAt('s', depotS(2500), -63, 3.4, 7.4, .25, 12.4, 0x6d7a86);
 
   // --- 柵（東・南・西）と、柱
   {
@@ -132,7 +132,7 @@ export function buildHagurazakiDepot(ctx: GameContext): void {
       }
     };
     side(DEPOT.fenceLat, DEPOT.fenceNorth, DEPOT.fenceSouth);
-    side(DEPOT.fenceWest, 2330, DEPOT.fenceSouth);
+    side(DEPOT.fenceWest, depotS(2330), DEPOT.fenceSouth);
     for (let l = DEPOT.fenceLat; l <= DEPOT.fenceWest; l += 3) post(DEPOT.fenceSouth, l);
     for (let l = DEPOT.fenceLat; l < DEPOT.fenceWest; l += 30) {
       const len = Math.min(30, DEPOT.fenceWest - l) + .1;
@@ -145,8 +145,8 @@ export function buildHagurazakiDepot(ctx: GameContext): void {
     const lampMat = new THREE.MeshBasicMaterial({ color: 0xffe2b0, toneMapped: false });
     const lamps: THREE.Matrix4[] = [];
     // 留置線の間の通路（1・2番の間と 4・5番の間）。梯子線が横切る範囲と洗浄線の屋根の柱は避ける
-    for (let s = 2490; s <= 3080; s += 45) for (const lat of [yardLat(1) - DEPOT.pitch / 2, yardLat(4) - DEPOT.pitch / 2]) {
-      if (s > 2690 && s < 2780) continue;
+    for (let s = depotS(2490); s <= depotS(3080); s += 45) for (const lat of [yardLat(1) - DEPOT.pitch / 2, yardLat(4) - DEPOT.pitch / 2]) {
+      if (s > depotS(2690) && s < depotS(2780)) continue;
       boxAt('s', s, lat, 0, .22, 10, .22, 0x6e7377);
       const p = track.at(s, lat + 1, 10.1), t = track.trackAt(s);
       lamps.push(new THREE.Matrix4().compose(p, new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -t.phi, 0)), new THREE.Vector3(1.4, .16, .5)));
@@ -182,7 +182,7 @@ export function buildHagurazakiDepotTrains(ctx: GameContext): void {
   const group = new THREE.Group(); group.name = 'oncoming-hagurazaki-depot';
   for (const p of PARKED) {
     const lat = yardLat(p.track);
-    const cars = createTrainSet(p.kind, p.units.reduce((x, y) => x + y, 0), ctx.renderer, { dest: '', label: p.label, units: p.units });
+    const cars = createTrainSet(p.kind, p.units.reduce((x, y) => x + y, 0), ctx.renderer, { dest: '', label: p.label, units: p.units, dark: true });
     // 先頭を車止めの側（s の増える向き）へ、後ろへ連ねる
     let cur = DEPOT.bumper - 4 - p.gap;
     for (const c of cars) {

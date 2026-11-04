@@ -238,7 +238,7 @@ export function buildSuminoeDepotTrains(ctx: GameContext): void {
   const group = new THREE.Group(); group.name = 'oncoming-suminoe-depot';
   for (const p of PARKED) {
     const ln = straight[p.track], lat = ln.lat(0);
-    const cars = createTrainSet(p.kind, p.cars, ctx.renderer, { dest: '', label: '回送', units: p.units });
+    const cars = createTrainSet(p.kind, p.cars, ctx.renderer, { dest: '', label: '回送', units: p.units, dark: true });
     const total = cars.reduce((sum, c) => sum + c.length, 0);
     // 車止めの側に後尾、進行方向（+s）が入出庫線の側
     let cur = ln.from + 4 + p.gap + rand() * 3 + total;

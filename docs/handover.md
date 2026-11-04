@@ -1,7 +1,7 @@
 # 引き継ぎ資料（densha-one-station）
 
-作成: 2026-10-08。Claude Code のセッションから、Codex など別のエージェントへ作業を引き継ぐための資料。
-ゲームの内容（遊べるもの・操作）は [README.md](../README.md)、これまでの完了項目と残りの案は [ROADMAP.md](../ROADMAP.md) にある。この文書は「どう作られているか」「どう作るか」「何が残っているか」を書く。
+作成: 2026-10-08、更新: 2026-11-04。Claude Code のセッションから、Codex など別のエージェントへ作業を引き継ぐための資料。
+ゲームの内容（遊べるもの・操作）は [README.md](../README.md)、**残りの作業は [ROADMAP.md](../ROADMAP.md)**（済んだ項目は消してある。経緯は git log と `docs/spec-*.md`）。この文書は「どう作られているか」「どう作るか」「何が残っているか」を書く。
 
 読む順のおすすめ: 1 → 2 → 9（守ること）→ 11（未着手のプラン）→ 担当する作業に関係する章。
 
@@ -80,7 +80,11 @@ scripts/           検証・データ生成（Node で esbuild して実行）
 ### 地図データ（OpenStreetMap）からの配置
 - 手順の詳細は [docs/osm-scenery.md](./osm-scenery.md)
 - `scripts/osm-scenery.ts` が Overpass API から線路の両側約300m の建物・道路・緑地・川を取り、**コースの座標（s, lat）へ写して**簡略化し、`src/data/osm/<区間>.json` に書く。写し方は、路線データと同じく「駅間ごとに営業キロへ伸縮」
-- OSM のデータが無いコース（みさき公園〜和歌山港）: 街並みは手続き生成（`town-jp.ts`・`scenery.ts`）。橋の下の川だけ、水面1枚の手作りデータ `src/data/osm/misaki-wakayamako.json` を `loadOsmFor` の区間として読む（`osm-town.ts` の `DATASETS` で `waterOnly: true`。`osmSceneryFor` と `hasOsmScenery` は水面だけのデータを街並みのデータとして扱わない）。標高が正の山あいは `Route.groundFollowsTrack`（地面が線路の高さに沿う。`terrain.ts`）
+- 6区間すべてに OSM のデータがある（`namba`・`sakai-izumiotsu`・`izumiotsu-kishiwada`・`kishiwada-izumisano`・`izumisano-misaki`・`misaki-wakayamako`）。泉佐野以南の山あいは `Route.groundFollowsTrack`（地面が線路の高さに沿う。`terrain.ts`）
+- 取得（2026-11-04 の形）: 線路と駅を先に取り、線路に沿った約 1.2km の矩形ごとに way を取ってまとめる。取れない矩形は4つに分ける（2段まで）。多角形のリレーションはコース全体で1回。0 件・remark 付きの応答は捨て、200 秒で打ち切る。矩形ごとの結果は `node_modules/.cache/osm/<id>.raw.b*.json` に残るので、失敗しても `--refresh` で続きから取れる。`--endpoint=` でサーバーを選ぶ（混雑時は maps.mail.ru のミラーが応答した）。`--min-time=YYYY-MM-DD` で古いミラーのデータを捨てる
+- データに入るもの: 建物・道路・面・高架の道路のほか、線路をくぐる道路（`underpasses`。`world/underpass.ts` が掘り下げ・床版・擁壁を描く）、駅のペデストリアンデッキ（`decks`）、階数の無い高層の建物の塔（スクリプトの `TOWERS`）
+- 写し方の基準: 通常は OSM の駅の点をゲームのホームの中心に合わせる。`COURSES` の `platformAnchors` の駅は、OSM のホーム（`--platforms` で取る）の中心に合わせる（ホームを実際の長さにした泉佐野以南の8駅）
+- 点検の道具: `--scan`（線路の橋・川・道路の上下関係と、ゲームの踏切・構造物との対応）、`--platforms`（OSM のホームとゲームのホーム・踏切の位置）、`--points=緯度,経度;…`（任意の点をコースの座標へ写す）、`--crossings`（踏切の取り直し → `npm run crossings:south`）
 - `world/osm-town.ts` がそのデータで建物・道路・緑地を置く。同じ区間を含むコース（上下・通し）でも同じ位置に出る。データは選んだコースの区間だけ dynamic import で読む（`loadOsmFor`。`main.ts` が `buildWorld` の前に待つ。詳細は [osm-scenery.md](./osm-scenery.md) の「読み込み」）
 - 実行: `npm run osm:scenery -- --course=namba`（`sakai-izumiotsu`・`izumiotsu-kishiwada`）。**クラウド環境からは Overpass につながらない**ので、取得はローカルで行う。Overpass は混むと 504 を返すので間をおいて再試行。`npm ci` は `node_modules/.cache/osm` の一時保存を消す
 - 出典の表示: 「© OpenStreetMap contributors（ODbL）」を README に書く
@@ -156,18 +160,12 @@ dev サーバー（`npm run dev`、または `.claude/launch.json` の `densha`�
 - 時刻表・運用: 南海電鉄の時刻表、鉄道運用Hub（運用表データは CC BY 4.0、編成表データは著作権放棄）
 - 3D 素材: Kenney City Kit・Quaternius（CC0）
 
-## 11. 未着手のプラン（ユーザーの要望。上から優先）
+## 11. 残りの作業
 
-| # | プラン | 状態・メモ |
-|---|---|---|
-| 1 | **景観の作り直し（全区間）** | ローカルのセッションで作業中（ブランチ `claude/awesome-raman-0eee6f`）。PR が出たらマージ・公開 |
-| 2 | **駅舎の構造を全駅で実物に寄せる** | 既存27駅を写真照合。新今宮・天下茶屋の大屋根、羽衣・石津川・松ノ浜などの上屋と背面壁、駅ごとの支材・屋根形をローカルで反映。未公開。出典・維持した形・工事中や写真に写らない部分は `docs/station-architecture-reference.md`。今回は配線・停止位置を変更していない |
-| 3 | **遊べる車両を増やす**（1000系・9000系・12000系） | Codex で作業中（ブランチ `codex/densha-playable-trains`） |
-| 4 | **岸和田〜泉佐野の新コース** | ローカルで上下7駅・8.0km、5種別、泉佐野島式3面4線、OSM景観、対向ダイヤを追加。未公開。仕様・再生成・未確認箇所は `docs/spec-kishiwada-izumisano.md`。泉佐野の駅舎（分割屋根・東西の駅舎）は実装済み（`docs/izumisano-station-reference.md` 6章）。ほかの駅舎の個別外観・踏切の現地照合は未完了 |
-| 5 | **高野線 なんば〜堺東の新設** + 泉北線の車両 | 規模が最大。なんば〜岸里玉出の高野線は描画だけある（`koya-traffic.ts`）。本線より最高速度が低く曲線が多い・本数が多い。運用Hub に高野線系統のデータもある（railroad_id は別） |
-| 6 | **Autoモード（見るだけ）** | 自動運転（`debug/autodrive.ts` の hook）をゲームのモードにし、視点（運転台・俯瞰・前方斜め・全景）を自動で切り替える |
-| 7 | **なんば駅探索モード** | なんば到着後だけ、自由に動かせるカメラで構内を歩く。コンコース・階段などの作り込みが別に必要 |
-| 8 | **負荷測定とスマホの画質自動調整** | ROADMAP の残り。景観の作り直しで三角形が増えた区間がある |
-| 9 | 対向列車の小さな課題 | 前の列車がまだ走路にいると、出現の機会を逃して1本見送ることがある（例: 堺→なんばの朝の特急で、天下茶屋に停車中の普通の後ろのラピートα）。ユーザー報告「住吉大社あたりで普通とすれ違った直後に七道でも普通」（実ダイヤどおりなら問題なし） |
-| 10 | なんば〜岸和田の通し | 保留（ユーザー判断）。作るなら景観の区間ごとの読み込みが必要 |
-| 11 | **泉佐野以南のコース** | みさき公園〜和歌山港（6駅・15.1km、上下、普通・特急サザン）を追加。ローカルで画面確認・Pages 公開前（ブランチ `claude/south-misaki-wakayamako`）。景観（OSM・駅舎・橋）・実ダイヤ・対向列車・踏切は後日。泉佐野〜みさき公園（10駅・17.9km）は泉佐野駅の作り直し後。仕様・仮値・不明な点は `docs/spec-south-courses.md` §7 |
+残りの作業は [ROADMAP.md](../ROADMAP.md) にまとめた（2026-11-04）。高野線の拡張の計画は [plan-claude-next.md](./plan-claude-next.md)。
+ROADMAP に入れていない、以前からの案（ユーザーが保留・判断待ち）:
+
+- Autoモード（見るだけ）: 自動運転（`debug/autodrive.ts` の hook）をゲームのモードにし、視点を自動で切り替える。
+- なんば駅探索モード: なんば到着後に、自由に動かせるカメラで構内を歩く。コンコース・階段の作り込みが別に要る。
+- 対向列車の小さな課題: 前の列車がまだ走路にいると、出現の機会を逃して1本見送ることがある（例: 堺→なんばの朝の特急で、天下茶屋に停車中の普通の後ろのラピートα）。
+- なんば〜岸和田の通し: 保留（ユーザー判断）。

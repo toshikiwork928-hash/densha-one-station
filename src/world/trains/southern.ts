@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { GeoBatch, M, P } from '../batch';
 import {
-  Y0, adder, addEndWall, addSingleArm, addTaperedSkirt, addUnderfloor, capGeo, cv, faceSheet, roundRings, shellGeo, sideSheet, sweepBand,
+  Y0, adder, addCrossArm, addEndWall, addTaperedSkirt, addUnderfloor, capGeo, cv, faceSheet, roundRings, shellGeo, sideSheet, sweepBand,
   type CarKind, type CarParts, type Ring, type SheetMaps, type V2,
 } from './common';
 import { mergeLed } from './commuter';
@@ -166,13 +166,16 @@ export function buildSouthernCar(kind: CarKind, Lb: number): CarParts {
   } else addEndWall(b, -hz, YTOP_S, HW_S, 0xc2c6cc);
   addUnderfloor(b, Lb, kind, { frame: 0x3a3d42, equip: 0x2b2e33, bogie: 0x24272b });
   // 屋根上: 低い箱形の冷房装置
+  // パンタ: 中間電動車（モハ10101形）に下枠交差形を2基（Wikipedia「南海10000系電車」の編成表の記号。位置は記載が無いので車体の両端寄り）。
+  // 実車は難波方の先頭車（モハ10001形）にも付くが、先頭車の形は両端で共有なので付けない
+  const pans = kind === 'pan' ? [-hz + 2.8, hz - 2.8] : [];
   for (const z of [-7.2, -4.4, -1.6, 1.2, 4.0, 6.8]) {
-    if (kind === 'pan' && Math.abs(z - (-hz + 4.0)) < 1.7) continue;
+    if (pans.some(p => Math.abs(z - p) < 1.7)) continue;
     if (head && z < -6.5) continue;
     add(0, roofTop + .13, z, 1.4, .26, 1.6, 0xcdd1d6);
     for (const sx of [-1, 1]) add(sx * .71, roofTop + .14, z, .02, .16, 1.1, 0x3a3f45);
   }
   add(0, roofTop + .03, 0, .4, .06, Lb - 1.4, 0xa9aeb4);
-  if (kind === 'pan') addSingleArm(b, -hz + 4.0, roofTop - .02);
+  for (const p of pans) addCrossArm(b, p, roofTop - .02);
   return { shell, face, paint: b.geometry('paint')!, led, head: lit.geometry('l') ?? undefined, marks, glows };
 }

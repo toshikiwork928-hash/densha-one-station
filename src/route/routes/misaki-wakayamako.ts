@@ -25,10 +25,13 @@ const names = [
   ['紀ノ川', 'きのかわ'], ['和歌山市', 'わかやまし'], ['和歌山港', 'わかやまこう'],
 ];
 const LAST = names.length - 1;
+/** ホームの長さ [m]（OSM の railway=platform。6両 + 20m = 145m より短いものは 145m）。ホームは停止位置の 10m 先で終わる。泉佐野〜みさき公園の IZUMISANO_MISAKI_PLATFORM_LEN と同じ考え方 */
+export const MISAKI_WAKAYAMAKO_PLATFORM_LEN: Record<string, number> = { 孝子: 145 };
+
 const stations: Station[] = names.map(([name, kana], i) => {
-  const stopS = 180 + MW_DISTANCES[name];
+  const stopS = 180 + MW_DISTANCES[name], pl = MISAKI_WAKAYAMAKO_PLATFORM_LEN[name];
   return {
-    name, kana, stopS, platform: { from: stopS - 180, to: stopS + 40, side: 'L' },
+    name, kana, stopS, platform: pl ? { from: stopS + 10 - pl, to: stopS + 10, side: 'L' } : { from: stopS - 180, to: stopS + 40, side: 'L' },
     scheduledArrival: i * 100, dwell: i && i < LAST ? 25 : undefined, stopMarkerCars: 6,
     ...(i === LAST ? { elevated: true, island: { ...ISLAND }, headEnd: true } : {}),
     ...(i > 0 && i < LAST ? { layout: 'relative' as const } : {}),

@@ -9,6 +9,7 @@ import { loopZone, profileLat, trackSpan } from '../route/service';
 import { osmFor, osmReady, osmSceneryFor } from './osm-town';
 import { RIVER_WATER, makeRiverField, type RiverField } from './river';
 import { buildMountainTerrain, makeMountainTerrain, type MountainTerrain } from './mountain-terrain';
+import { buildUnderpasses, makeUnderpassField, type UnderpassField } from './underpass';
 
 export type StructureKind = 'tunnel' | 'viaduct' | 'bridge';
 type Structure = NonNullable<Route['structures']>[number];
@@ -29,6 +30,10 @@ export interface Terrain {
   dryY(s: number): number;
   /** (s, lat) の川の溝の深さ [m]（0 = 溝なし）。橋の下の溝と OSM の水面に沿った溝を合わせた値 */
   riverDepth(s: number, lat: number): number;
+  /** (s, lat) の、線路をくぐる道路の掘り下げの深さ [m]（0 = なし。world/underpass.ts） */
+  cutDepth(s: number, lat: number): number;
+  /** 線路をくぐる道路（沿線データの読み込み前・無いコースは null） */
+  readonly underpasses: UnderpassField | null;
   /** (s, lat) が川の溝・水面から margin [m] 以内か（建物・木・道路の判定用） */
   riverNear(s: number, lat: number, margin?: number): boolean;
   /** 川として扱う OSM の water 面の目印（river.ts の areaKey）。osm-town はこれを池として貼らない */
@@ -115,6 +120,13 @@ function makeTerrain(route: Route, track: Track): Terrain {
     return d * (1 - smooth((out - 6) / 16));
   };
   const riverDepth = (s: number, lat: number) => Math.max(stubDepth(s, lat), getRiver()?.depth(s, lat) ?? 0);
+  // 線路をくぐる道路の掘り下げ（world/underpass.ts）。川の溝と同じく沿線データの読み込み後に作る
+  let under: UnderpassField | undefined;
+  const getUnder = (): UnderpassField | null => {
+    if (under === undefined && osmReady(route)) under = makeUnderpassField(route, osmFor(route), trackY, dryY);
+    return under ?? null;
+  };
+  const cutDepth = (s: number, lat: number) => getUnder()?.depth(s, lat) ?? 0;
   const hill = (s: number, lat: number) => {
     for (const t of tunnels) {
       if (s < t.from || s > t.to) continue;
@@ -168,8 +180,9 @@ function makeTerrain(route: Route, track: Track): Terrain {
   const crossings = route.crossings ?? [];
   return {
     groundY, trackY, reliefY,
-    terrainY: (s, lat) => dryY(s) + hill(s, lat) + reliefY(s, lat) - riverDepth(s, lat),
-    dryY, riverDepth,
+    terrainY: (s, lat) => dryY(s) + hill(s, lat) + reliefY(s, lat) - Math.max(riverDepth(s, lat), cutDepth(s, lat)),
+    dryY, riverDepth, cutDepth,
+    get underpasses() { return getUnder(); },
     riverNear: (s, lat, m = 0) => {
       if (stubDepth(s - m, lat) > 0 || stubDepth(s, lat) > 0 || stubDepth(s + m, lat) > 0) return true;
       const r = getRiver();
@@ -178,7 +191,7 @@ function makeTerrain(route: Route, track: Track): Terrain {
     get riverAreaKeys() { return getRiver()?.keys ?? new Set<string>(); },
     riverSpans: () => {
       const spans: [number, number][] = bridges.map(b => [b.from - 30, b.to + 30]);
-      spans.push(...(getRiver()?.spans ?? []));
+      spans.push(...(getRiver()?.spans ?? []), ...(getUnder()?.spans ?? []));
       spans.sort((a, b) => a[0] - b[0]);
       const out: [number, number][] = [];
       for (const sp of spans) { const l = out[out.length - 1]; if (l && sp[0] <= l[1]) l[1] = Math.max(l[1], sp[1]); else out.push([sp[0], sp[1]]); }
@@ -309,21 +322,25 @@ export function buildTerrain(ctx: GameContext): Terrain {
   const town = !route.urban && !!osmSceneryFor(route), townC = new THREE.Color(0x9a9886);
   // 川（橋の範囲と OSM の水面）がある s の範囲は、溝の形を出せるよう細かい格子で作る（lat 4m・s 5m）。ほかは従来の格子
   const spans = T.riverSpans().filter(sp => sp[1] > S0 && sp[0] < S1);
-  const denseLat = (() => {
+  const denseLatOf = (fine: [number, number] | null) => {
     const [r0, r1] = T.riverLatRange() ?? [-340, 340], set = new Set<number>([-1400, -1000, 1000, 1404]);
     for (let l = Math.min(-340, r0 - 20); l < -340; l += 20) set.add(l);
     for (let l = -340; l <= 340; l += 4) set.add(l);
     for (let l = 340; l <= Math.max(340, r1 + 20); l += 20) set.add(l);
+    // 線路をくぐる道路の掘り下げの範囲は 1m 刻み（擁壁の位置で地面を切り替える）
+    if (fine) for (let l = Math.ceil(Math.max(-340, fine[0])); l <= Math.min(340, fine[1]); l += 1) set.add(l);
     return [...set].sort((a, b) => a - b);
-  })();
+  };
+  const denseLat = denseLatOf(null);
+  const unders = T.underpasses?.list ?? [];
   const mud = new THREE.Color(0x6f6a55);
-  const denseCols = (rowDip: number[]) => (s: number): [number, number][] => {
+  const denseCols = (rowDip: number[], lats = denseLat) => (s: number): [number, number][] => {
     const k = T.curvature(s), R = Math.abs(k) > 1e-5 ? 1 / Math.abs(k) : 1e9;
     rowDip.length = 0;
-    return denseLat.map((l, j) => {
+    return lats.map((l, j) => {
       const inside = (k > 0 && l > 0) || (k < 0 && l < 0);
       const ll = inside ? Math.sign(l) * Math.min(Math.abs(l), R * .85) : l;
-      const edge = j === 0 || j === denseLat.length - 1;
+      const edge = j === 0 || j === lats.length - 1;
       // 溝は線路方向の位置と同じ横位置（曲線の内側で寄せた位置）で測る
       const y = edge ? T.dryY(s) : T.terrainY(s, ll);
       rowDip.push(edge ? 0 : T.dryY(s) - y);
@@ -355,16 +372,26 @@ export function buildTerrain(ctx: GameContext): Terrain {
         g.name = 'ground'; scene.add(g);
         continue;
       }
-      const dip: number[] = [], rows = denseCols(dip);
-      const g = gridAlong(track, p0, p1, 5, rows, groundMat, (q, j, out) => {
-        const h = hash(Math.floor(q / 30), j), l = denseLat[j];
-        out.copy(town && j >= 1 && j <= denseLat.length - 2 ? townC : gc).multiplyScalar(.85 + h * .22);
-        if (l >= -6 && l <= 10) out.lerp(dirt, .35);
-        out.lerp(mud, Math.min(1, dip[j] / 3) * .85); // 岸の斜面は土の色
-      });
-      g.name = 'ground'; scene.add(g);
-      const w = waterAlong(track, p0, p1, 5, denseCols([]), waterY, river, (s, lat) => T.riverNear(s, lat));
-      if (w) { w.name = 'river'; w.userData.noShadow = true; scene.add(w); }
+      // 線路をくぐる道路の掘り下げの範囲は s 方向も 1m 刻み
+      const cuts: [number, number, [number, number]][] = unders.filter(u => u.s1 + 2 > p0 && u.s0 - 2 < p1).map(u => [Math.max(p0, u.s0 - 2), Math.min(p1, u.s1 + 2), [u.l0 - 2, u.l1 + 2]]);
+      const sub: [number, number, [number, number] | null][] = [];
+      let q0 = p0;
+      for (const [a, b, lr] of cuts.sort((x, y) => x[0] - y[0])) { if (a > q0) sub.push([q0, a, null]); sub.push([Math.max(q0, a), b, lr]); q0 = Math.max(q0, b); }
+      if (q0 < p1) sub.push([q0, p1, null]);
+      for (const [a, b, fine] of sub) {
+        if (b - a < .5) continue;
+        const lats = fine ? denseLatOf(fine) : denseLat;
+        const dip: number[] = [], rows = denseCols(dip, lats);
+        const g = gridAlong(track, a, b, fine ? 1 : 5, rows, groundMat, (q, j, out) => {
+          const h = hash(Math.floor(q / 30), Math.round(lats[j] / 4)), l = lats[j];
+          out.copy(town && j >= 1 && j <= lats.length - 2 ? townC : gc).multiplyScalar(.85 + h * .22);
+          if (l >= -6 && l <= 10) out.lerp(dirt, .35);
+          out.lerp(mud, Math.min(1, dip[j] / 3) * .85 * (T.cutDepth(q, l) > 0 ? 0 : 1)); // 岸の斜面は土の色（くぐる道路の掘り下げは除く）
+        });
+        g.name = 'ground'; scene.add(g);
+        const w = waterAlong(track, a, b, fine ? 1 : 5, denseCols([], lats), waterY, river, (s, lat) => T.riverNear(s, lat));
+        if (w) { w.name = 'river'; w.userData.noShadow = true; scene.add(w); }
+      }
     }
   };
   for (let s = S0; s < S1; s += 1000) buildGround(s, Math.min(S1, s + 1000));
@@ -407,6 +434,8 @@ export function buildTerrain(ctx: GameContext): Terrain {
     if (runStart != null) flush(runStart, s1);
   };
   embank(S0, S1, () => true, bankSpan);
+  // 線路をくぐる道路の床版・擁壁（掘り下げは terrainY）。地面の帯の色は線路から離れた所の地面の色
+  if (T.underpasses) buildUnderpasses(ctx, T.underpasses, T.dryY);
   for (const x of bankX) {
     const lat = (q: number) => profileLat(x.lat, q);
     embank(Math.max(S0, x.from), Math.min(S1, x.to), q => { const [lo, hi] = bankSpan(q), l = lat(q); return l < lo - .01 || l > hi + .01; }, q => [lat(q), lat(q)]);

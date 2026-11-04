@@ -34,6 +34,7 @@ import { buildWakayamadaigakumae } from './wakayamadaigakumae';
 import { downFrame } from './down-frame';
 import { buildIzumisanoAirport } from './izumisano-airport';
 import { buildHagurazakiDepot, buildHagurazakiDepotTrains } from './hagurazaki-depot';
+import { buildMizuma } from './mizuma';
 import { osmFor, waterMaskOf } from './osm-town';
 
 export interface World {
@@ -81,6 +82,9 @@ export function buildWorld(ctx: GameContext): World {
   buildWakayamashiTrains(ctx);
   // みさき公園〜和歌山港の和歌山大学前駅の周辺（橋上駅舎・駅ビル・イオンモールへのデッキ・西口・マンション・斜面。同じく下りの座標）。ctx.rng を消費しない
   buildWakayamadaigakumae(ctx);
+  // 岸和田〜泉佐野専用: 水間鉄道の貝塚駅（見た目だけ。座標は下りのもの）。ctx.rng を消費しない
+  const kctx = downFrame(ctx, 'izumisano');
+  if (kctx) buildMizuma(kctx);
   // 泉佐野〜みさき公園専用（下り 'izumisano-misaki' と上り '-up'。座標は下りのもの、world/down-frame.ts）。ctx.rng を消費しない
   const sctx = downFrame(ctx, 'izumisano-misaki');
   if (sctx) {

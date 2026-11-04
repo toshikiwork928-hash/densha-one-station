@@ -1,7 +1,7 @@
 // 9000系更新車。既存の通勤形ジオメトリを使い、更新標準塗装を描く。
 import * as THREE from 'three';
 import { GeoBatch, M, P } from '../batch';
-import { Y0, adder, addEndWall, addSingleArm, addTaperedSkirt, addUnderfloor, capGeo, faceSheet, roundRings, shellGeo, sideSheet, sweepBand, type CarKind, type CarParts, type Ring, type SheetMaps, type V2 } from './common';
+import { Y0, adder, addCrossArm, addEndWall, addTaperedSkirt, addUnderfloor, capGeo, faceSheet, roundRings, shellGeo, sideSheet, sweepBand, type CarKind, type CarParts, type Ring, type SheetMaps, type V2 } from './common';
 import { mergeLed } from './commuter';
 import { paintDoor } from './c1000';
 
@@ -91,8 +91,10 @@ export function build9000Car(kind: CarKind, Lb: number): CarParts {
   }
   addEndWall(b, head ? hz : -hz, YTOP, HW, 0xb9bec4);
   addUnderfloor(b, Lb, kind, { frame: 0x3a3d42, equip: 0x2b2e33, bogie: 0x24272b });
-  for (const z of [-6, -2, 2, 6]) add(0, YTOP + .14, z, 1.5, .25, 1.6, 0xb5bac0);
+  // パンタ: 中間電動車（モハ9001形）に下枠交差形を2基（Wikipedia「南海9000系電車」。位置は記載が無いので車体の両端寄り）。冷房装置はその間
+  const pans = kind === 'pan' ? [-hz + 2.8, hz - 2.8] : [];
+  for (const z of [-6, -2, 2, 6]) if (!pans.some(p => Math.abs(z - p) < 1.6)) add(0, YTOP + .14, z, 1.5, .25, 1.6, 0xb5bac0);
   add(0, YTOP + .03, 0, .45, .06, Lb - 1.2, 0x868b91);
-  if (kind === 'pan') addSingleArm(b, -hz + 4, YTOP - .02);
+  for (const p of pans) addCrossArm(b, p, YTOP - .02);
   return { shell, face, paint: b.geometry('paint')!, glass: undefined, led, head: lit.geometry('l') ?? undefined, marks: { l: marksL.geometry('l')!, r: marksR.geometry('l')! }, glows };
 }

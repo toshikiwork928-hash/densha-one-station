@@ -123,6 +123,9 @@ body.cam-replay #dash, body.cam-replay #sidePanel .panel, body.cam-replay #touch
 .preview-heading span { color: var(--muted); font-weight: 400; }
 .preview-stage { height: 240px; background: radial-gradient(ellipse at 50% 40%, #dce5ed, #a0b1c1); border-radius: 8px; overflow: hidden; }
 .vehicle-preview-canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+/* 大きく表示: プレビューの枠を画面いっぱいに（タイトルのメニューの上に重ねる） */
+.vehicle-preview.preview-big { position: fixed; inset: 3vh 3vw; z-index: 60; display: flex; flex-direction: column; box-shadow: 0 10px 40px #000a; }
+.vehicle-preview.preview-big .preview-stage { flex: 1; height: auto; min-height: 0; }
 .vehicle-preview-canvas:active { cursor: grabbing; }
 .vehicle-preview-canvas:focus-visible { outline: 3px solid #2f7cf6; outline-offset: -3px; }
 .preview-controls { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }

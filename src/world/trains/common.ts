@@ -365,6 +365,23 @@ export function addSingleArm(b: GeoBatch, pz: number, roofTop: number) {
   for (const sx of [-1, 1]) add(sx * 1.0, hy - .06, pz + .1, .25, .04, .08, 0x2a2d31, 0, 0, sx * .5);
 }
 
+/** 下枠交差形パンタグラフ（下枠が台枠の中央で交差し、上枠は菱形の上半分と同じ形。南海の 7100系・1000系・9000系・10000系） */
+export function addCrossArm(b: GeoBatch, pz: number, roofTop: number) {
+  const add = adder(b), c = 0x3d4248;
+  add(0, roofTop + .08, pz, 1.4, .1, 1.2, 0x5a5f66);
+  for (const sx of [-.55, .55]) for (const dz of [-.5, .5]) b.add('paint', P.cyl, M(sx, roofTop + .04, pz + dz, 0, .12, .16, .12), 0x9a6b4b);
+  const yb = roofTop + .18, ym = roofTop + .72, yt = roofTop + 1.3;
+  for (const sx of [-.45, .45]) {
+    // 下枠: 台枠の前後の端から反対側の中央へ（交差する）
+    arm(b, sx, yb, pz - .45, sx, ym, pz + .2, .05, c); arm(b, sx, yb, pz + .45, sx, ym, pz - .2, .05, c);
+    // 上枠: 中央の関節から集電舟へ広がる
+    arm(b, sx, ym, pz + .2, sx, yt, pz + .45, .045, c); arm(b, sx, ym, pz - .2, sx, yt, pz - .45, .045, c);
+  }
+  add(0, ym, pz, .95, .04, .04, c); add(0, yt, pz - .45, 1.1, .04, .04, c); add(0, yt, pz + .45, 1.1, .04, .04, c);
+  add(0, yt + .05, pz, 1.9, .05, .12, 0x2a2d31);
+  for (const sx of [-1, 1]) add(sx * 1.0, yt - .01, pz, .25, .04, .08, 0x2a2d31, 0, 0, sx * .5);
+}
+
 /** 菱形パンタグラフ */
 export function addLozenge(b: GeoBatch, pz: number, roofTop: number) {
   const add = adder(b), c = 0x3d4248;

@@ -120,10 +120,18 @@ const STATION_EXTRA: ExtraTrack[] = [
 const OZAKI = 5;
 const OZAKI_LOOP: StationLoop = { lat: -9.2, turnoutLength: 90, turnoutLimitKmh: 45 };
 
+/**
+ * ホームの長さ [m]（OSM の railway=platform の長さ。停まる最長の編成 6両 + 20m = 145m より短いものは 145m）。ホームは停止位置の 10m 先で終わる。
+ * 既定の 220m のままだと、実際のホームの端のすぐ外の踏切がゲームのホームの中に入り、置けなかった（2026-11-04）。
+ * OSM の景観は、これらの駅では OSM のホームの中心をゲームのホームの中心に合わせて写す（scripts/osm-scenery.ts の platformAnchors）。
+ * 尾崎（待避線）・泉佐野・みさき公園（専用の駅）は既定のまま
+ */
+export const IZUMISANO_MISAKI_PLATFORM_LEN: Record<string, number> = { 羽倉崎: 181, 吉見ノ里: 160, 岡田浦: 145, 樽井: 145, 鳥取ノ荘: 145, 箱作: 145, 淡輪: 145 };
+
 const stations: Station[] = names.map(([name, kana], i) => {
-  const stopS = START + KM[i];
+  const stopS = START + KM[i], pl = IZUMISANO_MISAKI_PLATFORM_LEN[name];
   return {
-    name, kana, stopS, platform: { from: stopS - 180, to: stopS + 40, side: 'L' },
+    name, kana, stopS, platform: pl ? { from: stopS + 10 - pl, to: stopS + 10, side: 'L' } : { from: stopS - 180, to: stopS + 40, side: 'L' },
     scheduledArrival: i * 100, dwell: i && i < LAST ? 25 : undefined, stopMarkerCars: 6,
     elevated: i === 0, layout: i === 0 || i === HAGURAZAKI || i === TARUI ? 'custom' : i === OZAKI ? 'loop' : 'relative',
     ...(STRUCTURES[name] ? { structure: STRUCTURES[name] } : {}),
@@ -196,7 +204,15 @@ export const izumisanoMisaki: Route = {
   // 対向列車は実ダイヤの時刻付き共通運行（data/oncoming-timetable.json、world/oncoming-timetable.ts）。停車シーンの設定は持たない。
   // 泉佐野の南の合流部（s 300〜550）で本線の列車を同じ線と判定する（counterSameTrack）
   oncoming: [], counterSameTrack: true, signals, crossings,
-  structures: [{ kind: 'viaduct', from: -400, to: VIADUCT_END }],
+  // 泉佐野の高架のほか、OSM の線路の橋（bridge=yes）のうち川を渡る4か所。範囲は `npm run osm:scenery -- --course=izumisano-misaki --scan --offline` の「線路の橋」（営業キロ + START の s）。
+  // 水面は OSM の川の線（waterway）を、橋の長さの半分の川幅で膨らませたもの（src/data/osm/izumisano-misaki.json。川幅はゲーム用の概形）
+  structures: [
+    { kind: 'viaduct', from: -400, to: VIADUCT_END },
+    { kind: 'bridge', from: 4189, to: 4302 },   // 樫井川
+    { kind: 'bridge', from: 8148, to: 8306 },   // 男里川
+    { kind: 'bridge', from: 12917, to: 12944 }, // 茶屋川
+    { kind: 'bridge', from: 16727, to: 16760 }, // 番川
+  ],
   extraTracks: [...EXTRA, ...STATION_EXTRA],
   // 周囲の山（国土地理院の標高。south.json の relief。営業キロ + START が s）
   relief: { s0: START, step: SOUTH.relief.step, lats: SOUTH.relief.lats, rows: SOUTH.relief.rows.slice(0, Math.ceil((END - START) / SOUTH.relief.step) + 3) }, reserved,

@@ -366,6 +366,13 @@ export const nambaUp: Route = reverseRoute(namba, {
     };
     if (v.id === 'southern') { v.kind = 'southern-10000'; v.unitKinds = ['southern-10000', 'commuter-old']; }
   }
+  // なんばに着く対向列車の番線: サザンは5番線、ラピートは9番線（それ以外は従来の上り本線の進路のまま7番線）。自列車が同じ番線から出るときは使わない
+  // 進路は構内（車止め 〜 番線への分岐の終わり）だけの線にする。長い線にすると、対向列車の待避線の合流の判定（進路の始点 = 合流点）が働いて後続を止める
+  const throat = (track: 5 | 9, a: number, b: number): LatProfile => [[r.extent.from - 50, 4 - NAMBA_TRACKS[track]], [mS(b), 4 - NAMBA_TRACKS[track]], [mS(a), 4]];
+  r.counterLanes = [
+    { code: 'S', station: 0, profile: throat(5, 9560, 9740), player: 'southern' },
+    { code: 'R', station: 0, profile: throat(9, 9520, 9700), player: 'limited' },
+  ];
   // 駅の既定のドアの側は普通のもの
   const local = r.services!.find(v => v.id === 'local')!;
   r.stations.forEach((sta, i) => { if (local.platformSides![i]) sta.platform.side = local.platformSides![i]; });

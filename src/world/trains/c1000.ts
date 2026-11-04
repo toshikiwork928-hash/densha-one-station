@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { GeoBatch, M, P } from '../batch';
 import {
-  Y0, adder, addEndWall, addLozenge, addSingleArm, addTaperedSkirt, addUnderfloor, capGeo, faceSheet, roundRings, shellGeo, sideSheet, sweepBand,
+  Y0, adder, addCrossArm, addEndWall, addLozenge, addTaperedSkirt, addUnderfloor, capGeo, faceSheet, roundRings, shellGeo, sideSheet, sweepBand,
   type CarKind, type CarParts, type Ring, type SheetMaps, type V2,
 } from './common';
 
@@ -257,8 +257,9 @@ export function buildNewLiveryCar(m: NewLiveryModel, kind: CarKind, Lb: number):
     }
   }
   add(0, roofTop + .03, 0, .45, .06, Lb - 3, 0x868b91);
-  // パンタ: 1000系は中間車（シングルアーム）、2000系は各車の連結面寄り（菱形。2両編成でも付くように先頭車にも）
-  if (m === '1000' && kind !== 'head') addSingleArm(b, -hz + 3.4, roofTop - .02);
+  // パンタ: 1000系は制御電動車（モハ1001形、難波方の先頭車）と中間電動車（モハ1301形）に下枠交差形（Wikipedia「南海1000系電車 (2代)」の 1〜5次車。
+  // 6次車はシングルアーム）。先頭車の形は両端で共有なので両先頭に付く。1両あたりの個数・位置は記載が無い（不明）ので1基・連結面寄り。2000系は各車の連結面寄り（菱形）
+  if (m === '1000' && kind !== 'mid') addCrossArm(b, kind === 'head' ? hz - 3.4 : -hz + 3.4, roofTop - .02);
   if (m === '2000' && kind !== 'mid') addLozenge(b, hz - 3.0, roofTop - .02);
   return { shell, face, paint: b.geometry('paint')!, led, led2, head: lit.geometry('l') ?? undefined, marks, glows };
 }

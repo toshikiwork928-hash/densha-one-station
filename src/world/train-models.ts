@@ -31,6 +31,8 @@ export interface TrainSetOptions {
   units?: number[];
   /** ユニットごとの車種（units と同じ並び）。未指定・不足分は kind。例 サザン = ['southern-10000', 'commuter-old'] */
   unitKinds?: TrainKind[];
+  /** 車庫・留置線に留置中: 夕方・夜も車内灯（窓・外板の明かり）を点けない */
+  dark?: boolean;
 }
 
 /** 編成を生成（先頭車 index 0、最後尾は逆向きの先頭車） */
@@ -82,6 +84,8 @@ interface KindKit {
   paint: THREE.MeshStandardMaterial;
   glass: THREE.MeshStandardMaterial;
   base: { env: number; paintEnv: number };
+  /** 留置中の編成用（車内灯を点けない） */
+  dark?: boolean;
 }
 
 const kindKits = new Map<TrainKind, KindKit>();
@@ -199,6 +203,22 @@ function kindKit(kind: TrainKind, renderer: THREE.WebGLRenderer): KindKit {
   return k;
 }
 
+/** 留置中の編成用の材質の組（形は同じ種別の組と共有し、明かりのある材質だけ複製する） */
+const darkKits = new Map<TrainKind, KindKit>();
+function darkKit(kind: TrainKind, renderer: THREE.WebGLRenderer): KindKit {
+  let d = darkKits.get(kind);
+  if (d) return d;
+  const k = kindKit(kind, renderer);
+  d = {
+    ...k, dark: true, openMats: [],
+    side: { head: k.side.head.clone(), mid: k.side.mid.clone() }, face: k.face?.clone(), glass: k.glass.clone(),
+    open: h => openMat(d!, h, () => k.open(h).clone()),
+  };
+  darkKits.set(kind, d);
+  applyNight(d);
+  return d;
+}
+
 const openCache = new Map<KindKit, Partial<Record<'head' | 'mid', THREE.MeshStandardMaterial>>>();
 function openMat(k: KindKit, head: boolean, make: () => THREE.MeshStandardMaterial): THREE.MeshStandardMaterial {
   let c = openCache.get(k);
@@ -242,7 +262,10 @@ function addSideDisplays(body: THREE.Group, kind: TrainKind, label: string, dest
   const combined = kind === 'commuter-old' || kind === 'commuter-9000' || kind === 'commuter-new' || kind === 'southern-12000';
   if (!split && !combined) return;
   const x = kind === 'limited' ? 1.43 : 1.46, y = kind === 'limited' ? 3.12 : 3.21;
-  const signs = split
+  // 1000系: 車体中央の2枚の窓（扉 ±2.4m の間。ガラスの中心は ±0.47m、幅 0.82m。trains/c1000.ts）の上に、種別と行先の2枠をそれぞれ窓の中心に合わせて置く
+  const signs = kind === 'commuter-1000'
+    ? [{ z: -.47, w: .76, mat: ledMatPart('type', label, dest) }, { z: .47, w: .76, mat: ledMatPart('dest', label, dest) }]
+    : split
     ? [{ z: kind === 'limited' ? 0 : -4.5, w: .78, mat: ledMatPart('type', label, dest) },
       { z: 4.5, w: 1.05, mat: ledMatPart('dest', label, dest) }]
     : [{ z: 0, w: kind === 'commuter-new' || kind === 'southern-12000' ? 1.55 : 1.20,
@@ -324,7 +347,7 @@ export const createTrainSet: CreateTrainSet = (kind, cars, renderer, opts = {}) 
   const out: TrainCar[] = [];
   units.forEach((m, u) => {
     // ユニットごとの車種（サザンは 10000系 + 7100系）。未指定は編成の kind
-    const uk = opts.unitKinds?.[u] ?? kind, kit = kindKit(uk, renderer), len = carLenOf(uk), { led, led2 } = leds(uk);
+    const uk = opts.unitKinds?.[u] ?? kind, kit = opts.dark ? darkKit(uk, renderer) : kindKit(uk, renderer), len = carLenOf(uk), { led, led2 } = leds(uk);
     const first = u === 0, last = u === units.length - 1;
     formation(m).forEach((k, i) => {
       const lastCar = i === m - 1;
@@ -338,15 +361,17 @@ export const createTrainSet: CreateTrainSet = (kind, cars, renderer, opts = {}) 
 };
 
 function applyNight(k: KindKit) {
-  for (const m of [k.side.head, k.side.mid, k.face, ...k.openMats]) if (m) { m.emissiveIntensity = night * 1.1; m.envMapIntensity = k.base.env * (1 - night * .75); }
-  k.paint.envMapIntensity = k.base.paintEnv * (1 - night * .75);
-  k.glass.envMapIntensity = 1.2 - night * .9; k.glass.emissiveIntensity = night * .5;
+  const lit = k.dark ? 0 : night; // 留置中の編成は車内灯を点けない（反射は昼夜で同じに落とす）
+  for (const m of [k.side.head, k.side.mid, k.face, ...k.openMats]) if (m) { m.emissiveIntensity = lit * 1.1; m.envMapIntensity = k.base.env * (1 - night * .75); }
+  if (!k.dark) k.paint.envMapIntensity = k.base.paintEnv * (1 - night * .75);
+  k.glass.envMapIntensity = 1.2 - night * .9; k.glass.emissiveIntensity = lit * .5;
 }
 
 /** 夜間係数 0..1（窓明かり・灯具のグロー・環境反射）。全編成で共通 */
 export function setTrainNight(f: number): void {
   night = f;
   for (const k of kindKits.values()) applyNight(k);
+  for (const k of darkKits.values()) applyNight(k);
   shared.glow.opacity = .25 + f * .75;
 }
 /** 互換: 編成指定版（材質は種別で共有のため全体に効く） */

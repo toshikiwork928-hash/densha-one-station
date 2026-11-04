@@ -3,9 +3,10 @@
 import * as THREE from 'three';
 import DATA from '../data/oncoming-timetable.json';
 import type { GameContext } from '../core/context';
-import type { LatProfile, OncomingSpec, Route, TimeOfDay } from '../route/types';
+import type { LatProfile, OncomingSpec, Route, ServiceId, TimeOfDay } from '../route/types';
 import { customPlatformSide, islandOffset, loopShape, loopZone, profileLat, serviceOf, type LoopZone } from '../route/service';
 import { createTrainSet, type TrainCar } from './train-models';
+import { TERMINAL_CHECKPOINTS } from '../game/terminal-ats';
 import { placeCar } from './emu';
 
 export interface TimedPoint { s: number; depart: number; stop: boolean; station: number | null }
@@ -85,8 +86,17 @@ export interface CounterTrain {
   spec: Consist; lat: number; paths: Path[]; plan: ReturnType<typeof makeCounterPlans>[number];
 }
 
+/** 終端の速度照査の速度 [km/h]（停止位置までの距離 d。game/terminal-ats.ts の TERMINAL_CHECKPOINTS と同じ点を直線でつなぐ） */
+function terminalPattern(d: number): number {
+  for (let i = 0; i + 1 < TERMINAL_CHECKPOINTS.length; i++) {
+    const [far, fast] = TERMINAL_CHECKPOINTS[i], [near, slow] = TERMINAL_CHECKPOINTS[i + 1];
+    if (d >= near) return d >= far ? fast : slow + (fast - slow) * (d - near) / (far - near);
+  }
+  return 10;
+}
+
 /** 描画を持たない共通運行。全編成を運行し、近い編成だけ描画側へ渡す。 */
-export function createCounterTraffic(route: Route, tod: TimeOfDay, consist: (code: string, ordinal: number, playerTowardNamba: boolean) => Consist) {
+export function createCounterTraffic(route: Route, tod: TimeOfDay, consist: (code: string, ordinal: number, playerTowardNamba: boolean) => Consist, player?: ServiceId) {
   const playerTowardNamba = serviceOf(route, 'local')?.destination === 'なんば';
   const main = route.oncoming.find(o => !o.stop && !o.follow && o.lat !== route.oncomingLocal?.lat)?.lat ?? 4;
   const nth: Record<string, number> = {};
@@ -104,6 +114,8 @@ export function createCounterTraffic(route: Route, tod: TimeOfDay, consist: (cod
         if (plan.code === 'A') extra = playerTowardNamba ? 'izumisano-t1' : 'izumisano-t4';
         else if (local && playerTowardNamba) extra = 'izumisano-t1';
       }
+      const own = route.counterLanes?.find(c => c.station === p.station && plan.code.startsWith(c.code) && c.player !== player);
+      if (own) { paths.push({ profile: own.profile, station: p.station }); continue; }
       const profile = extra ? route.extraTracks?.find(x => x.id === extra)?.lat : undefined;
       if (profile) { paths.push({ profile, station: p.station }); continue; }
       const usesLoop = sta.name !== '尾崎' || p.depart - p.arrive > DWELL + 1;
@@ -222,6 +234,12 @@ export function createCounterTraffic(route: Route, tod: TimeOfDay, consist: (cod
         const cap = Math.sqrt(2 * DECEL * Math.max(0, o.head - floor));
         let speed = Math.min(maximumSpeed(o.code), o.v + ACCEL * dt, cap);
         for (const path of o.paths) if (path.zone && o.head + o.length > path.zone.inFrom && o.head < path.zone.outTo + 150) speed = Math.min(speed, path.zone.limit / 3.6);
+        // 頭端駅（なんば）へ着く列車: 自列車と同じ終端の速度照査（1000m 手前 65km/h → 停止位置 10km/h）と、800m 手前からの構内制限 45km/h
+        for (const p of o.plan.points) {
+          if (!p.stop || p.station == null || !route.stations[p.station].headEnd) continue;
+          const d = o.head - p.s;
+          if (d > 0 && d < 1000) speed = Math.min(speed, terminalPattern(d) / 3.6, d < 800 ? 45 / 3.6 : Infinity);
+        }
         head = Math.max(head, oldHead - speed * dt);
         head = Math.min(oldHead, head);
       }
@@ -254,7 +272,7 @@ export function createTimetableOncoming(ctx: GameContext, consist: (code: string
   const pa = new THREE.Vector3(), pb = new THREE.Vector3();
   const update = () => {
     if (!counterTimetable(ctx.route.id, ctx.envState.timeOfDay) || ctx.route.singleTrack) return false;
-    traffic ??= createCounterTraffic(ctx.route, ctx.envState.timeOfDay, consist);
+    traffic ??= createCounterTraffic(ctx.route, ctx.envState.timeOfDay, consist, ctx.state.sel.service);
     traffic.update(ctx.route.startClock + ctx.state.t);
     const ps = ctx.state.train.s;
     const visible = new Set(traffic.trains.filter(o => o.active && o.head <= ctx.route.extent.to && o.head + o.length >= ctx.route.extent.from && o.head > ps - 500 - ctx.route.trainLength && o.head < ps + 2400));

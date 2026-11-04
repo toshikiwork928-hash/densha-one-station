@@ -9,19 +9,25 @@ import type { ExtraTrack, Route } from '../types';
 /** 羽倉崎駅の 1番線（島式ホームの左の線）の横位置。島式ホーム（幅 5.8）の線路中心から端 1.7m */
 export const T1_LAT = -9.2;
 /** 1番線（引上げ線）が本線から分かれる範囲と、車庫への入口（梯子線の始点） */
-export const LEAD_FROM = 1990, LEAD_TO_FULL = 2080, LEAD_END = 2335;
+/**
+ * 構内の s の写し: 構内の位置は OSM から読んだ値（羽倉崎の基準を OSM の駅の点にしていたときの s）。
+ * 羽倉崎・吉見ノ里の基準を OSM のホームの中心に変えた（2026-11-04、scripts/osm-scenery.ts の platformAnchors）ので、同じ OSM の位置は
+ * 構内の北端（2326）で +33m、南端（3104）で +47m 先になる。その間は直線で近似する
+ */
+export const depotS = (s: number): number => s + 33 + (s - 2326) * 14 / 778;
+export const LEAD_FROM = 1990, LEAD_TO_FULL = 2080, LEAD_END = depotS(2335);
 
 export const DEPOT = {
   /** 梯子線（斜めの引上げ線）の始点 s と、s あたりの横位置の変化（左へ） */
-  ladderS: 2330, ladderSlope: .2,
+  ladderS: depotS(2330), ladderSlope: .2,
   /** 留置線の本数・線間隔・1本目の横位置（OSM は約14本。ゲームでは13本） */
   count: 13, pitch: 4.2, lat0: -13.4,
-  /** 留置線の車止め（南西端）の s。入口（2361）から約 724m。構内は駅のホーム端（s 2320）から約 765m */
-  bumper: 3085,
+  /** 留置線の車止め（南西端）の s。入口から約 724m */
+  bumper: depotS(3085),
   /** 検修庫（建物の中に入る線）: 留置線 shedFrom〜count-1 番（0 始まり）、s の範囲 */
-  shedFrom: 8, shedS0: 2850, shedS1: 3098,
+  shedFrom: 8, shedS0: depotS(2850), shedS1: depotS(3098),
   /** 構内の柵 */
-  fenceLat: -73, fenceSouth: 3104, fenceWest: -5.8, fenceNorth: 2326,
+  fenceLat: -73, fenceSouth: depotS(3104), fenceWest: -5.8, fenceNorth: depotS(2326),
 };
 
 /** k 番目の留置線の横位置 */

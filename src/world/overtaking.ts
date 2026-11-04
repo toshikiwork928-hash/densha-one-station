@@ -52,6 +52,11 @@ export function createOvertaking(ctx: GameContext): void {
   const goalTerminal = goalSta && (goalSta.name === '堺' || goalSta.name === '泉大津');
   function showTerminalLocal(local: ServiceSpec, ps: number): void {
     if (!goalTerminal || st.endIndex !== goal) return;
+    showParkedLocal(local, ps, goal, ':goal');
+  }
+  /** 駅 index の待避線（終着駅は普通の番線）に止まっている普通を描く（自列車から 1600m 以内のとき） */
+  function showParkedLocal(local: ServiceSpec, ps: number, index: number, tag: string): void {
+    const goalSta = route.stations[index];
     const me = serviceOf(route, st.sel.service);
     if (!me || Math.abs(goalSta.stopS - ps) > 1600) return;
     // 普通の停止位置（駅の停止位置は自列車の両数のもの）と走行線
@@ -62,7 +67,7 @@ export function createOvertaking(ctx: GameContext): void {
     if (!latAt) return;
     const lat = latAt(head);
     const side = goalSta.layout === 'custom' ? customPlatformSide(goalSta, lat) ?? 'R' : goalSta.loop?.outside ? (goalSta.loop.lat < 0 ? 'L' : 'R') : 'R';
-    const v = view(local.kind, local.units, local.name, local.unitKinds, destOf(route, local), ':goal');
+    const v = view(local.kind, local.units, local.name, local.unitKinds, destOf(route, local), tag);
     v.group.visible = true;
     for (const c of v.cars) c.setDoors(true, side);
     place(v, head, latAt);
@@ -97,7 +102,11 @@ export function createOvertaking(ctx: GameContext): void {
     const h = st.precedingS, prevH = lastH;
     lastH = h;
     const last = route.stations.length - 1;
-    const z = zones.find(q => q.index < last && !route.stations[q.index].enterLoop && local.waits?.some(w => w.station === q.index && sameClass(w.passedBy, st.sel.service)) && h > q.inFrom && h < q.outTo + 400);
+    const waitZones = zones.filter(q => q.index < last && !route.stations[q.index].enterLoop && local.waits?.some(w => w.station === q.index && sameClass(w.passedBy, st.sel.service)));
+    // 先行の普通（1本）が先の待避駅で自列車に抜かれて後ろにいるとき、その先の待避駅で自列車を待つのは、もう1本前の普通（夕方の和歌山方面の
+    // 浜寺公園と泉大津など）。その駅の待避線に止まっている普通を描く（自列車が出て見えなくなるまで止まったまま）
+    for (const q of waitZones) if (h < ps - 50 && q.inFrom > h && ps < q.outTo + 300) showParkedLocal(local, ps, q.index, `:wait${q.index}`);
+    const z = waitZones.find(q => h > q.inFrom && h < q.outTo + 400);
     if (!z || Math.abs(h - ps) > 1500) return;
     const v = view(local.kind, local.units, local.name, local.unitKinds, destOf(route, local));
     v.group.visible = true;

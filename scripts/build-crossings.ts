@@ -5,7 +5,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { izumisanoMisaki } from '../src/route/routes/izumisano-misaki';
 import { misakiWakayamako } from '../src/route/routes/misaki-wakayamako';
-import { loopZone } from '../src/route/service';
+import { loopZone, maxStopLength, profileLat } from '../src/route/service';
 import type { Route } from '../src/route/types';
 
 interface Row { s: number; d: number; kind: string; hw: string; w: number; name: string; node: number }
@@ -18,9 +18,14 @@ function build(courseId: string, route: Route, prefix: string): { list: Out[]; l
   const log: string[] = [];
   // 停車した列車（最長 8両 160m）の下になる範囲。下りは先頭が stopS（後ろへ 165m）、上りは同じホームを反対向きに使うので、
   // ホームの端どうしを写した範囲（reverseRoute と同じ: stopS' = from + to - stopS）も加える
-  const stops = route.stations.map(s => ({ name: s.name, lo: Math.min(s.stopS - 165, s.platform.from + s.platform.to - s.stopS - 6), hi: Math.max(s.stopS + 6, s.platform.from + s.platform.to - s.stopS + 165) }));
+  // 停まる列車の長さは、その駅に停まる種別のいちばん長い編成（maxStopLength。泉佐野以南の普通だけが停まる駅は 6両）
+  const stops = route.stations.map((s, i) => { const L = maxStopLength(route, i) + 5; return { name: s.name, lo: Math.min(s.stopS - L, s.platform.from + s.platform.to - s.stopS - 6, s.platform.from), hi: Math.max(s.stopS + 6, s.platform.from + s.platform.to - s.stopS + L, s.platform.to) }; });
+  // lo・hi にはホームの範囲（platform.from〜to）も含める。踏切がホームに埋まらないように（鳥取ノ荘で指摘 2026-10-12）
   const structures = (route.structures ?? []).map(x => ({ from: x.from, to: x.to, kind: x.kind }));
-  const extras = (route.extraTracks ?? []).map(x => ({ id: x.id, from: x.from, to: x.to }));
+  // 追加の線路は、横位置が変わる所（分岐器・渡り線）だけ除く。本線と並んで走る所（羽倉崎の車庫への線など）は、踏切がまたいで描ける（world/crossings.ts）
+  const extras = (route.extraTracks ?? []).map(x => ({ id: x.id, from: x.from, to: x.to, lat: x.lat, bumpers: x.bumpers }));
+  const turning = (x: typeof extras[number], s: number) => [-12, -6, 0, 6, 12].some(d => Math.abs(profileLat(x.lat, s + d) - profileLat(x.lat, s)) > .3)
+    || (x.bumpers?.some(b => Math.abs(b - s) < 15) ?? false);
   const road = rows.filter(r => r.kind === 'level_crossing' && r.w >= 3);
   const out: Out[] = [];
   for (const r of rows) {
@@ -32,19 +37,19 @@ function build(courseId: string, route: Route, prefix: string): { list: Out[]; l
     if (foot && road.some(q => Math.abs(q.s - s) < 20)) { why('道路の踏切の横の歩行者踏切'); continue; }
     const st = structures.find(x => s > x.from - 6 && s < x.to + 6);
     if (st) { why(`${st.kind}の区間`); continue; }
-    const ex = extras.find(x => s > x.from - 12 && s < x.to + 12);
+    const ex = extras.find(x => s > x.from - 12 && s < x.to + 12 && (s < x.from + 12 || s > x.to - 12 || turning(x, s)));
     if (ex) { why(`線路の増える区間（${ex.id}）`); continue; }
     // 待避線のある駅（尾崎・みさき公園）の、分岐器の区間（入口分岐器〜出口分岐器 + 余裕）
     const lz = route.stations.map(x => ({ n: x.name, z: loopZone(x) })).find(x => x.z && s > x.z.inFrom - 20 && s < x.z.outTo + 20);
     if (lz) { why(`${lz.n}の待避線の区間`); continue; }
-    // 停車した列車の下に当たるものは、近い端へ寄せる。寄せる量が 45m を超えるものは、
+    // 停車した列車の下に当たるものは、近い端へ寄せる。寄せる量が 60m を超えるものは、
     // OSM の道路と離れすぎるので置かない（道路は線路の手前で切れたまま）
     const half = foot ? 1.5 : r.w / 2;
     const p = stops.find(x => s > x.lo - half && s < x.hi + half);
     if (p) {
       const ahead = p.hi + half + 2, behind = p.lo - half - 2;
       const to = Math.abs(ahead - s) <= Math.abs(s - behind) ? ahead : behind;
-      if (Math.abs(to - s) > 45) { why(`${p.name}の停車位置の下（寄せる量 ${Math.round(Math.abs(to - s))}m）`); continue; }
+      if (Math.abs(to - s) > 60) { why(`${p.name}の停車位置の下（寄せる量 ${Math.round(Math.abs(to - s))}m）`); continue; }
       log.push(`移動 ${r.s} → ${Math.round(to)}（${p.name}の停車位置）`);
       s = to;
     }

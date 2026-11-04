@@ -338,6 +338,9 @@ export interface Route {
   bridgeStyle?: { color: number; throughGirder?: boolean };
   /** 複々線の駅（stations）でラッシュ時に足す対向の普通の走行線の横位置（trackProfiles のキー。緩行線） */
   oncomingLocal?: { stations: number[]; lat: number };
+  /** 時刻付きの対向列車（world/oncoming-timetable.ts）の、種別の記号（先頭の文字: S サザン・R ラピート・E 急行・A 空港急行・L 普通）ごとの、駅 station の番線への進路（横位置）。
+   *  自列車がその番線の種別（player）のときは使わない（同じ番線で向かい合わないように、従来の進路のまま）。なんばの頭端の番線の割り当て */
+  counterLanes?: { code: string; station: number; profile: LatProfile; player: ServiceId }[];
   /** 対向列車の同じ線の判定（world/oncoming-timetable.ts）: 横位置の基準が同じで、待避線・番線の経路を持たない列車は、線形の S字（合流部）で横位置が離れて見えても同じ線とみなす。
    *  既定は横位置の差だけで判定する。泉佐野の南の合流部（泉佐野〜みさき公園）で、同じ線の後続が横位置の差で別の線と判定される不具合を避ける */
   counterSameTrack?: boolean;

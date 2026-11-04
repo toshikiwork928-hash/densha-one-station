@@ -32,7 +32,7 @@ export function buildWakayamashiTrains(ctx: GameContext): void {
   const a = new THREE.Vector3(), z = new THREE.Vector3();
   const lat = (id: string, s: number) => id === 'k3' ? WK.lat3 : profileLat(YARD[id].lat, s);
   for (const p of PARKED) {
-    const cars = createTrainSet(p.kind, p.units.reduce((x, y) => x + y, 0), f.renderer, { dest: p.dest, label: p.label, units: p.units });
+    const cars = createTrainSet(p.kind, p.units.reduce((x, y) => x + y, 0), f.renderer, { dest: p.dest, label: p.label, units: p.units, dark: p.label === '回送' });
     let cur = p.front;
     for (const c of cars) {
       const sc = cur - c.length / 2, bog = bogieOffset(c.length), l = lat(p.line, sc);

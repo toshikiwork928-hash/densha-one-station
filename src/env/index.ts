@@ -32,7 +32,7 @@ export function attachEnvSystem(ctx: GameContext): EnvSystem {
   const branchSide = seaSideOf(ctx.route);
   const coastalEast = ctx.route.coastalScenery !== false && ctx.route.coastalLandmarks?.length ? new THREE.Vector2(-branchSide, 0) : undefined;
   const sky = createSkyDome(scene, QUALITY_SPEC[settings.quality].cloudOctaves, ctx.route.theme, coastalEast); // 沿岸は東の低丘だけ、山岳線は従来の稜線
-  const precip = createPrecip(scene);
+  const precip = createPrecip(scene, renderer);
   const shield = createWindshield();
   const lights = createNightLights(ctx);
   const shadows = createShadows(renderer, scene, env.sun);

@@ -1,5 +1,6 @@
 // 踏切（route.crossings）: 道路・遮断機・警報灯・踏切警標。自列車/対向列車の接近で鳴動し crossing イベントを出す
 import * as THREE from 'three';
+import { trackSpan } from '../route/service';
 import type { GameContext } from '../core/context';
 import { GeoBatch, M, P, basePart, onLight } from './batch';
 import { glowTexture } from './emu';
@@ -79,12 +80,13 @@ export function buildCrossings(ctx: GameContext, oncoming: OncomingSystem): void
   if (!list.length) return;
   const roadMat = new THREE.MeshLambertMaterial({ color: 0x55575b });
   const lineMat = new THREE.MeshLambertMaterial({ color: 0xeeeeee });
-  const tr = route.tracks, L0 = Math.min(...tr), L1 = Math.max(...tr);
-  const sideLat = [L0 - 3.6, L1 + 3.6];
   const rts: CrossingRt[] = [];
 
   for (const c of list) {
     const w = c.roadWidth ?? 6, g = T.groundY(c.s);
+    // 踏切がまたぐ線路の範囲（本線と、並んで走る追加の線路。羽倉崎の車庫への線など）
+    const [L0, L1] = trackSpan(route, c.s, 30);
+    const sideLat = [L0 - 3.6, L1 + 3.6];
     // 路面（線路上はレール面まで持ち上げる）
     // 周囲の山（route.relief）がある所は、道路も山の斜面に沿わせる（山あいの踏切で道路が空中や地中に伸びない）
     const prof = (s: number): [number, number][] => {

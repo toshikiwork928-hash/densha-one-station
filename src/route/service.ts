@@ -17,6 +17,12 @@ export function selectableServices(route: Route): ServiceSpec[] {
 export const CAR_LEN = 20;
 /** 車種ごとの1両の長さ [m] */
 export const carLenOf = (kind: TrainKind): number => kind === 'commuter-2300' || kind === 'commuter-2000' || kind === 'limited-30000' ? 18 : CAR_LEN;
+/** 駅 index に停まる種別の、いちばん長い編成の長さ [m]（選べる編成を含む）。種別の無い路線・停まる種別が無い駅は 8両（踏切・停車位置の判定の既定） */
+export function maxStopLength(route: Route, index: number): number {
+  const list = (route.services ?? []).filter(v => v.stops.includes(index));
+  if (!list.length) return 8 * CAR_LEN;
+  return Math.max(...list.map(v => Math.max(v.cars, ...(v.formationOptions ?? []).map(f => f.reduce((a, n) => a + n, 0)), (v.units ?? []).reduce((a, n) => a + n, 0)) * carLenOf(v.kind)));
+}
 /** 停止位置目標 stopS の基準両数（短い編成は手前に止める） */
 export const BASE_CARS = 6;
 /** n 両編成の停止位置のずれ [m]（基準 6両・20m 車なら 4両 → 20m 手前）。編成の中央をそろえる: (基準 − 両数) × 1両の長さ / 2 */

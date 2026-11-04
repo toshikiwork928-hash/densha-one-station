@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { GeoBatch, M, P } from '../batch';
 import {
-  Y0, adder, addEndWall, addLozenge, addSingleArm, addTaperedSkirt, addUnderfloor, capGeo, faceSheet, roundRings, shellGeo, sideSheet, sweepBand,
+  Y0, adder, addCrossArm, addEndWall, addLozenge, addSingleArm, addTaperedSkirt, addUnderfloor, capGeo, faceSheet, roundRings, shellGeo, sideSheet, sweepBand,
   type CarKind, type CarParts, type Ring, type SheetMaps, type V2,
 } from './common';
 
@@ -195,6 +195,10 @@ export function buildCommuterCar(v: CommuterVariant, kind: CarKind, Lb: number, 
   const b = new GeoBatch(), add = adder(b), lit = new GeoBatch(), tl = new GeoBatch(), gl = new GeoBatch();
   const glows: THREE.Vector3[] = [];
   const roofTop = YTOP;
+  // パンタグラフ: 7100系は両先頭の制御電動車（モハ7101形）に下枠交差形を1基（Wikipedia「南海7100系電車」。2両編成は実際は難波側の1両だけだが、先頭車の形は両端で共有）。
+  // 先頭車の中の位置は資料に記載が無い（不明）ので連結面寄り。8300系（シングルアーム）・6300系（菱形）は従来どおり3両目
+  const cross7100 = v === 'old' && !ss;
+  const panZ: number[] = cross7100 ? (head ? [hz - 4.0] : []) : kind === 'pan' ? [-hz + 4.0] : [];
   // 雨樋
   for (const sx of [-1, 1]) add(sx * (HW - .03), 3.56, 0, .04, .04, Lb - (head ? .6 : 0), 0x8d939a, 0, 0, 0);
   addEndWall(b, hz, YTOP, HW, v === 'new' ? 0xb9bec4 : 0xbfc3c9);
@@ -275,7 +279,7 @@ export function buildCommuterCar(v: CommuterVariant, kind: CarKind, Lb: number, 
     // 分散冷房（箱形・両側にルーバー）
     // 低い箱形クーラーを約2.4m間隔で並べる（実車は1両8基ほど）
     for (const z of [-8.4, -6, -3.6, -1.2, 1.2, 3.6, 6, 8.4]) {
-      if (kind === 'pan' && Math.abs(z - (-hz + 4.0)) < 1.6) continue;
+      if (panZ.some(p => Math.abs(z - p) < 1.6)) continue;
       if (head && z < -8) continue;
       add(0, roofTop + .15, z, 1.3, .32, 1.3, 0xc0c4c9);
       for (const sx of [-1, 1]) for (const dz of [-.33, .33]) add(sx * .66, roofTop + .16, z + dz, .02, .18, .44, 0x3a3f45); // 側面のフィルター（1基に2つ）
@@ -284,7 +288,7 @@ export function buildCommuterCar(v: CommuterVariant, kind: CarKind, Lb: number, 
     for (const z of [-8.2, -4, 0, 4, 8.2]) add(0, roofTop + .06, z, .3, .1, .3, 0x8a8f95); // 通風器
     if (kind === 'head') add(0, roofTop + .05, zf + .9, .5, .06, .5, 0x8a8f95);
   }
-  if (kind === 'pan') (v === 'new' ? addSingleArm : addLozenge)(b, -hz + 4.0, roofTop - .02);
+  for (const p of panZ) (v === 'new' ? addSingleArm : cross7100 ? addCrossArm : addLozenge)(b, p, roofTop - .02);
   return { shell, face, paint: b.geometry('paint')!, glass: gl.geometry('l') ?? undefined, led, led2, head: lit.geometry('l') ?? undefined, tail: tl.geometry('l') ?? undefined, marks, glows };
 }
 

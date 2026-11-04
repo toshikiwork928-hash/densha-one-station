@@ -14,7 +14,7 @@ import { misakiWakayamako, misakiWakayamakoUp } from '../src/route/routes/misaki
 import { approachText, departText } from '../src/audio/announce-text';
 import { applyService, destOf, sameClass, selectableServices } from '../src/route/service';
 import { buildTrack } from '../src/route/track';
-import { loopZone, loopShape, profileLat, trackLines } from '../src/route/service';
+import { loopZone, loopShape, maxStopLength, profileLat, trackLines } from '../src/route/service';
 import { coastalThirdTracks } from '../src/world/coastal-stations';
 import type { Route, ServiceId } from '../src/route/types';
 import { createState, stagesOf, type VehicleSel } from '../src/game/state';
@@ -92,9 +92,9 @@ if (process.argv.includes('--selection-only')) process.exit(0);
     assert.deepEqual(route.stations.map(s => s.name), down ? names : [...names].reverse(), `${tag}の駅`);
     assert.equal(Math.abs(route.stations[last].stopS - route.stations[0].stopS), 15100, `${tag}みさき公園〜和歌山港 15.1km`);
     assert.equal(route.oncoming.length, 0, `${tag}の route.oncoming は空（対向列車は oncoming-timetable.json の共通運行）`);
-    // 踏切は OSM の位置（scripts/build-crossings.ts）。停車した列車（最長 8両）の下には置かない
+    // 踏切は OSM の位置（scripts/build-crossings.ts）。停車した列車（その駅に停まる種別のいちばん長い編成）の下には置かない
     assert.ok((route.crossings?.length ?? 0) >= 20, `${tag}の踏切 ${route.crossings?.length}`);
-    for (const c of route.crossings ?? []) for (const st of route.stations) assert.ok(c.s < st.stopS - 165 - (c.roadWidth ?? 6) / 2 || c.s > st.stopS + 6 + (c.roadWidth ?? 6) / 2, `${tag}の踏切 ${c.id} が ${st.name} の停車位置の下`);
+    for (const c of route.crossings ?? []) route.stations.forEach((st, i) => assert.ok(c.s < st.stopS - maxStopLength(route, i) - (c.roadWidth ?? 6) / 2 || c.s > st.stopS + 6 + (c.roadWidth ?? 6) / 2, `${tag}の踏切 ${c.id} が ${st.name} の停車位置の下`));
     assert.deepEqual(selectableServices(route).map(v => v.id), ['local', 'express', 'southern'], `${tag}のTOP種別は普通・急行・サザン`);
     const track = buildTrack(route);
     assert.ok(Math.abs(track.length - 15378.192) < .01, `${tag}の線形の総延長 ${track.length}`);
@@ -353,6 +353,14 @@ for (const route of [shiokaze, shiokazeUp]) {
   assert.ok(approachText(up, ix(up, '新今宮'), sv).includes('JR線はお乗り換えです。'));
   assert.ok(approachText(up, ix(up, '天下茶屋'), sv).includes('コウヤ線、地下鉄サカイスジ線、阪急キョウト・キタセンリ方面はお乗り換えください。'));
   assert.ok(approachText(dn, ix(dn, '天下茶屋'), sd).endsWith('。地下鉄サカイスジ線、阪急キョウト・キタセンリ方面はお乗り換えください。') || approachText(dn, ix(dn, '天下茶屋'), sd).includes('です。地下鉄サカイスジ線'), approachText(dn, ix(dn, '天下茶屋'), sd));
+}
+// 乗り換え案内（泉佐野以南）: 和歌山市は加太線・和歌山港線・JR和歌山線。和歌山港へ行く列車では和歌山港線を案内しない。和歌山港は南海フェリー
+{
+  const mw = structuredClone(misakiWakayamako), ix = (n: string) => mw.stations.findIndex(s => s.name === n);
+  const ex = applyService(mw, 'express')!, wk = approachText(mw, ix('和歌山市'), ex);
+  if (ex.destination === '和歌山港') assert.ok(wk.includes('カダ線、JRワカヤマ線はお乗り換えください。') && !wk.includes('ワカヤマコウ線'), wk);
+  else assert.ok(wk.includes('カダ線、ワカヤマコウ線、JRワカヤマ線はお乗り換えください。'), wk);
+  assert.ok(approachText(mw, ix('紀ノ川'), applyService(structuredClone(misakiWakayamako), 'local')!).includes('カダ線はお乗り換えください。'));
 }
 const parkDown = shiokaze.stations.find(s => s.layout === 'hamadera')!;
 const parkUp = shiokazeUp.stations.find(s => s.layout === 'hamadera')!;
