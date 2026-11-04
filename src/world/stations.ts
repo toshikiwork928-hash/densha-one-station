@@ -137,8 +137,10 @@ export function buildStation(ctx: GameContext, sta: Station, prevName: string, n
   const drawStairs = (!stc && opt.minimal) || (!!stc && link === 'underpass');
   if (!opt.minimal) {
   const pz = bzs.reduce((q, w) => q + w, 0) / bzs.length;
-  b.add('body', P.plane, M(X(-21), .04, pz, 0, 28, len * .9, 1, -Math.PI / 2), 0x6a6c70); // 広場の舗装
-  for (let z = -len * .3; z < len * .3; z += 3) box(-28, .06, z, 4.5, .02, .1, 0xeeeeee); // 駐車枠
+  // 広場の舗装: 駅舎の外側（線路から 17.6m より外）だけ、長さは駅舎の前（駅舎の幅 + 30m）。ホームの裏には敷かない（舗装がホームに接していた。2026-11-04）
+  const plazaX0 = 7.2 + bd + .4, plazaX1 = 35, plazaL = Math.min(len * .9, (endPos === 'ends' ? len * .9 : bwU + 30));
+  b.add('body', P.plane, M(X(-(plazaX0 + plazaX1) / 2), .04, pz, 0, plazaX1 - plazaX0, plazaL, 1, -Math.PI / 2), 0x6a6c70); // 広場の舗装
+  for (let z = -plazaL * .35; z < plazaL * .35; z += 3) box(-28, .06, pz + z, 4.5, .02, .1, 0xeeeeee); // 駐車枠
   for (const bz of bzs) {
     if (wood) {
       // 洋風木造駅舎（淡輪: 1925年竣工。屋根は黒）
@@ -155,7 +157,7 @@ export function buildStation(ctx: GameContext, sta: Station, prevName: string, n
     for (let z = -bwU / 2 + 2; z < bwU / 2 - 1; z += 3.2) if (Math.abs(z) > 5 || bwU < 18) box(bx - bd / 2 - .02, 5.4, bz + z, .04, 1.3, 2, 0x2b343d);
   }
   // 広場の人・タクシー・バス停
-  for (let k = 0; k < 10; k++) person(b, rnd, X(-(14 + rnd() * 12)), pz + (rnd() - .5) * 40, rnd() * 6);
+  for (let k = 0; k < 10; k++) person(b, rnd, X(-(19 + rnd() * 8)), pz + (rnd() - .5) * Math.min(40, plazaL), rnd() * 6);
   for (const z of [-14, -9]) {
     b.add('body', P.boxB, M(X(-25), .25, pz + z, 0, 1.7, .7, 4.4), 0xd8c020);
     b.add('body', P.boxB, M(X(-25), .95, pz + z + .2, 0, 1.5, .55, 2.2), 0xd8c020);

@@ -142,7 +142,8 @@ dev サーバー（`npm run dev`、または `.claude/launch.json` の `densha`�
 4. master のアプリと `pub` の中身が一致するか比べる（`legacy`・`.github`・公開側だけの画像を除いて `diff -r`）
 5. `pub` で `npm ci && npm run build` が通るか確かめる（`dist/` は commit しない）
 6. commit して `main` に push → Actions（Deploy to GitHub Pages）の成功を確認 → 公開ページの `assets/index-*.js` の名前が今回のビルドと同じか確認
-- 公開済みの最新: master `afc637b` 相当以降は、PR ごとに公開している（公開用リポジトリのコミット履歴を見る）
+- 公開済みの最新（2026-11-04）: 本体 master `ce619cc` = 公開用 main `a0f1b53`（公開 JS `assets/index-DYUKOXfK.js`）。公開用のコミットメッセージの末尾に、対応する本体のコミットを書く
+- 公開用リポジトリに本体を経由しないコミットが入っていて差分が当たらないときは、その内容が本体に入っていることを確かめてから、本体のアプリの中身（`git archive <今回> apps/densha-one-station`）で公開用を丸ごと置き換える（`legacy/`・`.github/`・`docs/image-*.webp` は残す）。2026-11-04 はこの方法で同期した
 
 ## 9. 守ること・ユーザーの好み
 

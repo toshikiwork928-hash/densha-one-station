@@ -795,8 +795,8 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
       }
     }
   }
-  // 地上駅のホームの範囲（前後 10m）。この範囲では面を線路の帯から PLATFORM_CLEAR 離す（片面ホームの外縁は線路の中心から約 6.7m）
-  const PLATFORM_CLEAR = 8;
+  // 地上駅のホームの範囲（前後 10m）。この範囲では面を線路の帯から PLATFORM_CLEAR 離す（片面ホームの外縁は線路の中心から約 6.7m。外縁から約 5m 空ける）
+  const PLATFORM_CLEAR = 12;
   const groundPlatforms = route.stations.filter(st => !elevated((st.platform.from + st.platform.to) / 2)).map(st => ({ from: st.platform.from - 10, to: st.platform.to + 10 }));
   // 面（多角形）: s 方向 40m ごとに切って三角形分割し（線路の曲がりに沿わせる）地面に貼る。木を植える面は TreeSpot に
   const riverKeys = T.riverAreaKeys;
