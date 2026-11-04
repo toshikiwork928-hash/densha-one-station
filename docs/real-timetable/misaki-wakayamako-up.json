@@ -1,0 +1,2646 @@
+{
+  "source": "鉄道運用Hub 南海電鉄 時刻表データ（https://unyohub.2pd.jp/railroad_nankai/ 。API timetable.php、railroad_id=nankai、diagram_revision=2024-12-21、timetable_id=weekday）。scripts/oncoming-meets.ts が node_modules/.cache/unyohub に保存したものを読んだ",
+  "license": "運用表データは CC BY 4.0（https://creativecommons.org/licenses/by/4.0/deed.ja ）。出典: 鉄道運用Hub",
+  "revision": "2024-12-21",
+  "dayType": "平日",
+  "generatedBy": "2026-11-04 に調査用の一時スクリプトで抽出（リポジトリには入れていない）。ゲーム側の値は src/route の ROUTES に applyService を時間帯ごとに当てて読んだ",
+  "fieldNotes": {
+    "time": "HH:MM（分単位。秒は無い）。24時を過ぎた時刻は 24:xx のまま",
+    "dep": "その駅の発車時刻（Hub の値）",
+    "arr": "到着時刻。Hub は線の終点の値だけが到着。途中駅の到着時刻は Hub に無い（不明）",
+    "pass": "通過。値があれば通過時刻（Hub に |HH:MM の形で入っている場合だけ）。null は通過で時刻不明",
+    "arr と dep が両方": "空港線・和歌山港線との境（泉佐野・和歌山市）で、前の線の到着と次の線の発車が別に入っている",
+    "overtakenBy": "同じ向きの格上の列車と発車順が入れ替わる所から推定（通過待ち・緩急接続・走行中）。extraMin は前の駅からその駅の発車までが、普通の終日の最小値より何分長いか（待ちの長さの目安）",
+    "representatives": "自列車にする代表の1本の案（種別ごと）。inWindow=false は開始時刻の前後60分に該当列車が無いもの",
+    "vsGame": "realXxxMin は代表列車のコース始発駅の発車からの分。gameArrSec/gameDepSec はゲームの時刻表（自動生成、秒）。realCourseMin は始発駅の発車から終着駅の値（arr か dep）まで"
+  },
+  "course": "misaki-wakayamako-up",
+  "direction": "上り（和歌山市方面 → なんば）",
+  "stations": ["和歌山港","和歌山市","紀ノ川","和歌山大学前","孝子","みさき公園"],
+  "selectableServices": [
+    {"id":"local","name":"普通","gameStops":["和歌山港","和歌山市","紀ノ川","和歌山大学前","孝子","みさき公園"],"gameDestination":"なんば"},
+    {"id":"express","name":"急行","gameStops":["和歌山港","和歌山市","和歌山大学前","みさき公園"],"gameDestination":"なんば"},
+    {"id":"southern","name":"特急サザン","gameStops":["和歌山港","和歌山市","和歌山大学前","みさき公園"],"gameDestination":"なんば"}
+  ],
+  "timeOfDay": {
+    "morning": {
+      "startClock": "07:30",
+      "window": ["06:30","08:30"],
+      "windowRule": "コースの最初の駅の時刻（発・着・通過）が 06:30 以上 08:30 未満の列車",
+      "pattern": {
+        "local（加太線へ直通（本線は和歌山市〜紀ノ川だけ））": {
+          "count": 7,
+          "perHour": 3.5,
+          "originTimes": ["06:32(和歌山市から)","06:51(和歌山市から)","07:05(和歌山市から)","07:24(和歌山市から)","07:38(和歌山市から)","07:55(和歌山市から)","08:14(和歌山市から)"],
+          "destinations": {"加太線直通（行先は未調査）":7},
+          "stopPatterns": {"和歌山市 紀ノ川":7}
+        },
+        "local": {
+          "count": 8,
+          "perHour": 4,
+          "originTimes": ["06:34(和歌山市から)","06:48(和歌山市から)","07:03(和歌山市から)","07:12(和歌山市から)","07:22(和歌山市から)","07:41(和歌山市から)","08:03(和歌山市から)","08:18(和歌山市から)"],
+          "destinations": {"なんば":8},
+          "stopPatterns": {"和歌山市 紀ノ川 和歌山大学前 孝子 みさき公園":8}
+        },
+        "express": {
+          "count": 7,
+          "perHour": 3.5,
+          "originTimes": ["06:42(和歌山市から)","06:59(和歌山市から)","07:03","07:18(和歌山市から)","07:31(和歌山市から)","07:51(和歌山市から)","08:11(和歌山市から)"],
+          "destinations": {"なんば":7},
+          "stopPatterns": {"和歌山市 和歌山大学前 みさき公園":6,"和歌山港 和歌山市 和歌山大学前 みさき公園":1}
+        },
+        "southern": {
+          "count": 3,
+          "perHour": 1.5,
+          "originTimes": ["06:56(和歌山市から)","07:29(和歌山市から)","07:48(和歌山市から)"],
+          "destinations": {"なんば":3},
+          "stopPatterns": {"和歌山市 和歌山大学前 みさき公園":3}
+        },
+        "local（和歌山港線の線内だけの普通（和歌山市〜和歌山港））": {
+          "count": 2,
+          "perHour": 1,
+          "originTimes": ["08:00","08:22"],
+          "destinations": {"和歌山市":2},
+          "stopPatterns": {"和歌山港 和歌山市":2}
+        }
+      },
+      "waitSummary": {},
+      "representatives": {
+        "local": {
+          "section": "和歌山市 → みさき公園",
+          "train": "6812",
+          "type": "普通",
+          "from": "和歌山市",
+          "to": "なんば",
+          "originDep": "07:22",
+          "offsetFromStartMin": -8,
+          "inWindow": true,
+          "reason": "和歌山市を発車してみさき公園に停車する普通のうち、開始時刻 07:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "6810 07:12",
+          "nextCandidate": "6814 07:41",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 14,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 15,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 805,
+            "gameOriginDepSec": 210,
+            "perStation": [
+              {"st":"和歌山市","realDepMin":0,"gameArrSec":185,"gameDepSec":210},
+              {"st":"紀ノ川","realDepMin":3,"gameArrSec":365,"gameDepSec":390},
+              {"st":"和歌山大学前","realDepMin":8,"gameArrSec":590,"gameDepSec":615},
+              {"st":"孝子","realDepMin":10,"gameArrSec":735,"gameDepSec":760},
+              {"st":"みさき公園","realDepMin":15,"gameArrSec":1015}
+            ]
+          },
+          "times": [
+            {"st":"和歌山市","dep":"07:22"},
+            {"st":"紀ノ川","dep":"07:25"},
+            {"st":"和歌山大学前","dep":"07:30"},
+            {"st":"孝子","dep":"07:32"},
+            {"st":"みさき公園","dep":"07:37"}
+          ]
+        },
+        "express": {
+          "section": "和歌山港 → みさき公園",
+          "train": "1904",
+          "type": "急行",
+          "from": "和歌山港",
+          "to": "なんば",
+          "originDep": "07:03",
+          "offsetFromStartMin": -27,
+          "inWindow": true,
+          "reason": "和歌山港を発車してみさき公園に停車する急行のうち、開始時刻 07:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "1902 05:41",
+          "nextCandidate": "1906 19:35",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 19,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 20,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 920,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"和歌山港","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"和歌山市","realDepMin":7,"realArrMin":7,"gameArrSec":190,"gameDepSec":215},
+              {"st":"紀ノ川","gameArrSec":355},
+              {"st":"和歌山大学前","realDepMin":13,"gameArrSec":535,"gameDepSec":560},
+              {"st":"孝子","gameArrSec":675},
+              {"st":"みさき公園","realDepMin":20,"gameArrSec":920}
+            ]
+          },
+          "times": [
+            {"st":"和歌山港","dep":"07:03"},
+            {"st":"和歌山市","arr":"07:10","dep":"07:10"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"07:16"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"07:23"}
+          ]
+        },
+        "express@和歌山市から": {
+          "section": "和歌山市 → みさき公園",
+          "train": "1710",
+          "type": "急行",
+          "from": "和歌山市",
+          "to": "なんば",
+          "originDep": "07:31",
+          "offsetFromStartMin": 1,
+          "inWindow": true,
+          "reason": "和歌山市を発車してみさき公園に停車する急行のうち、開始時刻 07:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "1708 07:18",
+          "nextCandidate": "1712 07:51",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 13,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 13,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 705,
+            "gameOriginDepSec": 215,
+            "perStation": [
+              {"st":"和歌山市","realDepMin":0,"gameArrSec":190,"gameDepSec":215},
+              {"st":"紀ノ川","gameArrSec":355},
+              {"st":"和歌山大学前","realDepMin":7,"gameArrSec":535,"gameDepSec":560},
+              {"st":"孝子","gameArrSec":675},
+              {"st":"みさき公園","realDepMin":13,"gameArrSec":920}
+            ]
+          },
+          "times": [
+            {"st":"和歌山市","dep":"07:31"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"07:38"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"07:44"}
+          ]
+        },
+        "southern": {
+          "section": "和歌山港 → みさき公園",
+          "train": "0602",
+          "type": "サザン20号",
+          "from": "和歌山港",
+          "to": "なんば",
+          "originDep": "10:23",
+          "offsetFromStartMin": 173,
+          "inWindow": false,
+          "reason": "開始時刻の前後60分に和歌山港発の特急サザンが無い。終日で最も近い列車を参考に入れた。この時間帯の自列車には向かない",
+          "prevCandidate": null,
+          "nextCandidate": "0604 18:53",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 19,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 20,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 925,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"和歌山港","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"和歌山市","realDepMin":7,"realArrMin":7,"gameArrSec":190,"gameDepSec":215},
+              {"st":"紀ノ川","gameArrSec":355},
+              {"st":"和歌山大学前","realDepMin":13,"gameArrSec":535,"gameDepSec":560},
+              {"st":"孝子","gameArrSec":675},
+              {"st":"みさき公園","realDepMin":20,"gameArrSec":925}
+            ]
+          },
+          "times": [
+            {"st":"和歌山港","dep":"10:23"},
+            {"st":"和歌山市","arr":"10:30","dep":"10:30"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"10:36"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"10:43"}
+          ]
+        },
+        "southern@和歌山市から": {
+          "section": "和歌山市 → みさき公園",
+          "train": "0508",
+          "type": "サザン",
+          "from": "和歌山市",
+          "to": "なんば",
+          "originDep": "07:29",
+          "offsetFromStartMin": -1,
+          "inWindow": true,
+          "reason": "和歌山市を発車してみさき公園に停車する特急サザンのうち、開始時刻 07:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "0506 06:56",
+          "nextCandidate": "0510 07:48",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 12,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 13,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 710,
+            "gameOriginDepSec": 215,
+            "perStation": [
+              {"st":"和歌山市","realDepMin":0,"gameArrSec":190,"gameDepSec":215},
+              {"st":"紀ノ川","gameArrSec":355},
+              {"st":"和歌山大学前","realDepMin":6,"gameArrSec":535,"gameDepSec":560},
+              {"st":"孝子","gameArrSec":675},
+              {"st":"みさき公園","realDepMin":13,"gameArrSec":925}
+            ]
+          },
+          "times": [
+            {"st":"和歌山市","dep":"07:29"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"07:35"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"07:42"}
+          ]
+        }
+      },
+      "trains": [
+        {
+          "train": "5609",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "加太線直通（行先は未調査）",
+          "courseFrom": "和歌山市",
+          "courseTo": "紀ノ川",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"和歌山市","dep":"06:32"},
+            {"st":"紀ノ川","arr":"06:35"}
+          ],
+          "note": "加太線へ直通（本線は和歌山市〜紀ノ川だけ）",
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6804",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"06:34"},
+            {"st":"紀ノ川","dep":"06:38"},
+            {"st":"和歌山大学前","dep":"06:42"},
+            {"st":"孝子","dep":"06:45"},
+            {"st":"みさき公園","dep":"06:49"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "1704",
+          "type": "急行",
+          "service": "express",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"06:42"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"06:49"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"06:56"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6806",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"06:48"},
+            {"st":"紀ノ川","dep":"06:51"},
+            {"st":"和歌山大学前","dep":"06:56"},
+            {"st":"孝子","dep":"06:58"},
+            {"st":"みさき公園","dep":"07:03"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "5611",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "加太線直通（行先は未調査）",
+          "courseFrom": "和歌山市",
+          "courseTo": "紀ノ川",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"和歌山市","dep":"06:51"},
+            {"st":"紀ノ川","arr":"06:54"}
+          ],
+          "note": "加太線へ直通（本線は和歌山市〜紀ノ川だけ）",
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "0506",
+          "type": "サザン6号",
+          "service": "southern",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"06:56"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"07:02"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"07:09"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "1706",
+          "type": "急行",
+          "service": "express",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"06:59"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"07:05"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"07:12"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "1904",
+          "type": "急行",
+          "service": "express",
+          "from": "和歌山港",
+          "to": "なんば",
+          "courseFrom": "和歌山港",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山港","dep":"07:03"},
+            {"st":"和歌山市","arr":"07:10","dep":"07:10"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"07:16"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"07:23"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6808",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"07:03"},
+            {"st":"紀ノ川","dep":"07:06"},
+            {"st":"和歌山大学前","dep":"07:11"},
+            {"st":"孝子","dep":"07:13"},
+            {"st":"みさき公園","dep":"07:18"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "5613",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "加太線直通（行先は未調査）",
+          "courseFrom": "和歌山市",
+          "courseTo": "紀ノ川",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"和歌山市","dep":"07:05"},
+            {"st":"紀ノ川","arr":"07:08"}
+          ],
+          "note": "加太線へ直通（本線は和歌山市〜紀ノ川だけ）",
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6810",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"07:12"},
+            {"st":"紀ノ川","dep":"07:15"},
+            {"st":"和歌山大学前","dep":"07:20"},
+            {"st":"孝子","dep":"07:22"},
+            {"st":"みさき公園","dep":"07:27"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "1708",
+          "type": "急行",
+          "service": "express",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"07:18"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"07:24"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"07:31"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6812",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"07:22"},
+            {"st":"紀ノ川","dep":"07:25"},
+            {"st":"和歌山大学前","dep":"07:30"},
+            {"st":"孝子","dep":"07:32"},
+            {"st":"みさき公園","dep":"07:37"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "5615",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "加太線直通（行先は未調査）",
+          "courseFrom": "和歌山市",
+          "courseTo": "紀ノ川",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"和歌山市","dep":"07:24"},
+            {"st":"紀ノ川","arr":"07:27"}
+          ],
+          "note": "加太線へ直通（本線は和歌山市〜紀ノ川だけ）",
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "0508",
+          "type": "サザン",
+          "service": "southern",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"07:29"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"07:35"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"07:42"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "1710",
+          "type": "急行",
+          "service": "express",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"07:31"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"07:38"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"07:44"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "5617",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "加太線直通（行先は未調査）",
+          "courseFrom": "和歌山市",
+          "courseTo": "紀ノ川",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"和歌山市","dep":"07:38"},
+            {"st":"紀ノ川","arr":"07:42"}
+          ],
+          "note": "加太線へ直通（本線は和歌山市〜紀ノ川だけ）",
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6814",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"07:41"},
+            {"st":"紀ノ川","dep":"07:45"},
+            {"st":"和歌山大学前","dep":"07:49"},
+            {"st":"孝子","dep":"07:52"},
+            {"st":"みさき公園","dep":"07:56"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "0510",
+          "type": "サザン10号",
+          "service": "southern",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"07:48"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"07:54"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"08:01"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "1712",
+          "type": "急行",
+          "service": "express",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"07:51"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"07:58"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"08:04"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "5619",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "加太線直通（行先は未調査）",
+          "courseFrom": "和歌山市",
+          "courseTo": "紀ノ川",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"和歌山市","dep":"07:55"},
+            {"st":"紀ノ川","arr":"07:58"}
+          ],
+          "note": "加太線へ直通（本線は和歌山市〜紀ノ川だけ）",
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "5802",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山港",
+          "to": "和歌山市",
+          "courseFrom": "和歌山港",
+          "courseTo": "和歌山市",
+          "coversCourse": false,
+          "startsAtOrigin": true,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"和歌山港","dep":"08:00"},
+            {"st":"和歌山市","arr":"08:05"}
+          ],
+          "note": "和歌山港線の線内だけの普通（和歌山市〜和歌山港）",
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6816",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"08:03"},
+            {"st":"紀ノ川","dep":"08:06"},
+            {"st":"和歌山大学前","dep":"08:11"},
+            {"st":"孝子","dep":"08:13"},
+            {"st":"みさき公園","dep":"08:18"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "1714",
+          "type": "急行",
+          "service": "express",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"08:11"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"08:17"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"08:24"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "5621",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "加太線直通（行先は未調査）",
+          "courseFrom": "和歌山市",
+          "courseTo": "紀ノ川",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"和歌山市","dep":"08:14"},
+            {"st":"紀ノ川","arr":"08:17"}
+          ],
+          "note": "加太線へ直通（本線は和歌山市〜紀ノ川だけ）",
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6818",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"08:18"},
+            {"st":"紀ノ川","dep":"08:22"},
+            {"st":"和歌山大学前","dep":"08:26"},
+            {"st":"孝子","dep":"08:29"},
+            {"st":"みさき公園","dep":"08:33"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "5804",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山港",
+          "to": "和歌山市",
+          "courseFrom": "和歌山港",
+          "courseTo": "和歌山市",
+          "coversCourse": false,
+          "startsAtOrigin": true,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"和歌山港","dep":"08:22"},
+            {"st":"和歌山市","arr":"08:27"}
+          ],
+          "note": "和歌山港線の線内だけの普通（和歌山市〜和歌山港）",
+          "stopsVsGame": "same"
+        }
+      ]
+    },
+    "noon": {
+      "startClock": "10:00",
+      "window": ["09:00","11:00"],
+      "windowRule": "コースの最初の駅の時刻（発・着・通過）が 09:00 以上 11:00 未満の列車",
+      "pattern": {
+        "southern": {
+          "count": 4,
+          "perHour": 2,
+          "originTimes": ["09:00(和歌山市から)","09:30(和歌山市から)","10:00(和歌山市から)","10:23"],
+          "destinations": {"なんば":4},
+          "stopPatterns": {"和歌山市 和歌山大学前 みさき公園":3,"和歌山港 和歌山市 和歌山大学前 みさき公園":1}
+        },
+        "local": {
+          "count": 9,
+          "perHour": 4.5,
+          "originTimes": ["09:02(和歌山市から)","09:12(和歌山市から)","09:32(和歌山市から)","09:41(和歌山市から)","09:52(和歌山市から)","10:08(和歌山市から)","10:22(和歌山市から)","10:38(和歌山市から)","10:52(和歌山市から)"],
+          "destinations": {"なんば":9},
+          "stopPatterns": {"和歌山市 紀ノ川 和歌山大学前 孝子 みさき公園":9}
+        },
+        "local（加太線へ直通（本線は和歌山市〜紀ノ川だけ））": {
+          "count": 5,
+          "perHour": 2.5,
+          "originTimes": ["09:14(和歌山市から)","09:35(和歌山市から)","09:56(和歌山市から)","10:19(和歌山市から)","10:57(和歌山市から)"],
+          "destinations": {"加太線直通（行先は未調査）":5},
+          "stopPatterns": {"和歌山市 紀ノ川":5}
+        }
+      },
+      "waitSummary": {},
+      "representatives": {
+        "local": {
+          "section": "和歌山市 → みさき公園",
+          "train": "6832",
+          "type": "普通",
+          "from": "和歌山市",
+          "to": "なんば",
+          "originDep": "10:08",
+          "offsetFromStartMin": 8,
+          "inWindow": true,
+          "reason": "和歌山市を発車してみさき公園に停車する普通のうち、開始時刻 10:00 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "6830 09:52",
+          "nextCandidate": "6834 10:22",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 15,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 15,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 805,
+            "gameOriginDepSec": 210,
+            "perStation": [
+              {"st":"和歌山市","realDepMin":0,"gameArrSec":185,"gameDepSec":210},
+              {"st":"紀ノ川","realDepMin":4,"gameArrSec":365,"gameDepSec":390},
+              {"st":"和歌山大学前","realDepMin":8,"gameArrSec":590,"gameDepSec":615},
+              {"st":"孝子","realDepMin":11,"gameArrSec":735,"gameDepSec":760},
+              {"st":"みさき公園","realDepMin":15,"gameArrSec":1015}
+            ]
+          },
+          "times": [
+            {"st":"和歌山市","dep":"10:08"},
+            {"st":"紀ノ川","dep":"10:12"},
+            {"st":"和歌山大学前","dep":"10:16"},
+            {"st":"孝子","dep":"10:19"},
+            {"st":"みさき公園","dep":"10:23"}
+          ]
+        },
+        "express": {
+          "section": "和歌山港 → みさき公園",
+          "train": "1904",
+          "type": "急行",
+          "from": "和歌山港",
+          "to": "なんば",
+          "originDep": "07:03",
+          "offsetFromStartMin": -177,
+          "inWindow": false,
+          "reason": "開始時刻の前後60分に和歌山港発の急行が無い。終日で最も近い列車を参考に入れた。この時間帯の自列車には向かない",
+          "prevCandidate": "1902 05:41",
+          "nextCandidate": "1906 19:35",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 19,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 20,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 920,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"和歌山港","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"和歌山市","realDepMin":7,"realArrMin":7,"gameArrSec":190,"gameDepSec":215},
+              {"st":"紀ノ川","gameArrSec":355},
+              {"st":"和歌山大学前","realDepMin":13,"gameArrSec":535,"gameDepSec":560},
+              {"st":"孝子","gameArrSec":675},
+              {"st":"みさき公園","realDepMin":20,"gameArrSec":920}
+            ]
+          },
+          "times": [
+            {"st":"和歌山港","dep":"07:03"},
+            {"st":"和歌山市","arr":"07:10","dep":"07:10"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"07:16"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"07:23"}
+          ]
+        },
+        "express@和歌山市から": {
+          "section": "和歌山市 → みさき公園",
+          "train": "1716",
+          "type": "急行",
+          "from": "和歌山市",
+          "to": "なんば",
+          "originDep": "08:47",
+          "offsetFromStartMin": -73,
+          "inWindow": false,
+          "reason": "開始時刻の前後60分に和歌山市発の急行が無い。終日で最も近い列車を参考に入れた。この時間帯の自列車には向かない",
+          "prevCandidate": "1714 08:11",
+          "nextCandidate": "1718 16:45",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 12,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 13,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 705,
+            "gameOriginDepSec": 215,
+            "perStation": [
+              {"st":"和歌山市","realDepMin":0,"gameArrSec":190,"gameDepSec":215},
+              {"st":"紀ノ川","gameArrSec":355},
+              {"st":"和歌山大学前","realDepMin":6,"gameArrSec":535,"gameDepSec":560},
+              {"st":"孝子","gameArrSec":675},
+              {"st":"みさき公園","realDepMin":13,"gameArrSec":920}
+            ]
+          },
+          "times": [
+            {"st":"和歌山市","dep":"08:47"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"08:53"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"09:00"}
+          ]
+        },
+        "southern": {
+          "section": "和歌山港 → みさき公園",
+          "train": "0602",
+          "type": "サザン20号",
+          "from": "和歌山港",
+          "to": "なんば",
+          "originDep": "10:23",
+          "offsetFromStartMin": 23,
+          "inWindow": true,
+          "reason": "和歌山港を発車してみさき公園に停車する特急サザンのうち、開始時刻 10:00 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": null,
+          "nextCandidate": "0604 18:53",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 19,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 20,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 925,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"和歌山港","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"和歌山市","realDepMin":7,"realArrMin":7,"gameArrSec":190,"gameDepSec":215},
+              {"st":"紀ノ川","gameArrSec":355},
+              {"st":"和歌山大学前","realDepMin":13,"gameArrSec":535,"gameDepSec":560},
+              {"st":"孝子","gameArrSec":675},
+              {"st":"みさき公園","realDepMin":20,"gameArrSec":925}
+            ]
+          },
+          "times": [
+            {"st":"和歌山港","dep":"10:23"},
+            {"st":"和歌山市","arr":"10:30","dep":"10:30"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"10:36"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"10:43"}
+          ]
+        },
+        "southern@和歌山市から": {
+          "section": "和歌山市 → みさき公園",
+          "train": "0518",
+          "type": "サザン18号",
+          "from": "和歌山市",
+          "to": "なんば",
+          "originDep": "10:00",
+          "offsetFromStartMin": 0,
+          "inWindow": true,
+          "reason": "和歌山市を発車してみさき公園に停車する特急サザンのうち、開始時刻 10:00 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "0516 09:30",
+          "nextCandidate": "0602 10:30",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 12,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 13,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 710,
+            "gameOriginDepSec": 215,
+            "perStation": [
+              {"st":"和歌山市","realDepMin":0,"gameArrSec":190,"gameDepSec":215},
+              {"st":"紀ノ川","gameArrSec":355},
+              {"st":"和歌山大学前","realDepMin":6,"gameArrSec":535,"gameDepSec":560},
+              {"st":"孝子","gameArrSec":675},
+              {"st":"みさき公園","realDepMin":13,"gameArrSec":925}
+            ]
+          },
+          "times": [
+            {"st":"和歌山市","dep":"10:00"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"10:06"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"10:13"}
+          ]
+        }
+      },
+      "trains": [
+        {
+          "train": "0514",
+          "type": "サザン14号",
+          "service": "southern",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"09:00"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"09:06"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"09:13"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6822",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"09:02"},
+            {"st":"紀ノ川","dep":"09:05"},
+            {"st":"和歌山大学前","dep":"09:10"},
+            {"st":"孝子","dep":"09:12"},
+            {"st":"みさき公園","dep":"09:17"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6824",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"09:12"},
+            {"st":"紀ノ川","dep":"09:15"},
+            {"st":"和歌山大学前","dep":"09:20"},
+            {"st":"孝子","dep":"09:22"},
+            {"st":"みさき公園","dep":"09:27"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "5627",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "加太線直通（行先は未調査）",
+          "courseFrom": "和歌山市",
+          "courseTo": "紀ノ川",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"和歌山市","dep":"09:14"},
+            {"st":"紀ノ川","arr":"09:17"}
+          ],
+          "note": "加太線へ直通（本線は和歌山市〜紀ノ川だけ）",
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "0516",
+          "type": "サザン16号",
+          "service": "southern",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"09:30"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"09:36"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"09:43"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6826",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"09:32"},
+            {"st":"紀ノ川","dep":"09:35"},
+            {"st":"和歌山大学前","dep":"09:40"},
+            {"st":"孝子","dep":"09:42"},
+            {"st":"みさき公園","dep":"09:47"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "5629",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "加太線直通（行先は未調査）",
+          "courseFrom": "和歌山市",
+          "courseTo": "紀ノ川",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"和歌山市","dep":"09:35"},
+            {"st":"紀ノ川","arr":"09:38"}
+          ],
+          "note": "加太線へ直通（本線は和歌山市〜紀ノ川だけ）",
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6828",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"09:41"},
+            {"st":"紀ノ川","dep":"09:44"},
+            {"st":"和歌山大学前","dep":"09:49"},
+            {"st":"孝子","dep":"09:51"},
+            {"st":"みさき公園","dep":"09:56"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6830",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"09:52"},
+            {"st":"紀ノ川","dep":"09:55"},
+            {"st":"和歌山大学前","dep":"10:00"},
+            {"st":"孝子","dep":"10:02"},
+            {"st":"みさき公園","dep":"10:07"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "5631",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "加太線直通（行先は未調査）",
+          "courseFrom": "和歌山市",
+          "courseTo": "紀ノ川",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"和歌山市","dep":"09:56"},
+            {"st":"紀ノ川","arr":"09:59"}
+          ],
+          "note": "加太線へ直通（本線は和歌山市〜紀ノ川だけ）",
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "0518",
+          "type": "サザン18号",
+          "service": "southern",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"10:00"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"10:06"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"10:13"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6832",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"10:08"},
+            {"st":"紀ノ川","dep":"10:12"},
+            {"st":"和歌山大学前","dep":"10:16"},
+            {"st":"孝子","dep":"10:19"},
+            {"st":"みさき公園","dep":"10:23"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "5633",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "加太線直通（行先は未調査）",
+          "courseFrom": "和歌山市",
+          "courseTo": "紀ノ川",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"和歌山市","dep":"10:19"},
+            {"st":"紀ノ川","arr":"10:22"}
+          ],
+          "note": "加太線へ直通（本線は和歌山市〜紀ノ川だけ）",
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6834",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"10:22"},
+            {"st":"紀ノ川","dep":"10:25"},
+            {"st":"和歌山大学前","dep":"10:30"},
+            {"st":"孝子","dep":"10:32"},
+            {"st":"みさき公園","dep":"10:37"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "0602",
+          "type": "サザン20号",
+          "service": "southern",
+          "from": "和歌山港",
+          "to": "なんば",
+          "courseFrom": "和歌山港",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山港","dep":"10:23"},
+            {"st":"和歌山市","arr":"10:30","dep":"10:30"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"10:36"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"10:43"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6836",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"10:38"},
+            {"st":"紀ノ川","dep":"10:41"},
+            {"st":"和歌山大学前","dep":"10:46"},
+            {"st":"孝子","dep":"10:48"},
+            {"st":"みさき公園","dep":"10:53"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6838",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"10:52"},
+            {"st":"紀ノ川","dep":"10:56"},
+            {"st":"和歌山大学前","dep":"11:00"},
+            {"st":"孝子","dep":"11:03"},
+            {"st":"みさき公園","dep":"11:07"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "5635",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "加太線直通（行先は未調査）",
+          "courseFrom": "和歌山市",
+          "courseTo": "紀ノ川",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"和歌山市","dep":"10:57"},
+            {"st":"紀ノ川","arr":"11:00"}
+          ],
+          "note": "加太線へ直通（本線は和歌山市〜紀ノ川だけ）",
+          "stopsVsGame": "same"
+        }
+      ]
+    },
+    "evening": {
+      "startClock": "17:30",
+      "window": ["16:30","18:30"],
+      "windowRule": "コースの最初の駅の時刻（発・着・通過）が 16:30 以上 18:30 未満の列車",
+      "pattern": {
+        "southern": {
+          "count": 4,
+          "perHour": 2,
+          "originTimes": ["16:30(和歌山市から)","17:00(和歌山市から)","17:30(和歌山市から)","18:00(和歌山市から)"],
+          "destinations": {"なんば":4},
+          "stopPatterns": {"和歌山市 和歌山大学前 みさき公園":4}
+        },
+        "local": {
+          "count": 6,
+          "perHour": 3,
+          "originTimes": ["16:37(和歌山市から)","16:52(和歌山市から)","17:04(和歌山市から)","17:17(和歌山市から)","17:38(和歌山市から)","18:12(和歌山市から)"],
+          "destinations": {"なんば":6},
+          "stopPatterns": {"和歌山市 紀ノ川 和歌山大学前 孝子 みさき公園":6}
+        },
+        "local（加太線へ直通（本線は和歌山市〜紀ノ川だけ））": {
+          "count": 7,
+          "perHour": 3.5,
+          "originTimes": ["16:42(和歌山市から)","16:57(和歌山市から)","17:14(和歌山市から)","17:27(和歌山市から)","17:50(和歌山市から)","18:08(和歌山市から)","18:25(和歌山市から)"],
+          "destinations": {"加太線直通（行先は未調査）":7},
+          "stopPatterns": {"和歌山市 紀ノ川":7}
+        },
+        "express": {
+          "count": 3,
+          "perHour": 1.5,
+          "originTimes": ["16:45(和歌山市から)","17:34(和歌山市から)","18:19(和歌山市から)"],
+          "destinations": {"なんば":3},
+          "stopPatterns": {"和歌山市 和歌山大学前 みさき公園":3}
+        },
+        "local（和歌山港線の線内だけの普通（和歌山市〜和歌山港））": {
+          "count": 1,
+          "perHour": 0.5,
+          "originTimes": ["17:42"],
+          "destinations": {"和歌山市":1},
+          "stopPatterns": {"和歌山港 和歌山市":1}
+        },
+        "区急": {
+          "count": 1,
+          "perHour": 0.5,
+          "originTimes": ["17:53(和歌山市から)"],
+          "destinations": {"なんば":1},
+          "stopPatterns": {"和歌山市 紀ノ川 和歌山大学前 孝子 みさき公園":1}
+        }
+      },
+      "waitSummary": {},
+      "representatives": {
+        "local": {
+          "section": "和歌山市 → みさき公園",
+          "train": "6892",
+          "type": "普通",
+          "from": "和歌山市",
+          "to": "なんば",
+          "originDep": "17:38",
+          "offsetFromStartMin": 8,
+          "inWindow": true,
+          "reason": "和歌山市を発車してみさき公園に停車する普通のうち、開始時刻 17:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "6890 17:17",
+          "nextCandidate": "6894 18:12",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 15,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 15,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 805,
+            "gameOriginDepSec": 210,
+            "perStation": [
+              {"st":"和歌山市","realDepMin":0,"gameArrSec":185,"gameDepSec":210},
+              {"st":"紀ノ川","realDepMin":4,"gameArrSec":365,"gameDepSec":390},
+              {"st":"和歌山大学前","realDepMin":8,"gameArrSec":590,"gameDepSec":615},
+              {"st":"孝子","realDepMin":11,"gameArrSec":735,"gameDepSec":760},
+              {"st":"みさき公園","realDepMin":15,"gameArrSec":1015}
+            ]
+          },
+          "times": [
+            {"st":"和歌山市","dep":"17:38"},
+            {"st":"紀ノ川","dep":"17:42"},
+            {"st":"和歌山大学前","dep":"17:46"},
+            {"st":"孝子","dep":"17:49"},
+            {"st":"みさき公園","dep":"17:53"}
+          ]
+        },
+        "express": {
+          "section": "和歌山港 → みさき公園",
+          "train": "1906",
+          "type": "急行",
+          "from": "和歌山港",
+          "to": "なんば",
+          "originDep": "19:35",
+          "offsetFromStartMin": 125,
+          "inWindow": false,
+          "reason": "開始時刻の前後60分に和歌山港発の急行が無い。終日で最も近い列車を参考に入れた。この時間帯の自列車には向かない",
+          "prevCandidate": "1904 07:03",
+          "nextCandidate": "1908 20:35",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 19,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 19,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 920,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"和歌山港","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"和歌山市","realDepMin":6,"realArrMin":6,"gameArrSec":190,"gameDepSec":215},
+              {"st":"紀ノ川","gameArrSec":355},
+              {"st":"和歌山大学前","realDepMin":13,"gameArrSec":535,"gameDepSec":560},
+              {"st":"孝子","gameArrSec":675},
+              {"st":"みさき公園","realDepMin":19,"gameArrSec":920}
+            ]
+          },
+          "times": [
+            {"st":"和歌山港","dep":"19:35"},
+            {"st":"和歌山市","arr":"19:41","dep":"19:41"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"19:48"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"19:54"}
+          ]
+        },
+        "express@和歌山市から": {
+          "section": "和歌山市 → みさき公園",
+          "train": "1720",
+          "type": "急行",
+          "from": "和歌山市",
+          "to": "なんば",
+          "originDep": "17:34",
+          "offsetFromStartMin": 4,
+          "inWindow": true,
+          "reason": "和歌山市を発車してみさき公園に停車する急行のうち、開始時刻 17:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "1718 16:45",
+          "nextCandidate": "1722 18:19",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 12,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 13,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 705,
+            "gameOriginDepSec": 215,
+            "perStation": [
+              {"st":"和歌山市","realDepMin":0,"gameArrSec":190,"gameDepSec":215},
+              {"st":"紀ノ川","gameArrSec":355},
+              {"st":"和歌山大学前","realDepMin":6,"gameArrSec":535,"gameDepSec":560},
+              {"st":"孝子","gameArrSec":675},
+              {"st":"みさき公園","realDepMin":13,"gameArrSec":920}
+            ]
+          },
+          "times": [
+            {"st":"和歌山市","dep":"17:34"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"17:40"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"17:47"}
+          ]
+        },
+        "southern": {
+          "section": "和歌山港 → みさき公園",
+          "train": "0604",
+          "type": "サザン54号",
+          "from": "和歌山港",
+          "to": "なんば",
+          "originDep": "18:53",
+          "offsetFromStartMin": 83,
+          "inWindow": false,
+          "reason": "開始時刻の前後60分に和歌山港発の特急サザンが無い。終日で最も近い列車を参考に入れた。この時間帯の自列車には向かない",
+          "prevCandidate": "0602 10:23",
+          "nextCandidate": "0606 21:25",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 19,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 20,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 925,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"和歌山港","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"和歌山市","realDepMin":7,"realArrMin":7,"gameArrSec":190,"gameDepSec":215},
+              {"st":"紀ノ川","gameArrSec":355},
+              {"st":"和歌山大学前","realDepMin":13,"gameArrSec":535,"gameDepSec":560},
+              {"st":"孝子","gameArrSec":675},
+              {"st":"みさき公園","realDepMin":20,"gameArrSec":925}
+            ]
+          },
+          "times": [
+            {"st":"和歌山港","dep":"18:53"},
+            {"st":"和歌山市","arr":"19:00","dep":"19:00"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"19:06"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"19:13"}
+          ]
+        },
+        "southern@和歌山市から": {
+          "section": "和歌山市 → みさき公園",
+          "train": "0546",
+          "type": "サザン48号",
+          "from": "和歌山市",
+          "to": "なんば",
+          "originDep": "17:30",
+          "offsetFromStartMin": 0,
+          "inWindow": true,
+          "reason": "和歌山市を発車してみさき公園に停車する特急サザンのうち、開始時刻 17:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "0544 17:00",
+          "nextCandidate": "0548 18:00",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 12,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 13,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 710,
+            "gameOriginDepSec": 215,
+            "perStation": [
+              {"st":"和歌山市","realDepMin":0,"gameArrSec":190,"gameDepSec":215},
+              {"st":"紀ノ川","gameArrSec":355},
+              {"st":"和歌山大学前","realDepMin":6,"gameArrSec":535,"gameDepSec":560},
+              {"st":"孝子","gameArrSec":675},
+              {"st":"みさき公園","realDepMin":13,"gameArrSec":925}
+            ]
+          },
+          "times": [
+            {"st":"和歌山市","dep":"17:30"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"17:36"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"17:43"}
+          ]
+        }
+      },
+      "trains": [
+        {
+          "train": "0542",
+          "type": "サザン44号",
+          "service": "southern",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"16:30"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"16:36"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"16:43"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6884",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"16:37"},
+            {"st":"紀ノ川","dep":"16:40"},
+            {"st":"和歌山大学前","dep":"16:45"},
+            {"st":"孝子","dep":"16:47"},
+            {"st":"みさき公園","dep":"16:52"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "5659",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "加太線直通（行先は未調査）",
+          "courseFrom": "和歌山市",
+          "courseTo": "紀ノ川",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"和歌山市","dep":"16:42"},
+            {"st":"紀ノ川","arr":"16:45"}
+          ],
+          "note": "加太線へ直通（本線は和歌山市〜紀ノ川だけ）",
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "1718",
+          "type": "急行",
+          "service": "express",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"16:45"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"16:52"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"16:59"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6886",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"16:52"},
+            {"st":"紀ノ川","dep":"16:55"},
+            {"st":"和歌山大学前","dep":"17:00"},
+            {"st":"孝子","dep":"17:02"},
+            {"st":"みさき公園","dep":"17:07"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "5661",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "加太線直通（行先は未調査）",
+          "courseFrom": "和歌山市",
+          "courseTo": "紀ノ川",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"和歌山市","dep":"16:57"},
+            {"st":"紀ノ川","arr":"17:00"}
+          ],
+          "note": "加太線へ直通（本線は和歌山市〜紀ノ川だけ）",
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "0544",
+          "type": "サザン46号",
+          "service": "southern",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"17:00"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"17:06"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"17:13"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6888",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"17:04"},
+            {"st":"紀ノ川","dep":"17:07"},
+            {"st":"和歌山大学前","dep":"17:12"},
+            {"st":"孝子","dep":"17:14"},
+            {"st":"みさき公園","dep":"17:19"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "5663",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "加太線直通（行先は未調査）",
+          "courseFrom": "和歌山市",
+          "courseTo": "紀ノ川",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"和歌山市","dep":"17:14"},
+            {"st":"紀ノ川","arr":"17:18"}
+          ],
+          "note": "加太線へ直通（本線は和歌山市〜紀ノ川だけ）",
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6890",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"17:17"},
+            {"st":"紀ノ川","dep":"17:21"},
+            {"st":"和歌山大学前","dep":"17:25"},
+            {"st":"孝子","dep":"17:28"},
+            {"st":"みさき公園","dep":"17:32"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "5665",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "加太線直通（行先は未調査）",
+          "courseFrom": "和歌山市",
+          "courseTo": "紀ノ川",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"和歌山市","dep":"17:27"},
+            {"st":"紀ノ川","arr":"17:30"}
+          ],
+          "note": "加太線へ直通（本線は和歌山市〜紀ノ川だけ）",
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "0546",
+          "type": "サザン48号",
+          "service": "southern",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"17:30"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"17:36"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"17:43"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "1720",
+          "type": "急行",
+          "service": "express",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"17:34"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"17:40"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"17:47"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6892",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"17:38"},
+            {"st":"紀ノ川","dep":"17:42"},
+            {"st":"和歌山大学前","dep":"17:46"},
+            {"st":"孝子","dep":"17:49"},
+            {"st":"みさき公園","dep":"17:53"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "5814",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山港",
+          "to": "和歌山市",
+          "courseFrom": "和歌山港",
+          "courseTo": "和歌山市",
+          "coversCourse": false,
+          "startsAtOrigin": true,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"和歌山港","dep":"17:42"},
+            {"st":"和歌山市","arr":"17:47"}
+          ],
+          "note": "和歌山港線の線内だけの普通（和歌山市〜和歌山港）",
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "5667",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "加太線直通（行先は未調査）",
+          "courseFrom": "和歌山市",
+          "courseTo": "紀ノ川",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"和歌山市","dep":"17:50"},
+            {"st":"紀ノ川","arr":"17:54"}
+          ],
+          "note": "加太線へ直通（本線は和歌山市〜紀ノ川だけ）",
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "3810",
+          "type": "区急",
+          "service": null,
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"17:53"},
+            {"st":"紀ノ川","dep":"17:56"},
+            {"st":"和歌山大学前","dep":"18:00"},
+            {"st":"孝子","dep":"18:03"},
+            {"st":"みさき公園","dep":"18:07"}
+          ]
+        },
+        {
+          "train": "0548",
+          "type": "サザン50号",
+          "service": "southern",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"18:00"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"18:06"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"18:13"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "5669",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "加太線直通（行先は未調査）",
+          "courseFrom": "和歌山市",
+          "courseTo": "紀ノ川",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"和歌山市","dep":"18:08"},
+            {"st":"紀ノ川","arr":"18:11"}
+          ],
+          "note": "加太線へ直通（本線は和歌山市〜紀ノ川だけ）",
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6894",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"18:12"},
+            {"st":"紀ノ川","dep":"18:15"},
+            {"st":"和歌山大学前","dep":"18:20"},
+            {"st":"孝子","dep":"18:22"},
+            {"st":"みさき公園","dep":"18:27"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "1722",
+          "type": "急行",
+          "service": "express",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"18:19"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"18:25"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"18:32"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "5671",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "加太線直通（行先は未調査）",
+          "courseFrom": "和歌山市",
+          "courseTo": "紀ノ川",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"和歌山市","dep":"18:25"},
+            {"st":"紀ノ川","arr":"18:28"}
+          ],
+          "note": "加太線へ直通（本線は和歌山市〜紀ノ川だけ）",
+          "stopsVsGame": "same"
+        }
+      ]
+    },
+    "night": {
+      "startClock": "21:30",
+      "window": ["20:30","22:30"],
+      "windowRule": "コースの最初の駅の時刻（発・着・通過）が 20:30 以上 22:30 未満の列車",
+      "pattern": {
+        "southern": {
+          "count": 5,
+          "perHour": 2.5,
+          "originTimes": ["20:30(和歌山市から)","21:00(和歌山市から)","21:25","21:50(和歌山市から)","22:20(和歌山市から)"],
+          "destinations": {"なんば":5},
+          "stopPatterns": {"和歌山市 和歌山大学前 みさき公園":4,"和歌山港 和歌山市 和歌山大学前 みさき公園":1}
+        },
+        "local（加太線へ直通（本線は和歌山市〜紀ノ川だけ））": {
+          "count": 5,
+          "perHour": 2.5,
+          "originTimes": ["20:32(和歌山市から)","20:48(和歌山市から)","21:16(和歌山市から)","21:46(和歌山市から)","22:17(和歌山市から)"],
+          "destinations": {"加太線直通（行先は未調査）":5},
+          "stopPatterns": {"和歌山市 紀ノ川":5}
+        },
+        "express": {
+          "count": 1,
+          "perHour": 0.5,
+          "originTimes": ["20:35"],
+          "destinations": {"なんば":1},
+          "stopPatterns": {"和歌山港 和歌山市 和歌山大学前 みさき公園":1}
+        },
+        "local": {
+          "count": 7,
+          "perHour": 3.5,
+          "originTimes": ["20:44(和歌山市から)","21:02(和歌山市から)","21:12(和歌山市から)","21:25(和歌山市から)","21:43(和歌山市から)","21:55(和歌山市から)","22:13(和歌山市から)"],
+          "destinations": {"なんば":7},
+          "stopPatterns": {"和歌山市 紀ノ川 和歌山大学前 孝子 みさき公園":7}
+        }
+      },
+      "waitSummary": {},
+      "representatives": {
+        "local": {
+          "section": "和歌山市 → みさき公園",
+          "train": "6916",
+          "type": "普通",
+          "from": "和歌山市",
+          "to": "なんば",
+          "originDep": "21:25",
+          "offsetFromStartMin": -5,
+          "inWindow": true,
+          "reason": "和歌山市を発車してみさき公園に停車する普通のうち、開始時刻 21:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "6914 21:12",
+          "nextCandidate": "6918 21:43",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 14,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 15,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 805,
+            "gameOriginDepSec": 210,
+            "perStation": [
+              {"st":"和歌山市","realDepMin":0,"gameArrSec":185,"gameDepSec":210},
+              {"st":"紀ノ川","realDepMin":3,"gameArrSec":365,"gameDepSec":390},
+              {"st":"和歌山大学前","realDepMin":8,"gameArrSec":590,"gameDepSec":615},
+              {"st":"孝子","realDepMin":10,"gameArrSec":735,"gameDepSec":760},
+              {"st":"みさき公園","realDepMin":15,"gameArrSec":1015}
+            ]
+          },
+          "times": [
+            {"st":"和歌山市","dep":"21:25"},
+            {"st":"紀ノ川","dep":"21:28"},
+            {"st":"和歌山大学前","dep":"21:33"},
+            {"st":"孝子","dep":"21:35"},
+            {"st":"みさき公園","dep":"21:40"}
+          ]
+        },
+        "express": {
+          "section": "和歌山港 → みさき公園",
+          "train": "1908",
+          "type": "急行",
+          "from": "和歌山港",
+          "to": "なんば",
+          "originDep": "20:35",
+          "offsetFromStartMin": -55,
+          "inWindow": true,
+          "reason": "和歌山港を発車してみさき公園に停車する急行のうち、開始時刻 21:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "1906 19:35",
+          "nextCandidate": null,
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 19,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 20,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 920,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"和歌山港","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"和歌山市","realDepMin":7,"realArrMin":7,"gameArrSec":190,"gameDepSec":215},
+              {"st":"紀ノ川","gameArrSec":355},
+              {"st":"和歌山大学前","realDepMin":13,"gameArrSec":535,"gameDepSec":560},
+              {"st":"孝子","gameArrSec":675},
+              {"st":"みさき公園","realDepMin":20,"gameArrSec":920}
+            ]
+          },
+          "times": [
+            {"st":"和歌山港","dep":"20:35"},
+            {"st":"和歌山市","arr":"20:42","dep":"20:42"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"20:48"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"20:55"}
+          ]
+        },
+        "express@和歌山市から": {
+          "section": "和歌山市 → みさき公園",
+          "train": "1908",
+          "type": "急行",
+          "from": "和歌山港",
+          "to": "なんば",
+          "originDep": "20:42",
+          "offsetFromStartMin": -48,
+          "inWindow": true,
+          "reason": "和歌山市を発車してみさき公園に停車する急行のうち、開始時刻 21:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "1906 19:41",
+          "nextCandidate": null,
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 12,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 13,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 705,
+            "gameOriginDepSec": 215,
+            "perStation": [
+              {"st":"和歌山市","realDepMin":0,"realArrMin":0,"gameArrSec":190,"gameDepSec":215},
+              {"st":"紀ノ川","gameArrSec":355},
+              {"st":"和歌山大学前","realDepMin":6,"gameArrSec":535,"gameDepSec":560},
+              {"st":"孝子","gameArrSec":675},
+              {"st":"みさき公園","realDepMin":13,"gameArrSec":920}
+            ]
+          },
+          "times": [
+            {"st":"和歌山市","arr":"20:42","dep":"20:42"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"20:48"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"20:55"}
+          ]
+        },
+        "southern": {
+          "section": "和歌山港 → みさき公園",
+          "train": "0606",
+          "type": "サザン64号",
+          "from": "和歌山港",
+          "to": "なんば",
+          "originDep": "21:25",
+          "offsetFromStartMin": -5,
+          "inWindow": true,
+          "reason": "和歌山港を発車してみさき公園に停車する特急サザンのうち、開始時刻 21:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "0604 18:53",
+          "nextCandidate": null,
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 19,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 20,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 925,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"和歌山港","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"和歌山市","realDepMin":7,"realArrMin":7,"gameArrSec":190,"gameDepSec":215},
+              {"st":"紀ノ川","gameArrSec":355},
+              {"st":"和歌山大学前","realDepMin":13,"gameArrSec":535,"gameDepSec":560},
+              {"st":"孝子","gameArrSec":675},
+              {"st":"みさき公園","realDepMin":20,"gameArrSec":925}
+            ]
+          },
+          "times": [
+            {"st":"和歌山港","dep":"21:25"},
+            {"st":"和歌山市","arr":"21:32","dep":"21:32"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"21:38"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"21:45"}
+          ]
+        },
+        "southern@和歌山市から": {
+          "section": "和歌山市 → みさき公園",
+          "train": "0606",
+          "type": "サザン64号",
+          "from": "和歌山港",
+          "to": "なんば",
+          "originDep": "21:32",
+          "offsetFromStartMin": 2,
+          "inWindow": true,
+          "reason": "和歌山市を発車してみさき公園に停車する特急サザンのうち、開始時刻 21:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "0558 21:00",
+          "nextCandidate": "0560 21:50",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 12,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 13,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 710,
+            "gameOriginDepSec": 215,
+            "perStation": [
+              {"st":"和歌山市","realDepMin":0,"realArrMin":0,"gameArrSec":190,"gameDepSec":215},
+              {"st":"紀ノ川","gameArrSec":355},
+              {"st":"和歌山大学前","realDepMin":6,"gameArrSec":535,"gameDepSec":560},
+              {"st":"孝子","gameArrSec":675},
+              {"st":"みさき公園","realDepMin":13,"gameArrSec":925}
+            ]
+          },
+          "times": [
+            {"st":"和歌山市","arr":"21:32","dep":"21:32"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"21:38"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"21:45"}
+          ]
+        }
+      },
+      "trains": [
+        {
+          "train": "0556",
+          "type": "サザン60号",
+          "service": "southern",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"20:30"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"20:36"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"20:43"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "5683",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "加太線直通（行先は未調査）",
+          "courseFrom": "和歌山市",
+          "courseTo": "紀ノ川",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"和歌山市","dep":"20:32"},
+            {"st":"紀ノ川","arr":"20:35"}
+          ],
+          "note": "加太線へ直通（本線は和歌山市〜紀ノ川だけ）",
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "1908",
+          "type": "急行",
+          "service": "express",
+          "from": "和歌山港",
+          "to": "なんば",
+          "courseFrom": "和歌山港",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山港","dep":"20:35"},
+            {"st":"和歌山市","arr":"20:42","dep":"20:42"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"20:48"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"20:55"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6910",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"20:44"},
+            {"st":"紀ノ川","dep":"20:47"},
+            {"st":"和歌山大学前","dep":"20:52"},
+            {"st":"孝子","dep":"20:54"},
+            {"st":"みさき公園","dep":"20:59"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "5685",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "加太線直通（行先は未調査）",
+          "courseFrom": "和歌山市",
+          "courseTo": "紀ノ川",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"和歌山市","dep":"20:48"},
+            {"st":"紀ノ川","arr":"20:51"}
+          ],
+          "note": "加太線へ直通（本線は和歌山市〜紀ノ川だけ）",
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "0558",
+          "type": "サザン62号",
+          "service": "southern",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"21:00"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"21:06"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"21:13"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6912",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"21:02"},
+            {"st":"紀ノ川","dep":"21:05"},
+            {"st":"和歌山大学前","dep":"21:09"},
+            {"st":"孝子","dep":"21:12"},
+            {"st":"みさき公園","dep":"21:17"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6914",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"21:12"},
+            {"st":"紀ノ川","dep":"21:15"},
+            {"st":"和歌山大学前","dep":"21:20"},
+            {"st":"孝子","dep":"21:22"},
+            {"st":"みさき公園","dep":"21:27"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "5687",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "加太線直通（行先は未調査）",
+          "courseFrom": "和歌山市",
+          "courseTo": "紀ノ川",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"和歌山市","dep":"21:16"},
+            {"st":"紀ノ川","arr":"21:19"}
+          ],
+          "note": "加太線へ直通（本線は和歌山市〜紀ノ川だけ）",
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6916",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"21:25"},
+            {"st":"紀ノ川","dep":"21:28"},
+            {"st":"和歌山大学前","dep":"21:33"},
+            {"st":"孝子","dep":"21:35"},
+            {"st":"みさき公園","dep":"21:40"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "0606",
+          "type": "サザン64号",
+          "service": "southern",
+          "from": "和歌山港",
+          "to": "なんば",
+          "courseFrom": "和歌山港",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山港","dep":"21:25"},
+            {"st":"和歌山市","arr":"21:32","dep":"21:32"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"21:38"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"21:45"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6918",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"21:43"},
+            {"st":"紀ノ川","dep":"21:46"},
+            {"st":"和歌山大学前","dep":"21:51"},
+            {"st":"孝子","dep":"21:53"},
+            {"st":"みさき公園","dep":"21:58"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "5689",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "加太線直通（行先は未調査）",
+          "courseFrom": "和歌山市",
+          "courseTo": "紀ノ川",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"和歌山市","dep":"21:46"},
+            {"st":"紀ノ川","arr":"21:49"}
+          ],
+          "note": "加太線へ直通（本線は和歌山市〜紀ノ川だけ）",
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "0560",
+          "type": "サザン66号",
+          "service": "southern",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"21:50"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"21:56"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"22:03"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6920",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"21:55"},
+            {"st":"紀ノ川","dep":"21:58"},
+            {"st":"和歌山大学前","dep":"22:03"},
+            {"st":"孝子","dep":"22:05"},
+            {"st":"みさき公園","dep":"22:10"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6922",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"22:13"},
+            {"st":"紀ノ川","dep":"22:16"},
+            {"st":"和歌山大学前","dep":"22:21"},
+            {"st":"孝子","dep":"22:23"},
+            {"st":"みさき公園","dep":"22:28"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "5691",
+          "type": "普通",
+          "service": "local",
+          "from": "和歌山市",
+          "to": "加太線直通（行先は未調査）",
+          "courseFrom": "和歌山市",
+          "courseTo": "紀ノ川",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"和歌山市","dep":"22:17"},
+            {"st":"紀ノ川","arr":"22:21"}
+          ],
+          "note": "加太線へ直通（本線は和歌山市〜紀ノ川だけ）",
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "0562",
+          "type": "サザン68号",
+          "service": "southern",
+          "from": "和歌山市",
+          "to": "なんば",
+          "courseFrom": "和歌山市",
+          "courseTo": "みさき公園",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"和歌山市","dep":"22:20"},
+            {"st":"紀ノ川","pass":null},
+            {"st":"和歌山大学前","dep":"22:27"},
+            {"st":"孝子","pass":null},
+            {"st":"みさき公園","dep":"22:33"}
+          ],
+          "stopsVsGame": "same"
+        }
+      ]
+    }
+  }
+}

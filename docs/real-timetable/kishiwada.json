@@ -1,0 +1,2822 @@
+{
+  "source": "鉄道運用Hub 南海電鉄 時刻表データ（https://unyohub.2pd.jp/railroad_nankai/ 。API timetable.php、railroad_id=nankai、diagram_revision=2024-12-21、timetable_id=weekday）。scripts/oncoming-meets.ts が node_modules/.cache/unyohub に保存したものを読んだ",
+  "license": "運用表データは CC BY 4.0（https://creativecommons.org/licenses/by/4.0/deed.ja ）。出典: 鉄道運用Hub",
+  "revision": "2024-12-21",
+  "dayType": "平日",
+  "generatedBy": "2026-11-04 に調査用の一時スクリプトで抽出（リポジトリには入れていない）。ゲーム側の値は src/route の ROUTES に applyService を時間帯ごとに当てて読んだ",
+  "fieldNotes": {
+    "time": "HH:MM（分単位。秒は無い）。24時を過ぎた時刻は 24:xx のまま",
+    "dep": "その駅の発車時刻（Hub の値）",
+    "arr": "到着時刻。Hub は線の終点の値だけが到着。途中駅の到着時刻は Hub に無い（不明）",
+    "pass": "通過。値があれば通過時刻（Hub に |HH:MM の形で入っている場合だけ）。null は通過で時刻不明",
+    "arr と dep が両方": "空港線・和歌山港線との境（泉佐野・和歌山市）で、前の線の到着と次の線の発車が別に入っている",
+    "overtakenBy": "同じ向きの格上の列車と発車順が入れ替わる所から推定（通過待ち・緩急接続・走行中）。extraMin は前の駅からその駅の発車までが、普通の終日の最小値より何分長いか（待ちの長さの目安）",
+    "representatives": "自列車にする代表の1本の案（種別ごと）。inWindow=false は開始時刻の前後60分に該当列車が無いもの",
+    "vsGame": "realXxxMin は代表列車のコース始発駅の発車からの分。gameArrSec/gameDepSec はゲームの時刻表（自動生成、秒）。realCourseMin は始発駅の発車から終着駅の値（arr か dep）まで"
+  },
+  "course": "kishiwada",
+  "direction": "下り（なんば → 和歌山市方面）",
+  "stations": ["泉大津","忠岡","春木","和泉大宮","岸和田"],
+  "selectableServices": [
+    {"id":"local","name":"普通","gameStops":["泉大津","忠岡","春木","和泉大宮","岸和田"],"gameDestination":"羽倉崎"},
+    {"id":"express","name":"急行","gameStops":["泉大津","岸和田"],"gameDestination":"和歌山市"},
+    {"id":"airport","name":"空港急行","gameStops":["泉大津","春木","岸和田"],"gameDestination":"関西空港"}
+  ],
+  "timeOfDay": {
+    "morning": {
+      "startClock": "07:30",
+      "window": ["06:30","08:30"],
+      "windowRule": "コースの最初の駅の時刻（発・着・通過）が 06:30 以上 08:30 未満の列車",
+      "pattern": {
+        "local": {
+          "count": 10,
+          "perHour": 5,
+          "originTimes": ["06:30","06:43","07:01","07:10","07:25","07:37","07:45","07:59","08:07","08:21"],
+          "destinations": {"和歌山市":7,"みさき公園":1,"羽倉崎":2},
+          "stopPatterns": {"泉大津 忠岡 春木 和泉大宮 岸和田":10}
+        },
+        "express": {
+          "count": 5,
+          "perHour": 2.5,
+          "originTimes": ["06:34","07:00","07:24","07:44","08:18"],
+          "destinations": {"和歌山市":5},
+          "stopPatterns": {"泉大津 岸和田":5}
+        },
+        "ラピートα": {
+          "count": 2,
+          "perHour": 1,
+          "originTimes": ["06:48(通過)","07:50(通過)"],
+          "destinations": {"関西空港":2},
+          "stopPatterns": {"":2}
+        },
+        "airport": {
+          "count": 7,
+          "perHour": 3.5,
+          "originTimes": ["06:49","07:09","07:30","07:51","07:58","08:11","08:24"],
+          "destinations": {"関西空港":7},
+          "stopPatterns": {"泉大津 春木 岸和田":7}
+        }
+      },
+      "waitSummary": {"普通 が 岸和田 で 急行系 に 緩急接続（コースの終着駅）":5,"普通 が 岸和田 で 特急 に 通過待ち（コースの終着駅）":3,"普通 が 泉大津 で 急行系 に 緩急接続（コースの始発駅）":6,"普通 が 泉大津 で 特急 に 通過待ち（コースの始発駅）":3,"普通 が 岸和田 で 特急 に 緩急接続（コースの終着駅）":1},
+      "representatives": {
+        "local": {
+          "section": "泉大津 → 岸和田",
+          "train": "6815",
+          "type": "普通",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "07:25",
+          "offsetFromStartMin": -5,
+          "inWindow": true,
+          "reason": "泉大津を発車して岸和田に停車する普通のうち、開始時刻 07:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "6701 07:10",
+          "nextCandidate": "6501 07:37",
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"1705","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseOrigin":true}
+          ],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 7,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 8,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 490,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"泉大津","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"忠岡","realDepMin":2,"gameArrSec":130,"gameDepSec":155},
+              {"st":"春木","realDepMin":4,"gameArrSec":255,"gameDepSec":280},
+              {"st":"和泉大宮","realDepMin":6,"gameArrSec":375,"gameDepSec":400},
+              {"st":"岸和田","realDepMin":8,"gameArrSec":490}
+            ]
+          },
+          "times": [
+            {"st":"泉大津","dep":"07:25"},
+            {"st":"忠岡","dep":"07:27"},
+            {"st":"春木","dep":"07:29"},
+            {"st":"和泉大宮","dep":"07:31"},
+            {"st":"岸和田","dep":"07:33"}
+          ]
+        },
+        "express": {
+          "section": "泉大津 → 岸和田",
+          "train": "1705",
+          "type": "急行",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "07:24",
+          "offsetFromStartMin": -6,
+          "inWindow": true,
+          "reason": "泉大津を発車して岸和田に停車する急行のうち、開始時刻 07:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "1703 07:00",
+          "nextCandidate": "1707 07:44",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 5,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 5,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 275,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"泉大津","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"忠岡","gameArrSec":105},
+              {"st":"春木","gameArrSec":160},
+              {"st":"和泉大宮","gameArrSec":210},
+              {"st":"岸和田","realDepMin":5,"gameArrSec":275}
+            ]
+          },
+          "times": [
+            {"st":"泉大津","dep":"07:24"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","pass":null},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"07:29"}
+          ]
+        },
+        "airport": {
+          "section": "泉大津 → 岸和田",
+          "train": "2113",
+          "type": "空港急行",
+          "from": "なんば",
+          "to": "関西空港",
+          "originDep": "07:30",
+          "offsetFromStartMin": 0,
+          "inWindow": true,
+          "reason": "泉大津を発車して岸和田に停車する空港急行のうち、開始時刻 07:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "2111 07:09",
+          "nextCandidate": "2115 07:51",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 6,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 7,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 330,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"泉大津","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"忠岡","gameArrSec":95},
+              {"st":"春木","realDepMin":4,"gameArrSec":170,"gameDepSec":195},
+              {"st":"和泉大宮","gameArrSec":270},
+              {"st":"岸和田","realDepMin":7,"gameArrSec":330}
+            ]
+          },
+          "times": [
+            {"st":"泉大津","dep":"07:30"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"07:34"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"07:37"}
+          ]
+        }
+      },
+      "trains": [
+        {
+          "train": "6809",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"06:30"},
+            {"st":"忠岡","dep":"06:32"},
+            {"st":"春木","dep":"06:34"},
+            {"st":"和泉大宮","dep":"06:36"},
+            {"st":"岸和田","dep":"06:42"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["泉大津","岸和田"],"by":"1701","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "1701",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"06:34"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","pass":null},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"06:40"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6811",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"06:43"},
+            {"st":"忠岡","dep":"06:45"},
+            {"st":"春木","dep":"06:47"},
+            {"st":"和泉大宮","dep":"06:49"},
+            {"st":"岸和田","dep":"06:56"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["春木","岸和田"],"by":"2109","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":6,"atCourseEnd":true},
+            {"at":"岸和田","between":["泉大津","岸和田"],"by":"0703","byType":"ラピートα3号","kind":"通過待ち","extraMin":6,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "0703",
+          "type": "ラピートα3号",
+          "service": null,
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": false,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"泉大津","pass":"06:48"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","pass":null},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","pass":"06:52"}
+          ]
+        },
+        {
+          "train": "2109",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"06:49"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"06:52"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"06:55"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"0703","byType":"ラピートα3号","kind":"通過待ち（推定。長い停車が見えない）","extraMin":0,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "1703",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"07:00"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","pass":null},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"07:05"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6813",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"07:01"},
+            {"st":"忠岡","dep":"07:04"},
+            {"st":"春木","dep":"07:06"},
+            {"st":"和泉大宮","dep":"07:08"},
+            {"st":"岸和田","dep":"07:09"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"1703","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":3,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "2111",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"07:09"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"07:13"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"07:15"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6701",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "みさき公園",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"07:10"},
+            {"st":"忠岡","dep":"07:13"},
+            {"st":"春木","dep":"07:15"},
+            {"st":"和泉大宮","dep":"07:17"},
+            {"st":"岸和田","dep":"07:21"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"2111","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseOrigin":true},
+            {"at":"岸和田","between":["天下茶屋","貝塚"],"by":"0705","byType":"ラピートα5号","kind":"通過待ち","extraMin":3,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "1705",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"07:24"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","pass":null},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"07:29"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6815",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"07:25"},
+            {"st":"忠岡","dep":"07:27"},
+            {"st":"春木","dep":"07:29"},
+            {"st":"和泉大宮","dep":"07:31"},
+            {"st":"岸和田","dep":"07:33"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"1705","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "2113",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"07:30"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"07:34"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"07:37"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6501",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"07:37"},
+            {"st":"忠岡","dep":"07:40"},
+            {"st":"春木","dep":"07:42"},
+            {"st":"和泉大宮","dep":"07:44"},
+            {"st":"岸和田","dep":"07:46"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["堺","岸和田"],"by":"0501","byType":"サザン1号","kind":"通過待ち","extraMin":3,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "1707",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"07:44"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","pass":null},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"07:50"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6817",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"07:45"},
+            {"st":"忠岡","dep":"07:48"},
+            {"st":"春木","dep":"07:50"},
+            {"st":"和泉大宮","dep":"07:51"},
+            {"st":"岸和田","dep":"07:58"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"1707","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":3,"atCourseOrigin":true},
+            {"at":"岸和田","between":["春木","岸和田"],"by":"2115","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":6,"atCourseEnd":true},
+            {"at":"岸和田","between":["泉大津","岸和田"],"by":"0707","byType":"ラピートα7号","kind":"通過待ち","extraMin":6,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "0707",
+          "type": "ラピートα7号",
+          "service": null,
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": false,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"泉大津","pass":"07:50"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","pass":null},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","pass":"07:55"}
+          ]
+        },
+        {
+          "train": "2115",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"07:51"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"07:54"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"07:57"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"0707","byType":"ラピートα7号","kind":"通過待ち（推定。長い停車が見えない）","extraMin":0,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "2117",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"07:58"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"08:02"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"08:05"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6819",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"07:59"},
+            {"st":"忠岡","dep":"08:02"},
+            {"st":"春木","dep":"08:04"},
+            {"st":"和泉大宮","dep":"08:06"},
+            {"st":"岸和田","dep":"08:12"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"2117","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":3,"atCourseOrigin":true},
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0503","byType":"サザン3号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "6503",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"08:07"},
+            {"st":"忠岡","dep":"08:09"},
+            {"st":"春木","dep":"08:11"},
+            {"st":"和泉大宮","dep":"08:13"},
+            {"st":"岸和田","dep":"08:19"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["春木","岸和田"],"by":"2119","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5,"atCourseEnd":true},
+            {"at":"泉大津","between":["堺","岸和田"],"by":"0503","byType":"サザン3号","kind":"通過待ち","extraMin":4,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "2119",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"08:11"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"08:15"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"08:18"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "1709",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"08:18"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","pass":null},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"08:25"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0709","byType":"ラピートα9号","kind":"通過待ち（推定。長い停車が見えない）","extraMin":0,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "6821",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"08:21"},
+            {"st":"忠岡","dep":"08:24"},
+            {"st":"春木","dep":"08:26"},
+            {"st":"和泉大宮","dep":"08:27"},
+            {"st":"岸和田","dep":"08:32"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"1709","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5,"atCourseOrigin":true},
+            {"at":"岸和田","between":["春木","岸和田"],"by":"2121","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseEnd":true},
+            {"at":"泉大津","between":["堺","岸和田"],"by":"0709","byType":"ラピートα9号","kind":"通過待ち","extraMin":5,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "2121",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"08:24"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"08:28"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"08:31"}
+          ],
+          "stopsVsGame": "same"
+        }
+      ]
+    },
+    "noon": {
+      "startClock": "10:00",
+      "window": ["09:00","11:00"],
+      "windowRule": "コースの最初の駅の時刻（発・着・通過）が 09:00 以上 11:00 未満の列車",
+      "pattern": {
+        "southern": {
+          "count": 1,
+          "perHour": 0.5,
+          "originTimes": ["09:01(通過)"],
+          "destinations": {"和歌山市":1},
+          "stopPatterns": {"岸和田":1}
+        },
+        "local": {
+          "count": 11,
+          "perHour": 5.5,
+          "originTimes": ["09:02","09:10","09:18","09:29","09:37","09:52","10:04","10:16","10:30","10:45","10:59"],
+          "destinations": {"和歌山市":9,"羽倉崎":2},
+          "stopPatterns": {"泉大津 忠岡 春木 和泉大宮 岸和田":11}
+        },
+        "airport": {
+          "count": 9,
+          "perHour": 4.5,
+          "originTimes": ["09:09","09:23","09:36","09:47","10:00","10:15","10:29","10:44","10:58"],
+          "destinations": {"関西空港":9},
+          "stopPatterns": {"泉大津 春木 岸和田":9}
+        },
+        "ラピートα": {
+          "count": 1,
+          "perHour": 0.5,
+          "originTimes": ["09:49(通過)"],
+          "destinations": {"関西空港":1},
+          "stopPatterns": {"":1}
+        },
+        "limited": {
+          "count": 1,
+          "perHour": 0.5,
+          "originTimes": ["10:53(通過)"],
+          "destinations": {"関西空港":1},
+          "stopPatterns": {"岸和田":1}
+        }
+      },
+      "waitSummary": {"普通 が 泉大津 で 特急 に 通過待ち（コースの始発駅）":6,"普通 が 泉大津 で 急行系 に 緩急接続（コースの始発駅）":8,"普通 が 岸和田 で 急行系 に 緩急接続（コースの終着駅）":1,"普通 が 岸和田 で 特急 に 緩急接続（コースの終着駅）":3,"普通 が 岸和田 で 特急 に 通過待ち（コースの終着駅）":1},
+      "representatives": {
+        "local": {
+          "section": "泉大津 → 岸和田",
+          "train": "6835",
+          "type": "普通",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "10:04",
+          "offsetFromStartMin": 4,
+          "inWindow": true,
+          "reason": "泉大津を発車して岸和田に停車する普通のうち、開始時刻 10:00 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "6833 09:52",
+          "nextCandidate": "6837 10:16",
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"2135","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7,"atCourseOrigin":true},
+            {"at":"泉大津","between":["堺","岸和田"],"by":"0509","byType":"サザン11号","kind":"通過待ち","extraMin":7,"atCourseOrigin":true}
+          ],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 7,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 8,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 490,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"泉大津","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"忠岡","realDepMin":2,"gameArrSec":130,"gameDepSec":155},
+              {"st":"春木","realDepMin":4,"gameArrSec":255,"gameDepSec":280},
+              {"st":"和泉大宮","realDepMin":6,"gameArrSec":375,"gameDepSec":400},
+              {"st":"岸和田","realDepMin":8,"gameArrSec":490}
+            ]
+          },
+          "times": [
+            {"st":"泉大津","dep":"10:04"},
+            {"st":"忠岡","dep":"10:06"},
+            {"st":"春木","dep":"10:08"},
+            {"st":"和泉大宮","dep":"10:10"},
+            {"st":"岸和田","dep":"10:12"}
+          ]
+        },
+        "express": {
+          "section": "泉大津 → 岸和田",
+          "train": "1711",
+          "type": "急行",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "08:45",
+          "offsetFromStartMin": -75,
+          "inWindow": false,
+          "reason": "開始時刻の前後60分に泉大津発の急行が無い。終日で最も近い列車を参考に入れた。この時間帯の自列車には向かない",
+          "prevCandidate": "1709 08:18",
+          "nextCandidate": "1713 17:37",
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["堺","貝塚"],"by":"0711","byType":"ラピートα11号","kind":"通過待ち（推定。長い停車が見えない）","extraMin":0,"atCourseEnd":true}
+          ],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 5,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 8,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 275,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"泉大津","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"忠岡","gameArrSec":105},
+              {"st":"春木","gameArrSec":160},
+              {"st":"和泉大宮","gameArrSec":210},
+              {"st":"岸和田","realDepMin":8,"gameArrSec":275}
+            ]
+          },
+          "times": [
+            {"st":"泉大津","dep":"08:45"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","pass":null},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"08:53"}
+          ]
+        },
+        "airport": {
+          "section": "泉大津 → 岸和田",
+          "train": "2135",
+          "type": "空港急行",
+          "from": "なんば",
+          "to": "関西空港",
+          "originDep": "10:00",
+          "offsetFromStartMin": 0,
+          "inWindow": true,
+          "reason": "泉大津を発車して岸和田に停車する空港急行のうち、開始時刻 10:00 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "2133 09:47",
+          "nextCandidate": "2137 10:15",
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0509","byType":"サザン11号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":0,"atCourseEnd":true}
+          ],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 5,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 9,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 330,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"泉大津","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"忠岡","gameArrSec":95},
+              {"st":"春木","realDepMin":3,"gameArrSec":170,"gameDepSec":195},
+              {"st":"和泉大宮","gameArrSec":270},
+              {"st":"岸和田","realDepMin":9,"gameArrSec":330}
+            ]
+          },
+          "times": [
+            {"st":"泉大津","dep":"10:00"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"10:03"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"10:09"}
+          ]
+        }
+      },
+      "trains": [
+        {
+          "train": "0507",
+          "type": "サザン7号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","pass":"09:01"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","pass":null},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"09:06"}
+          ],
+          "stopsVsGame": {"extra":[],"missing":["泉大津"]}
+        },
+        {
+          "train": "6827",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"09:02"},
+            {"st":"忠岡","dep":"09:05"},
+            {"st":"春木","dep":"09:06"},
+            {"st":"和泉大宮","dep":"09:08"},
+            {"st":"岸和田","dep":"09:10"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["堺","泉大津"],"by":"0507","byType":"サザン7号","kind":"通過待ち","extraMin":4,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "2127",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"09:09"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"09:12"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"09:15"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6509",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"09:10"},
+            {"st":"忠岡","dep":"09:12"},
+            {"st":"春木","dep":"09:14"},
+            {"st":"和泉大宮","dep":"09:16"},
+            {"st":"岸和田","dep":"09:18"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"2127","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "6511",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"09:18"},
+            {"st":"忠岡","dep":"09:21"},
+            {"st":"春木","dep":"09:23"},
+            {"st":"和泉大宮","dep":"09:25"},
+            {"st":"岸和田","dep":"09:35"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["春木","岸和田"],"by":"2129","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":9,"atCourseEnd":true},
+            {"at":"泉大津","between":["天下茶屋","泉大津"],"by":"0713","byType":"ラピートα13号","kind":"通過待ち","extraMin":5,"atCourseOrigin":true},
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0601","byType":"サザン9号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":9,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "2129",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"09:23"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"09:26"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"09:29"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6829",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"09:29"},
+            {"st":"忠岡","dep":"09:32"},
+            {"st":"春木","dep":"09:34"},
+            {"st":"和泉大宮","dep":"09:36"},
+            {"st":"岸和田","dep":"09:37"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["堺","岸和田"],"by":"0601","byType":"サザン9号","kind":"通過待ち","extraMin":4,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "2131",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"09:36"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"09:39"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"09:42"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6831",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"09:37"},
+            {"st":"忠岡","dep":"09:40"},
+            {"st":"春木","dep":"09:42"},
+            {"st":"和泉大宮","dep":"09:44"},
+            {"st":"岸和田","dep":"09:45"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"2131","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "2133",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"09:47"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"09:50"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"09:56"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["泉大津","岸和田"],"by":"0715","byType":"ラピートα15号","kind":"通過待ち（推定。長い停車が見えない）","extraMin":0,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "0715",
+          "type": "ラピートα15号",
+          "service": null,
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": false,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"泉大津","pass":"09:49"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","pass":null},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","pass":"09:55"}
+          ]
+        },
+        {
+          "train": "6833",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"09:52"},
+            {"st":"忠岡","dep":"09:55"},
+            {"st":"春木","dep":"09:57"},
+            {"st":"和泉大宮","dep":"09:59"},
+            {"st":"岸和田","dep":"10:01"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["高石","泉大津"],"by":"2133","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":10,"atCourseOrigin":true},
+            {"at":"泉大津","between":["高石","泉大津"],"by":"0715","byType":"ラピートα15号","kind":"通過待ち","extraMin":10,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "2135",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"10:00"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"10:03"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"10:09"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0509","byType":"サザン11号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":0,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "6835",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"10:04"},
+            {"st":"忠岡","dep":"10:06"},
+            {"st":"春木","dep":"10:08"},
+            {"st":"和泉大宮","dep":"10:10"},
+            {"st":"岸和田","dep":"10:12"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"2135","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7,"atCourseOrigin":true},
+            {"at":"泉大津","between":["堺","岸和田"],"by":"0509","byType":"サザン11号","kind":"通過待ち","extraMin":7,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "2137",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"10:15"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"10:18"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"10:21"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6837",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"10:16"},
+            {"st":"忠岡","dep":"10:19"},
+            {"st":"春木","dep":"10:20"},
+            {"st":"和泉大宮","dep":"10:22"},
+            {"st":"岸和田","dep":"10:27"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"2137","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseOrigin":true},
+            {"at":"岸和田","between":["高石","岸和田"],"by":"0717","byType":"ラピートα17号","kind":"通過待ち","extraMin":4,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "2139",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"10:29"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"10:32"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"10:35"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6839",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"10:30"},
+            {"st":"忠岡","dep":"10:32"},
+            {"st":"春木","dep":"10:34"},
+            {"st":"和泉大宮","dep":"10:36"},
+            {"st":"岸和田","dep":"10:43"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"2139","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5,"atCourseOrigin":true},
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0511","byType":"サザン13号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":6,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "2141",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"10:44"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"10:47"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"10:50"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6841",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"10:45"},
+            {"st":"忠岡","dep":"10:47"},
+            {"st":"春木","dep":"10:49"},
+            {"st":"和泉大宮","dep":"10:51"},
+            {"st":"岸和田","dep":"10:53"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"2141","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "0201",
+          "type": "ラピートβ41号",
+          "service": "limited",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","pass":"10:53"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","pass":null},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"10:58"}
+          ],
+          "stopsVsGame": {"extra":[],"missing":["泉大津"]}
+        },
+        {
+          "train": "2143",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"10:58"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"11:02"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"11:04"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6843",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"10:59"},
+            {"st":"忠岡","dep":"11:02"},
+            {"st":"春木","dep":"11:04"},
+            {"st":"和泉大宮","dep":"11:06"},
+            {"st":"岸和田","dep":"11:13"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"2143","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseOrigin":true},
+            {"at":"泉大津","between":["堺","泉大津"],"by":"0201","byType":"ラピートβ41号","kind":"通過待ち","extraMin":8,"atCourseOrigin":true},
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0513","byType":"サザン15号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":6,"atCourseEnd":true}
+          ]
+        }
+      ]
+    },
+    "evening": {
+      "startClock": "17:30",
+      "window": ["16:30","18:30"],
+      "windowRule": "コースの最初の駅の時刻（発・着・通過）が 16:30 以上 18:30 未満の列車",
+      "pattern": {
+        "southern": {
+          "count": 2,
+          "perHour": 1,
+          "originTimes": ["16:30(通過)","17:03(通過)"],
+          "destinations": {"和歌山市":2},
+          "stopPatterns": {"岸和田":2}
+        },
+        "local": {
+          "count": 10,
+          "perHour": 5,
+          "originTimes": ["16:32","16:48","17:04","17:18","17:31","17:42","17:59","18:07","18:14","18:23"],
+          "destinations": {"和歌山市":4,"みさき公園":2,"関西空港":2,"羽倉崎":1,"樽井":1},
+          "stopPatterns": {"泉大津 忠岡 春木 和泉大宮 岸和田":10}
+        },
+        "airport": {
+          "count": 5,
+          "perHour": 2.5,
+          "originTimes": ["16:43","16:57","17:12","17:26","17:55"],
+          "destinations": {"関西空港":5},
+          "stopPatterns": {"泉大津 春木 岸和田":5}
+        },
+        "limited": {
+          "count": 2,
+          "perHour": 1,
+          "originTimes": ["16:46(通過)","17:47(通過)"],
+          "destinations": {"関西空港":2},
+          "stopPatterns": {"岸和田":2}
+        },
+        "express": {
+          "count": 3,
+          "perHour": 1.5,
+          "originTimes": ["17:37","18:06","18:22"],
+          "destinations": {"和歌山市":3},
+          "stopPatterns": {"泉大津 岸和田":3}
+        },
+        "区急": {
+          "count": 2,
+          "perHour": 1,
+          "originTimes": ["17:48","18:13"],
+          "destinations": {"和歌山市":2},
+          "stopPatterns": {"泉大津 春木 岸和田":2}
+        }
+      },
+      "waitSummary": {
+        "普通 が 泉大津 で 特急 に 通過待ち（コースの始発駅）": 7,
+        "普通 が 泉大津 で 急行系 に 緩急接続（コースの始発駅）": 7,
+        "普通 が 岸和田 で 急行系 に 緩急接続（コースの終着駅）": 1,
+        "普通 が 岸和田 で 区急 に 緩急接続（コースの終着駅）": 1,
+        "普通 が 岸和田 で 特急 に 緩急接続（コースの終着駅）": 3,
+        "区急 が 泉大津 で 特急 に 通過待ち（コースの始発駅）": 1,
+        "普通 が 泉大津 で 区急 に 緩急接続（コースの始発駅）": 1
+      },
+      "representatives": {
+        "local": {
+          "section": "泉大津 → 岸和田",
+          "train": "7001",
+          "type": "普通",
+          "from": "なんば",
+          "to": "関西空港",
+          "originDep": "17:31",
+          "offsetFromStartMin": 1,
+          "inWindow": true,
+          "reason": "泉大津を発車して岸和田に停車する普通のうち、開始時刻 17:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "6891 17:18",
+          "nextCandidate": "6893 17:42",
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["泉大津","岸和田"],"by":"1713","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":6,"atCourseEnd":true},
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"2195","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7,"atCourseOrigin":true},
+            {"at":"泉大津","between":["堺","岸和田"],"by":"0539","byType":"サザン41号","kind":"通過待ち","extraMin":7,"atCourseOrigin":true}
+          ],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 7,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 13,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 490,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"泉大津","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"忠岡","realDepMin":2,"gameArrSec":130,"gameDepSec":155},
+              {"st":"春木","realDepMin":4,"gameArrSec":255,"gameDepSec":280},
+              {"st":"和泉大宮","realDepMin":6,"gameArrSec":375,"gameDepSec":400},
+              {"st":"岸和田","realDepMin":13,"gameArrSec":490}
+            ]
+          },
+          "times": [
+            {"st":"泉大津","dep":"17:31"},
+            {"st":"忠岡","dep":"17:33"},
+            {"st":"春木","dep":"17:35"},
+            {"st":"和泉大宮","dep":"17:37"},
+            {"st":"岸和田","dep":"17:44"}
+          ]
+        },
+        "express": {
+          "section": "泉大津 → 岸和田",
+          "train": "1713",
+          "type": "急行",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "17:37",
+          "offsetFromStartMin": 7,
+          "inWindow": true,
+          "reason": "泉大津を発車して岸和田に停車する急行のうち、開始時刻 17:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "1711 08:45",
+          "nextCandidate": "1715 18:06",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 5,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 6,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 275,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"泉大津","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"忠岡","gameArrSec":105},
+              {"st":"春木","gameArrSec":160},
+              {"st":"和泉大宮","gameArrSec":210},
+              {"st":"岸和田","realDepMin":6,"gameArrSec":275}
+            ]
+          },
+          "times": [
+            {"st":"泉大津","dep":"17:37"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","pass":null},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"17:43"}
+          ]
+        },
+        "airport": {
+          "section": "泉大津 → 岸和田",
+          "train": "2195",
+          "type": "空港急行",
+          "from": "なんば",
+          "to": "関西空港",
+          "originDep": "17:26",
+          "offsetFromStartMin": -4,
+          "inWindow": true,
+          "reason": "泉大津を発車して岸和田に停車する空港急行のうち、開始時刻 17:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "2193 17:12",
+          "nextCandidate": "2197 17:55",
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0539","byType":"サザン41号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":0,"atCourseEnd":true}
+          ],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 5,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 9,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 330,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"泉大津","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"忠岡","gameArrSec":95},
+              {"st":"春木","realDepMin":3,"gameArrSec":170,"gameDepSec":195},
+              {"st":"和泉大宮","gameArrSec":270},
+              {"st":"岸和田","realDepMin":9,"gameArrSec":330}
+            ]
+          },
+          "times": [
+            {"st":"泉大津","dep":"17:26"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"17:29"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"17:35"}
+          ]
+        }
+      },
+      "trains": [
+        {
+          "train": "0535",
+          "type": "サザン37号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","pass":"16:30"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","pass":null},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"16:35"}
+          ],
+          "stopsVsGame": {"extra":[],"missing":["泉大津"]}
+        },
+        {
+          "train": "6887",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"16:32"},
+            {"st":"忠岡","dep":"16:34"},
+            {"st":"春木","dep":"16:36"},
+            {"st":"和泉大宮","dep":"16:38"},
+            {"st":"岸和田","dep":"16:40"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["堺","泉大津"],"by":"0535","byType":"サザン37号","kind":"通過待ち","extraMin":4,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "2189",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"16:43"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"16:46"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"16:52"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["泉大津","岸和田"],"by":"0213","byType":"ラピートβ53号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":0,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "0213",
+          "type": "ラピートβ53号",
+          "service": "limited",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","pass":"16:46"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","pass":null},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"16:51"}
+          ],
+          "stopsVsGame": {"extra":[],"missing":["泉大津"]}
+        },
+        {
+          "train": "6889",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"16:48"},
+            {"st":"忠岡","dep":"16:51"},
+            {"st":"春木","dep":"16:53"},
+            {"st":"和泉大宮","dep":"16:54"},
+            {"st":"岸和田","dep":"16:56"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"2189","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseOrigin":true},
+            {"at":"泉大津","between":["堺","泉大津"],"by":"0213","byType":"ラピートβ53号","kind":"通過待ち","extraMin":8,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "2191",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"16:57"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"17:01"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"17:04"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "0537",
+          "type": "サザン39号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","pass":"17:03"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","pass":null},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"17:07"}
+          ],
+          "stopsVsGame": {"extra":[],"missing":["泉大津"]}
+        },
+        {
+          "train": "6703",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "みさき公園",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"17:04"},
+            {"st":"忠岡","dep":"17:06"},
+            {"st":"春木","dep":"17:08"},
+            {"st":"和泉大宮","dep":"17:10"},
+            {"st":"岸和田","dep":"17:12"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"2191","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":11,"atCourseOrigin":true},
+            {"at":"泉大津","between":["浜寺公園","泉大津"],"by":"0537","byType":"サザン39号","kind":"通過待ち","extraMin":11,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "2193",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"17:12"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"17:15"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"17:23"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0215","byType":"ラピートβ55号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":0,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "6891",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"17:18"},
+            {"st":"忠岡","dep":"17:21"},
+            {"st":"春木","dep":"17:23"},
+            {"st":"和泉大宮","dep":"17:25"},
+            {"st":"岸和田","dep":"17:26"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"2193","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":9,"atCourseOrigin":true},
+            {"at":"泉大津","between":["堺","岸和田"],"by":"0215","byType":"ラピートβ55号","kind":"通過待ち","extraMin":9,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "2195",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"17:26"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"17:29"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"17:35"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0539","byType":"サザン41号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":0,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "7001",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"17:31"},
+            {"st":"忠岡","dep":"17:33"},
+            {"st":"春木","dep":"17:35"},
+            {"st":"和泉大宮","dep":"17:37"},
+            {"st":"岸和田","dep":"17:44"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["泉大津","岸和田"],"by":"1713","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":6,"atCourseEnd":true},
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"2195","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7,"atCourseOrigin":true},
+            {"at":"泉大津","between":["堺","岸和田"],"by":"0539","byType":"サザン41号","kind":"通過待ち","extraMin":7,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "1713",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"17:37"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","pass":null},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"17:43"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6893",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"17:42"},
+            {"st":"忠岡","dep":"17:44"},
+            {"st":"春木","dep":"17:46"},
+            {"st":"和泉大宮","dep":"17:48"},
+            {"st":"岸和田","dep":"17:56"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["春木","岸和田"],"by":"3801","byType":"区急","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7,"atCourseEnd":true},
+            {"at":"岸和田","between":["泉大津","岸和田"],"by":"0217","byType":"ラピートβ57号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "0217",
+          "type": "ラピートβ57号",
+          "service": "limited",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","pass":"17:47"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","pass":null},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"17:51"}
+          ],
+          "stopsVsGame": {"extra":[],"missing":["泉大津"]}
+        },
+        {
+          "train": "3801",
+          "type": "区急",
+          "service": null,
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"17:48"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"17:51"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"17:54"}
+          ],
+          "overtakenBy": [
+            {"at":"泉大津","between":["堺","泉大津"],"by":"0217","byType":"ラピートβ57号","kind":"通過待ち（推定。長い停車が見えない）","extraMin":0,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "2197",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"17:55"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"17:59"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"18:05"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0603","byType":"サザン43号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":0,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "6513",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"17:59"},
+            {"st":"忠岡","dep":"18:02"},
+            {"st":"春木","dep":"18:04"},
+            {"st":"和泉大宮","dep":"18:06"},
+            {"st":"岸和田","dep":"18:07"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"2197","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":6,"atCourseOrigin":true},
+            {"at":"泉大津","between":["堺","岸和田"],"by":"0603","byType":"サザン43号","kind":"通過待ち","extraMin":6,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "1715",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"18:06"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","pass":null},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"18:11"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "7003",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"18:07"},
+            {"st":"忠岡","dep":"18:10"},
+            {"st":"春木","dep":"18:12"},
+            {"st":"和泉大宮","dep":"18:13"},
+            {"st":"岸和田","dep":"18:15"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"1715","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "3803",
+          "type": "区急",
+          "service": null,
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"18:13"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"18:16"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"18:19"}
+          ]
+        },
+        {
+          "train": "6601",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "樽井",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"18:14"},
+            {"st":"忠岡","dep":"18:16"},
+            {"st":"春木","dep":"18:18"},
+            {"st":"和泉大宮","dep":"18:20"},
+            {"st":"岸和田","dep":"18:24"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"3803","byType":"区急","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseOrigin":true},
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0219","byType":"ラピートβ59号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":3,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "1717",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"18:22"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","pass":null},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"18:27"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6705",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "みさき公園",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"18:23"},
+            {"st":"忠岡","dep":"18:26"},
+            {"st":"春木","dep":"18:28"},
+            {"st":"和泉大宮","dep":"18:29"},
+            {"st":"岸和田","dep":"18:35"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"1717","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":6,"atCourseOrigin":true},
+            {"at":"泉大津","between":["堺","岸和田"],"by":"0219","byType":"ラピートβ59号","kind":"通過待ち","extraMin":6,"atCourseOrigin":true},
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0541","byType":"サザン45号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5,"atCourseEnd":true}
+          ]
+        }
+      ]
+    },
+    "night": {
+      "startClock": "21:30",
+      "window": ["20:30","22:30"],
+      "windowRule": "コースの最初の駅の時刻（発・着・通過）が 20:30 以上 22:30 未満の列車",
+      "pattern": {
+        "airport": {
+          "count": 6,
+          "perHour": 3,
+          "originTimes": ["20:33","20:52","21:03","21:22","21:33","21:53"],
+          "destinations": {"関西空港":6},
+          "stopPatterns": {"泉大津 春木 岸和田":6}
+        },
+        "local": {
+          "count": 12,
+          "perHour": 6,
+          "originTimes": ["20:34","20:42","20:54","21:04","21:12","21:23","21:35","21:43","21:49","21:57","22:10","22:22"],
+          "destinations": {"羽倉崎":4,"和歌山市":4,"みさき公園":3,"関西空港":1},
+          "stopPatterns": {"泉大津 忠岡 春木 和泉大宮 岸和田":12}
+        },
+        "express": {
+          "count": 3,
+          "perHour": 1.5,
+          "originTimes": ["20:41","21:11","21:42"],
+          "destinations": {"和歌山市":3},
+          "stopPatterns": {"泉大津 岸和田":3}
+        },
+        "limited": {
+          "count": 2,
+          "perHour": 1,
+          "originTimes": ["21:48(通過)","22:17(通過)"],
+          "destinations": {"関西空港":2},
+          "stopPatterns": {"岸和田":2}
+        },
+        "区急": {
+          "count": 2,
+          "perHour": 1,
+          "originTimes": ["22:09","22:21"],
+          "destinations": {"羽倉崎":1,"和歌山市":1},
+          "stopPatterns": {"泉大津 春木 岸和田":2}
+        }
+      },
+      "waitSummary": {"普通 が 岸和田 で 急行系 に 緩急接続（コースの終着駅）":2,"普通 が 泉大津 で 急行系 に 緩急接続（コースの始発駅）":8,"普通 が 泉大津 で 特急 に 通過待ち（コースの始発駅）":7,"普通 が 岸和田 で 特急 に 緩急接続（コースの終着駅）":8,"普通 が 泉大津 で 区急 に 緩急接続（コースの始発駅）":2},
+      "representatives": {
+        "local": {
+          "section": "泉大津 → 岸和田",
+          "train": "6911",
+          "type": "普通",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "21:35",
+          "offsetFromStartMin": 5,
+          "inWindow": true,
+          "reason": "泉大津を発車して岸和田に停車する普通のうち、開始時刻 21:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "6711 21:23",
+          "nextCandidate": "6913 21:43",
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"2219","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":9,"atCourseOrigin":true},
+            {"at":"泉大津","between":["堺","岸和田"],"by":"0551","byType":"サザン57号","kind":"通過待ち","extraMin":9,"atCourseOrigin":true}
+          ],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 7,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 8,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 490,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"泉大津","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"忠岡","realDepMin":2,"gameArrSec":130,"gameDepSec":155},
+              {"st":"春木","realDepMin":4,"gameArrSec":255,"gameDepSec":280},
+              {"st":"和泉大宮","realDepMin":6,"gameArrSec":375,"gameDepSec":400},
+              {"st":"岸和田","realDepMin":8,"gameArrSec":490}
+            ]
+          },
+          "times": [
+            {"st":"泉大津","dep":"21:35"},
+            {"st":"忠岡","dep":"21:37"},
+            {"st":"春木","dep":"21:39"},
+            {"st":"和泉大宮","dep":"21:41"},
+            {"st":"岸和田","dep":"21:43"}
+          ]
+        },
+        "express": {
+          "section": "泉大津 → 岸和田",
+          "train": "1729",
+          "type": "急行",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "21:42",
+          "offsetFromStartMin": 12,
+          "inWindow": true,
+          "reason": "泉大津を発車して岸和田に停車する急行のうち、開始時刻 21:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "1727 21:11",
+          "nextCandidate": null,
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 5,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 5,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 275,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"泉大津","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"忠岡","gameArrSec":105},
+              {"st":"春木","gameArrSec":160},
+              {"st":"和泉大宮","gameArrSec":210},
+              {"st":"岸和田","realDepMin":5,"gameArrSec":275}
+            ]
+          },
+          "times": [
+            {"st":"泉大津","dep":"21:42"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","pass":null},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"21:47"}
+          ]
+        },
+        "airport": {
+          "section": "泉大津 → 岸和田",
+          "train": "2219",
+          "type": "空港急行",
+          "from": "なんば",
+          "to": "関西空港",
+          "originDep": "21:33",
+          "offsetFromStartMin": 3,
+          "inWindow": true,
+          "reason": "泉大津を発車して岸和田に停車する空港急行のうち、開始時刻 21:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "2217 21:22",
+          "nextCandidate": "2221 21:53",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 6,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 7,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 330,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"泉大津","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"忠岡","gameArrSec":95},
+              {"st":"春木","realDepMin":4,"gameArrSec":170,"gameDepSec":195},
+              {"st":"和泉大宮","gameArrSec":270},
+              {"st":"岸和田","realDepMin":7,"gameArrSec":330}
+            ]
+          },
+          "times": [
+            {"st":"泉大津","dep":"21:33"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"21:37"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"21:40"}
+          ]
+        }
+      },
+      "trains": [
+        {
+          "train": "2211",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"20:33"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"20:37"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"20:40"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6519",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"20:34"},
+            {"st":"忠岡","dep":"20:37"},
+            {"st":"春木","dep":"20:39"},
+            {"st":"和泉大宮","dep":"20:41"},
+            {"st":"岸和田","dep":"20:48"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["泉大津","岸和田"],"by":"1725","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":6,"atCourseEnd":true},
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"2211","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":6,"atCourseOrigin":true},
+            {"at":"泉大津","between":["堺","岸和田"],"by":"0605","byType":"サザン53号","kind":"通過待ち","extraMin":6,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "1725",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"20:41"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","pass":null},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"20:47"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6907",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"20:42"},
+            {"st":"忠岡","dep":"20:45"},
+            {"st":"春木","dep":"20:47"},
+            {"st":"和泉大宮","dep":"20:49"},
+            {"st":"岸和田","dep":"20:55"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"1725","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseOrigin":true},
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0229","byType":"ラピートβ69号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "2213",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"20:52"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"20:56"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"20:59"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6521",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"20:54"},
+            {"st":"忠岡","dep":"20:57"},
+            {"st":"春木","dep":"20:59"},
+            {"st":"和泉大宮","dep":"21:00"},
+            {"st":"岸和田","dep":"21:06"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"2213","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseOrigin":true},
+            {"at":"泉大津","between":["堺","岸和田"],"by":"0229","byType":"ラピートβ69号","kind":"通過待ち","extraMin":8,"atCourseOrigin":true},
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0549","byType":"サザン55号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "2215",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"21:03"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"21:07"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"21:09"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6709",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "みさき公園",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"21:04"},
+            {"st":"忠岡","dep":"21:07"},
+            {"st":"春木","dep":"21:09"},
+            {"st":"和泉大宮","dep":"21:11"},
+            {"st":"岸和田","dep":"21:12"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"2215","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7,"atCourseOrigin":true},
+            {"at":"泉大津","between":["堺","岸和田"],"by":"0549","byType":"サザン55号","kind":"通過待ち","extraMin":7,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "1727",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"21:11"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","pass":null},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"21:16"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6909",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"21:12"},
+            {"st":"忠岡","dep":"21:14"},
+            {"st":"春木","dep":"21:16"},
+            {"st":"和泉大宮","dep":"21:18"},
+            {"st":"岸和田","dep":"21:23"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"1727","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseOrigin":true},
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0231","byType":"ラピートβ71号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "2217",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"21:22"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"21:26"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"21:28"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6711",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "みさき公園",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"21:23"},
+            {"st":"忠岡","dep":"21:26"},
+            {"st":"春木","dep":"21:28"},
+            {"st":"和泉大宮","dep":"21:30"},
+            {"st":"岸和田","dep":"21:34"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"2217","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseOrigin":true},
+            {"at":"泉大津","between":["堺","岸和田"],"by":"0231","byType":"ラピートβ71号","kind":"通過待ち","extraMin":8,"atCourseOrigin":true},
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0551","byType":"サザン57号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":3,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "2219",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"21:33"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"21:37"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"21:40"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6911",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"21:35"},
+            {"st":"忠岡","dep":"21:37"},
+            {"st":"春木","dep":"21:39"},
+            {"st":"和泉大宮","dep":"21:41"},
+            {"st":"岸和田","dep":"21:43"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"2219","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":9,"atCourseOrigin":true},
+            {"at":"泉大津","between":["堺","岸和田"],"by":"0551","byType":"サザン57号","kind":"通過待ち","extraMin":9,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "1729",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"21:42"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","pass":null},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"21:47"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6913",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"21:43"},
+            {"st":"忠岡","dep":"21:45"},
+            {"st":"春木","dep":"21:47"},
+            {"st":"和泉大宮","dep":"21:49"},
+            {"st":"岸和田","dep":"21:54"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"1729","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5,"atCourseOrigin":true},
+            {"at":"岸和田","between":["泉大津","岸和田"],"by":"0233","byType":"ラピートβ73号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "0233",
+          "type": "ラピートβ73号",
+          "service": "limited",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","pass":"21:48"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","pass":null},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"21:53"}
+          ],
+          "stopsVsGame": {"extra":[],"missing":["泉大津"]}
+        },
+        {
+          "train": "7009",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"21:49"},
+            {"st":"忠岡","dep":"21:52"},
+            {"st":"春木","dep":"21:54"},
+            {"st":"和泉大宮","dep":"21:56"},
+            {"st":"岸和田","dep":"22:01"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["春木","岸和田"],"by":"2221","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseEnd":true},
+            {"at":"泉大津","between":["浜寺公園","泉大津"],"by":"0233","byType":"ラピートβ73号","kind":"通過待ち","extraMin":3,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "2221",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"21:53"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"21:57"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"22:00"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6713",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "みさき公園",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"21:57"},
+            {"st":"忠岡","dep":"21:59"},
+            {"st":"春木","dep":"22:01"},
+            {"st":"和泉大宮","dep":"22:03"},
+            {"st":"岸和田","dep":"22:10"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0553","byType":"サザン59号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":6,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "3503",
+          "type": "区急",
+          "service": null,
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"22:09"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"22:13"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"22:16"}
+          ]
+        },
+        {
+          "train": "6523",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"22:10"},
+            {"st":"忠岡","dep":"22:13"},
+            {"st":"春木","dep":"22:15"},
+            {"st":"和泉大宮","dep":"22:17"},
+            {"st":"岸和田","dep":"22:23"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"3503","byType":"区急","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseOrigin":true},
+            {"at":"岸和田","between":["泉大津","岸和田"],"by":"0235","byType":"ラピートβ75号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "0235",
+          "type": "ラピートβ75号",
+          "service": "limited",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","pass":"22:17"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","pass":null},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"22:22"}
+          ],
+          "stopsVsGame": {"extra":[],"missing":["泉大津"]}
+        },
+        {
+          "train": "3809",
+          "type": "区急",
+          "service": null,
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"22:21"},
+            {"st":"忠岡","pass":null},
+            {"st":"春木","dep":"22:25"},
+            {"st":"和泉大宮","pass":null},
+            {"st":"岸和田","dep":"22:28"}
+          ]
+        },
+        {
+          "train": "6525",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "泉大津",
+          "courseTo": "岸和田",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉大津","dep":"22:22"},
+            {"st":"忠岡","dep":"22:25"},
+            {"st":"春木","dep":"22:27"},
+            {"st":"和泉大宮","dep":"22:29"},
+            {"st":"岸和田","dep":"22:34"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉大津","between":["羽衣","泉大津"],"by":"3809","byType":"区急","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":6,"atCourseOrigin":true},
+            {"at":"泉大津","between":["堺","泉大津"],"by":"0235","byType":"ラピートβ75号","kind":"通過待ち","extraMin":6,"atCourseOrigin":true},
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0555","byType":"サザン61号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseEnd":true}
+          ]
+        }
+      ]
+    }
+  }
+}

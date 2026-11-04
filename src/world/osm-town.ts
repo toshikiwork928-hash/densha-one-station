@@ -145,6 +145,36 @@ export function releaseOsmData(): void {
 }
 
 /**
+ * くぐる道路の中心線が線路の近く（横位置 ±20m 以内）で終わるとき、同じ向きに地上まで延ばす（坂が途中で切れて穴が開くのを防ぐ）。
+ * OSM で地下の区間だけが別の道になっていて、続きの道が取れていない所がある（岸和田〜泉佐野 s 5182 の歩道など）。
+ * 延ばす長さは、線路の外 12m と、地面へ戻る坂（world/underpass.ts の深さ・勾配）の分。延ばした線は路面として返す
+ */
+function throughTrack(flat: number[], foot: boolean): { pts: number[]; ext: number[][] } {
+  const n = flat.length / 2;
+  if (n < 2) return { pts: flat, ext: [] };
+  const reach = 12 + (foot ? 3.6 / .12 : 4.7 / .08);
+  const extend = (ix: number, prev: number): number[] | null => {
+    const s = flat[ix * 2], l = flat[ix * 2 + 1];
+    if (Math.abs(l) > 20) return null;
+    let ds = s - flat[prev * 2], dl = l - flat[prev * 2 + 1];
+    const L = Math.hypot(ds, dl) || 1;
+    ds /= L; dl /= L;
+    // 線路の外（6m より外）で終わる道は、線路から離れる向きでなければ直角に離す。
+    // 線路の下で終わる道は、線路に沿う向きなら直角に渡す
+    if (Math.abs(l) > 6) { if (Math.abs(dl) < .3 || Math.sign(dl) !== Math.sign(l)) { ds = 0; dl = Math.sign(l); } }
+    else if (Math.abs(dl) < .3) { const sg = Math.sign(dl) || -Math.sign(flat[prev * 2 + 1]) || 1; ds = 0; dl = sg; }
+    const t = (Math.sign(dl) * reach - l) / dl;
+    return [s, l, s + ds * t, l + dl * t];
+  };
+  const tail = extend(n - 1, n - 2), head = extend(0, 1);
+  let pts = flat;
+  if (tail) pts = pts.concat(tail.slice(2));
+  if (head) pts = head.slice(2).concat(pts);
+  // 路面は元の端点から延ばした先まで（head は向きを端点→先にそろえる）
+  return { pts, ext: [tail, head].filter((x): x is number[] => !!x) };
+}
+
+/**
  * 走るコースの座標へ写したデータ（共通の駅が2つ以上あるデータを合わせる）。無ければ null。
  * 区間データをつないだ通しコースでは、つなぎ目の駅の中心で各データを切って重ならないようにする。
  * 必要な区間は loadOsmFor で読み込み済みであること
@@ -241,7 +271,13 @@ export function osmFor(route: Route): OsmData | null {
     // くぐる道路: 位置と道路の中心線を写す（線の点の順は変えない。どちらの向きにたどっても同じ）
     for (const u of data.underpasses ?? []) {
       if (!inR(u[0] as number)) continue;
-      const p = u[4] as number[], q: number[] = [];
+      const { pts: p, ext } = throughTrack(u[4] as number[], u[3] === 4), q: number[] = [];
+      // 延ばした分の路面
+      for (const x of ext) {
+        const e: number[] = [];
+        for (let i = 0; i < x.length; i += 2) if (inR(x[i])) e.push(mapS(x[i]), mapL(x[i + 1]));
+        if (e.length >= 4) out.roads.push([u[3] as number, u[2] as number, '', e]);
+      }
       for (let i = 0; i < p.length; i += 2) q.push(mapS(p[i]), mapL(p[i + 1]));
       (out.underpasses ??= []).push([mapS(u[0] as number), mapL(u[1] as number), u[2], u[3], q]);
     }

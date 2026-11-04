@@ -111,6 +111,7 @@ scripts/           検証・データ生成（Node で esbuild して実行）
   - 泉佐野以南の4コース（`izumisano-misaki` と上り、`misaki-wakayamako` と上り）も同じ `oncoming-timetable.json` を使う。更新手順: (1) `node_modules/.cache/unyohub` に Hub の原データがあるか確認（無ければ `npm run oncoming:meets -- --timetable --refresh` で取得。間隔・User-Agent は既存の仕組み） (2) `npm run timetable -- --south-only` と `-- --misaki-wakayamako-only` で自列車の時刻表を作る（コースの最長所要時間が対向列車の収録範囲を決めるので、先に流す） (3) `npm run oncoming:meets -- --timetable` (4) `npm run verify:oncoming`。4コースの駅の距離はコースの営業キロ（スクリプトの KMS）で、既存コースの距離（KM）とは別。和歌山港線内の対向列車は出さない（上下の線を重ねて描く区間のため）。詳細は spec-south-courses.md の14・15章、調査は south-timetable-research.md。
   - 泉佐野以南の自列車のダイヤ: 実際の所要時間の下限は `scripts/timetable.ts` の `REAL_FLOORS`（Hub の平日時刻表の中央値）。尾崎の待ち合わせは `izumisano-misaki.ts` の `OZAKI_WAITS_*`、時間帯ごとの普通の時刻表は `south-local-timetables.ts`（生成）。
   - 開発用: `window.__oncomingDebug()` で列車番号・種別・横位置・停車駅・安全上の遅れ秒を確認できる。一時停止中は時計を進めず、再開始では運行と車両表示を初期化する。
+- **実ダイヤの時刻で自列車を走らせる計画**（未実装）: 調査資料は `docs/real-timetable-plan.md`、抽出データは `docs/real-timetable/*.json`（全14コース・4時間帯・全種別の実際の列車と代表の1本の案）。実装の前にユーザーに確かめることは ROADMAP.md の 5.5。
 - 高野線のモブ（なんば付近を走る電車）: `world/koya-traffic.ts`。同じ向きは 80 秒以上・出現位置の前方 500m を空ける。開発用 `window.__koyaDebug()`
 - なんばの留置: `world/namba-parked.ts`（車止め側の端を自列車の停止位置 `NAMBA_STOP` にそろえる。高野線1番線は除く）
 
@@ -142,7 +143,7 @@ dev サーバー（`npm run dev`、または `.claude/launch.json` の `densha`�
 4. master のアプリと `pub` の中身が一致するか比べる（`legacy`・`.github`・公開側だけの画像を除いて `diff -r`）
 5. `pub` で `npm ci && npm run build` が通るか確かめる（`dist/` は commit しない）
 6. commit して `main` に push → Actions（Deploy to GitHub Pages）の成功を確認 → 公開ページの `assets/index-*.js` の名前が今回のビルドと同じか確認
-- 公開済みの最新（2026-11-04）: 本体 master `ce619cc` = 公開用 main `a0f1b53`（公開 JS `assets/index-DYUKOXfK.js`）。公開用のコミットメッセージの末尾に、対応する本体のコミットを書く
+- 公開済みの最新（2026-11-04）: 本体 master `b5ff5ab` = 公開用 main `654603e`（公開 JS `assets/index-COs4dRoe.js`）。これより後の本体のコミットは文書だけ。公開用のコミットメッセージの末尾に、対応する本体のコミットを書く
 - 公開用リポジトリに本体を経由しないコミットが入っていて差分が当たらないときは、その内容が本体に入っていることを確かめてから、本体のアプリの中身（`git archive <今回> apps/densha-one-station`）で公開用を丸ごと置き換える（`legacy/`・`.github/`・`docs/image-*.webp` は残す）。2026-11-04 はこの方法で同期した
 
 ## 9. 守ること・ユーザーの好み

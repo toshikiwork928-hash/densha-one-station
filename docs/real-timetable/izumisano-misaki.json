@@ -1,0 +1,2455 @@
+{
+  "source": "鉄道運用Hub 南海電鉄 時刻表データ（https://unyohub.2pd.jp/railroad_nankai/ 。API timetable.php、railroad_id=nankai、diagram_revision=2024-12-21、timetable_id=weekday）。scripts/oncoming-meets.ts が node_modules/.cache/unyohub に保存したものを読んだ",
+  "license": "運用表データは CC BY 4.0（https://creativecommons.org/licenses/by/4.0/deed.ja ）。出典: 鉄道運用Hub",
+  "revision": "2024-12-21",
+  "dayType": "平日",
+  "generatedBy": "2026-11-04 に調査用の一時スクリプトで抽出（リポジトリには入れていない）。ゲーム側の値は src/route の ROUTES に applyService を時間帯ごとに当てて読んだ",
+  "fieldNotes": {
+    "time": "HH:MM（分単位。秒は無い）。24時を過ぎた時刻は 24:xx のまま",
+    "dep": "その駅の発車時刻（Hub の値）",
+    "arr": "到着時刻。Hub は線の終点の値だけが到着。途中駅の到着時刻は Hub に無い（不明）",
+    "pass": "通過。値があれば通過時刻（Hub に |HH:MM の形で入っている場合だけ）。null は通過で時刻不明",
+    "arr と dep が両方": "空港線・和歌山港線との境（泉佐野・和歌山市）で、前の線の到着と次の線の発車が別に入っている",
+    "overtakenBy": "同じ向きの格上の列車と発車順が入れ替わる所から推定（通過待ち・緩急接続・走行中）。extraMin は前の駅からその駅の発車までが、普通の終日の最小値より何分長いか（待ちの長さの目安）",
+    "representatives": "自列車にする代表の1本の案（種別ごと）。inWindow=false は開始時刻の前後60分に該当列車が無いもの",
+    "vsGame": "realXxxMin は代表列車のコース始発駅の発車からの分。gameArrSec/gameDepSec はゲームの時刻表（自動生成、秒）。realCourseMin は始発駅の発車から終着駅の値（arr か dep）まで"
+  },
+  "course": "izumisano-misaki",
+  "direction": "下り（なんば → 和歌山市方面）",
+  "stations": ["泉佐野","羽倉崎","吉見ノ里","岡田浦","樽井","尾崎","鳥取ノ荘","箱作","淡輪","みさき公園"],
+  "selectableServices": [
+    {"id":"local","name":"普通","gameStops":["泉佐野","羽倉崎","吉見ノ里","岡田浦","樽井","尾崎","鳥取ノ荘","箱作","淡輪","みさき公園"],"gameDestination":"和歌山市"},
+    {"id":"express","name":"急行","gameStops":["泉佐野","尾崎","みさき公園"],"gameDestination":"和歌山市"},
+    {"id":"southern","name":"特急サザン","gameStops":["泉佐野","尾崎","みさき公園"],"gameDestination":"和歌山港"}
+  ],
+  "timeOfDay": {
+    "morning": {
+      "startClock": "07:30",
+      "window": ["06:30","08:30"],
+      "windowRule": "コースの最初の駅の時刻（発・着・通過）が 06:30 以上 08:30 未満の列車",
+      "pattern": {
+        "local": {
+          "count": 9,
+          "perHour": 4.5,
+          "originTimes": ["06:39","06:55","07:09","07:29","07:40","07:52","08:04","08:15","08:28"],
+          "destinations": {"和歌山市":7,"みさき公園":1,"羽倉崎":1},
+          "stopPatterns": {"泉佐野 羽倉崎 吉見ノ里 岡田浦 樽井 尾崎 鳥取ノ荘 箱作 淡輪 みさき公園":8,"泉佐野 羽倉崎":1}
+        },
+        "express": {
+          "count": 4,
+          "perHour": 2,
+          "originTimes": ["06:49","07:15","07:37","08:00"],
+          "destinations": {"和歌山市":4},
+          "stopPatterns": {"泉佐野 尾崎 みさき公園":4}
+        },
+        "southern": {
+          "count": 2,
+          "perHour": 1,
+          "originTimes": ["07:50","08:20"],
+          "destinations": {"和歌山市":2},
+          "stopPatterns": {"泉佐野 尾崎 みさき公園":2}
+        }
+      },
+      "waitSummary": {"普通 が 尾崎 で 急行系 に 緩急接続":3,"普通 が 泉佐野 で 特急 に 緩急接続（コースの始発駅）":3,"普通 が 泉佐野 で 急行系 に 緩急接続（コースの始発駅）":5,"普通 が 尾崎 で 特急 に 緩急接続":1},
+      "representatives": {
+        "local": {
+          "section": "泉佐野 → みさき公園",
+          "train": "6813",
+          "type": "普通",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "07:29",
+          "offsetFromStartMin": -1,
+          "inWindow": true,
+          "reason": "泉佐野を発車してみさき公園に停車する普通のうち、開始時刻 07:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "6811 07:09",
+          "nextCandidate": "6701 07:40",
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"0705","byType":"ラピートα5号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseOrigin":true}
+          ],
+          "gameWaits": [
+            ["尾崎","express"]
+          ],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 22,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 23,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 1525,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"泉佐野","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"羽倉崎","realDepMin":3,"gameArrSec":155,"gameDepSec":180},
+              {"st":"吉見ノ里","realDepMin":5,"gameArrSec":275,"gameDepSec":300},
+              {"st":"岡田浦","realDepMin":7,"gameArrSec":400,"gameDepSec":425},
+              {"st":"樽井","realDepMin":9,"gameArrSec":540,"gameDepSec":565},
+              {"st":"尾崎","realDepMin":12,"gameArrSec":755,"gameDepSec":854},
+              {"st":"鳥取ノ荘","realDepMin":14,"gameArrSec":964,"gameDepSec":989},
+              {"st":"箱作","realDepMin":17,"gameArrSec":1130,"gameDepSec":1155},
+              {"st":"淡輪","realDepMin":21,"gameArrSec":1370,"gameDepSec":1395},
+              {"st":"みさき公園","realDepMin":23,"gameArrSec":1525}
+            ]
+          },
+          "times": [
+            {"st":"泉佐野","dep":"07:29"},
+            {"st":"羽倉崎","dep":"07:32"},
+            {"st":"吉見ノ里","dep":"07:34"},
+            {"st":"岡田浦","dep":"07:36"},
+            {"st":"樽井","dep":"07:38"},
+            {"st":"尾崎","dep":"07:41"},
+            {"st":"鳥取ノ荘","dep":"07:43"},
+            {"st":"箱作","dep":"07:46"},
+            {"st":"淡輪","dep":"07:50"},
+            {"st":"みさき公園","dep":"07:52"}
+          ]
+        },
+        "express": {
+          "section": "泉佐野 → みさき公園",
+          "train": "1705",
+          "type": "急行",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "07:37",
+          "offsetFromStartMin": 7,
+          "inWindow": true,
+          "reason": "泉佐野を発車してみさき公園に停車する急行のうち、開始時刻 07:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "1703 07:15",
+          "nextCandidate": "1707 08:00",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 15,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 17,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 870,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"泉佐野","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"羽倉崎","gameArrSec":110},
+              {"st":"吉見ノ里","gameArrSec":160},
+              {"st":"岡田浦","gameArrSec":210},
+              {"st":"樽井","gameArrSec":275},
+              {"st":"尾崎","realDepMin":8,"gameArrSec":405,"gameDepSec":430},
+              {"st":"鳥取ノ荘","gameArrSec":525},
+              {"st":"箱作","gameArrSec":605},
+              {"st":"淡輪","gameArrSec":765},
+              {"st":"みさき公園","realDepMin":17,"gameArrSec":870}
+            ]
+          },
+          "times": [
+            {"st":"泉佐野","dep":"07:37"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"07:45"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"07:54"}
+          ]
+        },
+        "southern": {
+          "section": "泉佐野 → みさき公園",
+          "train": "0501",
+          "type": "サザン1号",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "07:50",
+          "offsetFromStartMin": 20,
+          "inWindow": true,
+          "reason": "泉佐野を発車してみさき公園に停車する特急サザンのうち、開始時刻 07:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": null,
+          "nextCandidate": "0503 08:20",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 15,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 16,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 870,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"泉佐野","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"羽倉崎","gameArrSec":110},
+              {"st":"吉見ノ里","gameArrSec":160},
+              {"st":"岡田浦","gameArrSec":210},
+              {"st":"樽井","gameArrSec":275},
+              {"st":"尾崎","realDepMin":8,"gameArrSec":405,"gameDepSec":430},
+              {"st":"鳥取ノ荘","gameArrSec":525},
+              {"st":"箱作","gameArrSec":605},
+              {"st":"淡輪","gameArrSec":770},
+              {"st":"みさき公園","realDepMin":16,"gameArrSec":870}
+            ]
+          },
+          "times": [
+            {"st":"泉佐野","dep":"07:50"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"07:58"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"08:06"}
+          ]
+        }
+      },
+      "trains": [
+        {
+          "train": "6807",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"06:39"},
+            {"st":"羽倉崎","dep":"06:42"},
+            {"st":"吉見ノ里","dep":"06:44"},
+            {"st":"岡田浦","dep":"06:46"},
+            {"st":"樽井","dep":"06:48"},
+            {"st":"尾崎","dep":"06:51"},
+            {"st":"鳥取ノ荘","dep":"06:53"},
+            {"st":"箱作","dep":"06:56"},
+            {"st":"淡輪","dep":"07:00"},
+            {"st":"みさき公園","dep":"07:02"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "1701",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"06:49"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"06:57"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"07:06"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6809",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"06:55"},
+            {"st":"羽倉崎","dep":"06:57"},
+            {"st":"吉見ノ里","dep":"06:59"},
+            {"st":"岡田浦","dep":"07:01"},
+            {"st":"樽井","dep":"07:04"},
+            {"st":"尾崎","dep":"07:07"},
+            {"st":"鳥取ノ荘","dep":"07:09"},
+            {"st":"箱作","dep":"07:12"},
+            {"st":"淡輪","dep":"07:16"},
+            {"st":"みさき公園","dep":"07:18"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6811",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"07:09"},
+            {"st":"羽倉崎","dep":"07:12"},
+            {"st":"吉見ノ里","dep":"07:14"},
+            {"st":"岡田浦","dep":"07:16"},
+            {"st":"樽井","dep":"07:18"},
+            {"st":"尾崎","dep":"07:24"},
+            {"st":"鳥取ノ荘","dep":"07:26"},
+            {"st":"箱作","dep":"07:29"},
+            {"st":"淡輪","dep":"07:33"},
+            {"st":"みさき公園","dep":"07:35"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"尾崎","between":["泉佐野","尾崎"],"by":"1703","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":3}
+          ]
+        },
+        {
+          "train": "1703",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"07:15"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"07:23"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"07:32"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6813",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"07:29"},
+            {"st":"羽倉崎","dep":"07:32"},
+            {"st":"吉見ノ里","dep":"07:34"},
+            {"st":"岡田浦","dep":"07:36"},
+            {"st":"樽井","dep":"07:38"},
+            {"st":"尾崎","dep":"07:41"},
+            {"st":"鳥取ノ荘","dep":"07:43"},
+            {"st":"箱作","dep":"07:46"},
+            {"st":"淡輪","dep":"07:50"},
+            {"st":"みさき公園","dep":"07:52"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"0705","byType":"ラピートα5号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "1705",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"07:37"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"07:45"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"07:54"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6701",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "みさき公園",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"07:40"},
+            {"st":"羽倉崎","dep":"07:43"},
+            {"st":"吉見ノ里","dep":"07:45"},
+            {"st":"岡田浦","dep":"07:47"},
+            {"st":"樽井","dep":"07:49"},
+            {"st":"尾崎","dep":"07:52"},
+            {"st":"鳥取ノ荘","dep":"07:54"},
+            {"st":"箱作","dep":"07:57"},
+            {"st":"淡輪","dep":"08:01"},
+            {"st":"みさき公園","arr":"08:04"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"1705","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "0501",
+          "type": "サザン1号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"07:50"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"07:58"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"08:06"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6815",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"07:52"},
+            {"st":"羽倉崎","dep":"07:55"},
+            {"st":"吉見ノ里","dep":"07:57"},
+            {"st":"岡田浦","dep":"07:59"},
+            {"st":"樽井","dep":"08:01"},
+            {"st":"尾崎","dep":"08:09"},
+            {"st":"鳥取ノ荘","dep":"08:11"},
+            {"st":"箱作","dep":"08:14"},
+            {"st":"淡輪","dep":"08:18"},
+            {"st":"みさき公園","dep":"08:20"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"尾崎","between":["泉佐野","尾崎"],"by":"1707","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5},
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2113","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0501","byType":"サザン1号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "1707",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"08:00"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"08:08"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"08:15"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6501",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "泉佐野",
+          "courseTo": "羽倉崎",
+          "coversCourse": false,
+          "startsAtOrigin": true,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"泉佐野","dep":"08:04"},
+            {"st":"羽倉崎","arr":"08:07"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"1707","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0707","byType":"ラピートα7号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "6817",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"08:15"},
+            {"st":"羽倉崎","dep":"08:18"},
+            {"st":"吉見ノ里","dep":"08:20"},
+            {"st":"岡田浦","dep":"08:22"},
+            {"st":"樽井","dep":"08:24"},
+            {"st":"尾崎","dep":"08:30"},
+            {"st":"鳥取ノ荘","dep":"08:32"},
+            {"st":"箱作","dep":"08:35"},
+            {"st":"淡輪","dep":"08:39"},
+            {"st":"みさき公園","dep":"08:41"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2117","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5,"atCourseOrigin":true},
+            {"at":"尾崎","between":["泉佐野","尾崎"],"by":"0503","byType":"サザン3号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":3}
+          ]
+        },
+        {
+          "train": "0503",
+          "type": "サザン3号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"08:20"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"08:29"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"08:36"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6819",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"08:28"},
+            {"st":"羽倉崎","dep":"08:31"},
+            {"st":"吉見ノ里","dep":"08:34"},
+            {"st":"岡田浦","dep":"08:36"},
+            {"st":"樽井","dep":"08:38"},
+            {"st":"尾崎","dep":"08:44"},
+            {"st":"鳥取ノ荘","dep":"08:46"},
+            {"st":"箱作","dep":"08:49"},
+            {"st":"淡輪","dep":"08:53"},
+            {"st":"みさき公園","dep":"08:55"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"尾崎","between":["泉佐野","尾崎"],"by":"1709","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":3},
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2119","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseOrigin":true}
+          ]
+        }
+      ]
+    },
+    "noon": {
+      "startClock": "10:00",
+      "window": ["09:00","11:00"],
+      "windowRule": "コースの最初の駅の時刻（発・着・通過）が 09:00 以上 11:00 未満の列車",
+      "pattern": {
+        "express": {
+          "count": 1,
+          "perHour": 0.5,
+          "originTimes": ["09:04"],
+          "destinations": {"和歌山市":1},
+          "stopPatterns": {"泉佐野 尾崎 みさき公園":1}
+        },
+        "local": {
+          "count": 11,
+          "perHour": 5.5,
+          "originTimes": ["09:07","09:16","09:20","09:33","09:42","09:47","09:55","10:06","10:20","10:34","10:51"],
+          "destinations": {"羽倉崎":4,"和歌山市":7},
+          "stopPatterns": {"泉佐野 羽倉崎":4,"泉佐野 羽倉崎 吉見ノ里 岡田浦 樽井 尾崎 鳥取ノ荘 箱作 淡輪 みさき公園":7}
+        },
+        "southern": {
+          "count": 4,
+          "perHour": 2,
+          "originTimes": ["09:15","09:41","10:15","10:50"],
+          "destinations": {"和歌山市":3,"和歌山港":1},
+          "stopPatterns": {"泉佐野 尾崎 みさき公園":4}
+        }
+      },
+      "waitSummary": {"普通 が 泉佐野 で 特急 に 緩急接続（コースの始発駅）":7,"普通 が 尾崎 で 特急 に 緩急接続":1,"普通 が 泉佐野 で 急行系 に 緩急接続（コースの始発駅）":5},
+      "representatives": {
+        "local": {
+          "section": "泉佐野 → みさき公園",
+          "train": "6829",
+          "type": "普通",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "09:55",
+          "offsetFromStartMin": -5,
+          "inWindow": true,
+          "reason": "泉佐野を発車してみさき公園に停車する普通のうち、開始時刻 10:00 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "6827 09:33",
+          "nextCandidate": "6831 10:06",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [
+            ["尾崎","southern"]
+          ],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 22,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 23,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 1525,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"泉佐野","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"羽倉崎","realDepMin":3,"gameArrSec":155,"gameDepSec":180},
+              {"st":"吉見ノ里","realDepMin":5,"gameArrSec":275,"gameDepSec":300},
+              {"st":"岡田浦","realDepMin":7,"gameArrSec":400,"gameDepSec":425},
+              {"st":"樽井","realDepMin":9,"gameArrSec":540,"gameDepSec":565},
+              {"st":"尾崎","realDepMin":12,"gameArrSec":755,"gameDepSec":856},
+              {"st":"鳥取ノ荘","realDepMin":14,"gameArrSec":966,"gameDepSec":991},
+              {"st":"箱作","realDepMin":17,"gameArrSec":1130,"gameDepSec":1155},
+              {"st":"淡輪","realDepMin":21,"gameArrSec":1370,"gameDepSec":1395},
+              {"st":"みさき公園","realDepMin":23,"gameArrSec":1525}
+            ]
+          },
+          "times": [
+            {"st":"泉佐野","dep":"09:55"},
+            {"st":"羽倉崎","dep":"09:58"},
+            {"st":"吉見ノ里","dep":"10:00"},
+            {"st":"岡田浦","dep":"10:02"},
+            {"st":"樽井","dep":"10:04"},
+            {"st":"尾崎","dep":"10:07"},
+            {"st":"鳥取ノ荘","dep":"10:09"},
+            {"st":"箱作","dep":"10:12"},
+            {"st":"淡輪","dep":"10:16"},
+            {"st":"みさき公園","dep":"10:18"}
+          ]
+        },
+        "express": {
+          "section": "泉佐野 → みさき公園",
+          "train": "1711",
+          "type": "急行",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "09:04",
+          "offsetFromStartMin": -56,
+          "inWindow": true,
+          "reason": "泉佐野を発車してみさき公園に停車する急行のうち、開始時刻 10:00 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "1709 08:34",
+          "nextCandidate": "1713 17:51",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 15,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 15,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 870,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"泉佐野","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"羽倉崎","gameArrSec":110},
+              {"st":"吉見ノ里","gameArrSec":160},
+              {"st":"岡田浦","gameArrSec":210},
+              {"st":"樽井","gameArrSec":275},
+              {"st":"尾崎","realDepMin":8,"gameArrSec":405,"gameDepSec":430},
+              {"st":"鳥取ノ荘","gameArrSec":525},
+              {"st":"箱作","gameArrSec":605},
+              {"st":"淡輪","gameArrSec":765},
+              {"st":"みさき公園","realDepMin":15,"gameArrSec":870}
+            ]
+          },
+          "times": [
+            {"st":"泉佐野","dep":"09:04"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"09:12"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"09:19"}
+          ]
+        },
+        "southern": {
+          "section": "泉佐野 → みさき公園",
+          "train": "0509",
+          "type": "サザン11号",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "10:15",
+          "offsetFromStartMin": 15,
+          "inWindow": true,
+          "reason": "泉佐野を発車してみさき公園に停車する特急サザンのうち、開始時刻 10:00 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "0601 09:41",
+          "nextCandidate": "0511 10:50",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 15,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 16,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 870,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"泉佐野","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"羽倉崎","gameArrSec":110},
+              {"st":"吉見ノ里","gameArrSec":160},
+              {"st":"岡田浦","gameArrSec":210},
+              {"st":"樽井","gameArrSec":275},
+              {"st":"尾崎","realDepMin":8,"gameArrSec":405,"gameDepSec":430},
+              {"st":"鳥取ノ荘","gameArrSec":525},
+              {"st":"箱作","gameArrSec":605},
+              {"st":"淡輪","gameArrSec":770},
+              {"st":"みさき公園","realDepMin":16,"gameArrSec":870}
+            ]
+          },
+          "times": [
+            {"st":"泉佐野","dep":"10:15"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"10:23"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"10:31"}
+          ]
+        }
+      },
+      "trains": [
+        {
+          "train": "1711",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"09:04"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"09:12"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"09:19"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6505",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "泉佐野",
+          "courseTo": "羽倉崎",
+          "coversCourse": false,
+          "startsAtOrigin": true,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"泉佐野","dep":"09:07"},
+            {"st":"羽倉崎","arr":"09:10"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "0507",
+          "type": "サザン7号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"09:15"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"09:23"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"09:32"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6825",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"09:16"},
+            {"st":"羽倉崎","dep":"09:19"},
+            {"st":"吉見ノ里","dep":"09:21"},
+            {"st":"岡田浦","dep":"09:23"},
+            {"st":"樽井","dep":"09:26"},
+            {"st":"尾崎","dep":"09:29"},
+            {"st":"鳥取ノ荘","dep":"09:31"},
+            {"st":"箱作","dep":"09:33"},
+            {"st":"淡輪","dep":"09:38"},
+            {"st":"みさき公園","dep":"09:39"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0507","byType":"サザン7号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "6507",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "泉佐野",
+          "courseTo": "羽倉崎",
+          "coversCourse": false,
+          "startsAtOrigin": true,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"泉佐野","dep":"09:20"},
+            {"st":"羽倉崎","arr":"09:23"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6827",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"09:33"},
+            {"st":"羽倉崎","dep":"09:36"},
+            {"st":"吉見ノ里","dep":"09:38"},
+            {"st":"岡田浦","dep":"09:40"},
+            {"st":"樽井","dep":"09:42"},
+            {"st":"尾崎","dep":"09:50"},
+            {"st":"鳥取ノ荘","dep":"09:52"},
+            {"st":"箱作","dep":"09:55"},
+            {"st":"淡輪","dep":"09:59"},
+            {"st":"みさき公園","dep":"10:01"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["泉大津","泉佐野"],"by":"0713","byType":"ラピートα13号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":6,"atCourseOrigin":true},
+            {"at":"尾崎","between":["泉佐野","尾崎"],"by":"0601","byType":"サザン9号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5}
+          ]
+        },
+        {
+          "train": "0601",
+          "type": "サザン9号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山港",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"09:41"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"09:49"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"09:56"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6509",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "泉佐野",
+          "courseTo": "羽倉崎",
+          "coversCourse": false,
+          "startsAtOrigin": true,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"泉佐野","dep":"09:42"},
+            {"st":"羽倉崎","arr":"09:45"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2129","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":6,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0601","byType":"サザン9号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":6,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "6511",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "泉佐野",
+          "courseTo": "羽倉崎",
+          "coversCourse": false,
+          "startsAtOrigin": true,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"泉佐野","dep":"09:47"},
+            {"st":"羽倉崎","arr":"09:50"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6829",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"09:55"},
+            {"st":"羽倉崎","dep":"09:58"},
+            {"st":"吉見ノ里","dep":"10:00"},
+            {"st":"岡田浦","dep":"10:02"},
+            {"st":"樽井","dep":"10:04"},
+            {"st":"尾崎","dep":"10:07"},
+            {"st":"鳥取ノ荘","dep":"10:09"},
+            {"st":"箱作","dep":"10:12"},
+            {"st":"淡輪","dep":"10:16"},
+            {"st":"みさき公園","dep":"10:18"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6831",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"10:06"},
+            {"st":"羽倉崎","dep":"10:09"},
+            {"st":"吉見ノ里","dep":"10:11"},
+            {"st":"岡田浦","dep":"10:13"},
+            {"st":"樽井","dep":"10:16"},
+            {"st":"尾崎","dep":"10:19"},
+            {"st":"鳥取ノ荘","dep":"10:21"},
+            {"st":"箱作","dep":"10:24"},
+            {"st":"淡輪","dep":"10:28"},
+            {"st":"みさき公園","dep":"10:30"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2133","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":9,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0715","byType":"ラピートα15号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":9,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "0509",
+          "type": "サザン11号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"10:15"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"10:23"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"10:31"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6833",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"10:20"},
+            {"st":"羽倉崎","dep":"10:23"},
+            {"st":"吉見ノ里","dep":"10:25"},
+            {"st":"岡田浦","dep":"10:27"},
+            {"st":"樽井","dep":"10:30"},
+            {"st":"尾崎","dep":"10:33"},
+            {"st":"鳥取ノ荘","dep":"10:35"},
+            {"st":"箱作","dep":"10:38"},
+            {"st":"淡輪","dep":"10:42"},
+            {"st":"みさき公園","dep":"10:44"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2135","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0509","byType":"サザン11号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "6835",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"10:34"},
+            {"st":"羽倉崎","dep":"10:37"},
+            {"st":"吉見ノ里","dep":"10:39"},
+            {"st":"岡田浦","dep":"10:41"},
+            {"st":"樽井","dep":"10:44"},
+            {"st":"尾崎","dep":"10:47"},
+            {"st":"鳥取ノ荘","dep":"10:49"},
+            {"st":"箱作","dep":"10:52"},
+            {"st":"淡輪","dep":"10:56"},
+            {"st":"みさき公園","dep":"10:58"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2137","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":10,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0717","byType":"ラピートα17号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":10,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "0511",
+          "type": "サザン13号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"10:50"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"10:57"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"11:05"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6837",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"10:51"},
+            {"st":"羽倉崎","dep":"10:54"},
+            {"st":"吉見ノ里","dep":"10:56"},
+            {"st":"岡田浦","dep":"10:58"},
+            {"st":"樽井","dep":"11:00"},
+            {"st":"尾崎","dep":"11:03"},
+            {"st":"鳥取ノ荘","dep":"11:05"},
+            {"st":"箱作","dep":"11:08"},
+            {"st":"淡輪","dep":"11:12"},
+            {"st":"みさき公園","dep":"11:14"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2139","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":12,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0511","byType":"サザン13号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":12,"atCourseOrigin":true}
+          ]
+        }
+      ]
+    },
+    "evening": {
+      "startClock": "17:30",
+      "window": ["16:30","18:30"],
+      "windowRule": "コースの最初の駅の時刻（発・着・通過）が 16:30 以上 18:30 未満の列車",
+      "pattern": {
+        "local": {
+          "count": 8,
+          "perHour": 4,
+          "originTimes": ["16:30","16:44","17:02","17:16","17:35","17:46","18:20","18:24"],
+          "destinations": {"和歌山市":6,"みさき公園":1,"羽倉崎":1},
+          "stopPatterns": {"泉佐野 羽倉崎 吉見ノ里 岡田浦 樽井 尾崎 鳥取ノ荘 箱作 淡輪 みさき公園":7,"泉佐野 羽倉崎":1}
+        },
+        "southern": {
+          "count": 4,
+          "perHour": 2,
+          "originTimes": ["16:43","17:15","17:41","18:11"],
+          "destinations": {"和歌山市":3,"和歌山港":1},
+          "stopPatterns": {"泉佐野 尾崎 みさき公園":4}
+        },
+        "express": {
+          "count": 2,
+          "perHour": 1,
+          "originTimes": ["17:51","18:19"],
+          "destinations": {"和歌山市":2},
+          "stopPatterns": {"泉佐野 尾崎 みさき公園":2}
+        },
+        "区急": {
+          "count": 1,
+          "perHour": 0.5,
+          "originTimes": ["18:03"],
+          "destinations": {"和歌山市":1},
+          "stopPatterns": {"泉佐野 羽倉崎 吉見ノ里 岡田浦 樽井 尾崎 鳥取ノ荘 箱作 淡輪 みさき公園":1}
+        }
+      },
+      "waitSummary": {"普通 が 泉佐野 で 急行系 に 緩急接続（コースの始発駅）":7,"普通 が 泉佐野 で 特急 に 緩急接続（コースの始発駅）":6,"普通 が 尾崎 で 特急 に 緩急接続":1,"普通 が 尾崎 で 急行系 に 緩急接続":1,"区急 が 尾崎 で 特急 に 緩急接続":1},
+      "representatives": {
+        "local": {
+          "section": "泉佐野 → みさき公園",
+          "train": "6703",
+          "type": "普通",
+          "from": "なんば",
+          "to": "みさき公園",
+          "originDep": "17:35",
+          "offsetFromStartMin": 5,
+          "inWindow": true,
+          "reason": "泉佐野を発車してみさき公園に停車する普通のうち、開始時刻 17:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "6889 17:16",
+          "nextCandidate": "6891 17:46",
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2193","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":12,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0215","byType":"ラピートβ55号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":12,"atCourseOrigin":true},
+            {"at":"尾崎","between":["泉佐野","尾崎"],"by":"0539","byType":"サザン41号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4}
+          ],
+          "gameWaits": [
+            ["尾崎","southern"]
+          ],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 27,
+            "realArrEstNote": "到着時刻（Hub の値）",
+            "realCourseMin": 27,
+            "realLastKind": "arr",
+            "gameCourseSec": 1525,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"泉佐野","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"羽倉崎","realDepMin":3,"gameArrSec":155,"gameDepSec":180},
+              {"st":"吉見ノ里","realDepMin":5,"gameArrSec":275,"gameDepSec":300},
+              {"st":"岡田浦","realDepMin":7,"gameArrSec":400,"gameDepSec":425},
+              {"st":"樽井","realDepMin":9,"gameArrSec":540,"gameDepSec":565},
+              {"st":"尾崎","realDepMin":16,"gameArrSec":755,"gameDepSec":856},
+              {"st":"鳥取ノ荘","realDepMin":18,"gameArrSec":966,"gameDepSec":991},
+              {"st":"箱作","realDepMin":21,"gameArrSec":1130,"gameDepSec":1155},
+              {"st":"淡輪","realDepMin":25,"gameArrSec":1370,"gameDepSec":1395},
+              {"st":"みさき公園","realArrMin":27,"gameArrSec":1525}
+            ]
+          },
+          "times": [
+            {"st":"泉佐野","dep":"17:35"},
+            {"st":"羽倉崎","dep":"17:38"},
+            {"st":"吉見ノ里","dep":"17:40"},
+            {"st":"岡田浦","dep":"17:42"},
+            {"st":"樽井","dep":"17:44"},
+            {"st":"尾崎","dep":"17:51"},
+            {"st":"鳥取ノ荘","dep":"17:53"},
+            {"st":"箱作","dep":"17:56"},
+            {"st":"淡輪","dep":"18:00"},
+            {"st":"みさき公園","arr":"18:02"}
+          ]
+        },
+        "express": {
+          "section": "泉佐野 → みさき公園",
+          "train": "1713",
+          "type": "急行",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "17:51",
+          "offsetFromStartMin": 21,
+          "inWindow": true,
+          "reason": "泉佐野を発車してみさき公園に停車する急行のうち、開始時刻 17:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "1711 09:04",
+          "nextCandidate": "1715 18:19",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 16,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 16,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 870,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"泉佐野","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"羽倉崎","gameArrSec":110},
+              {"st":"吉見ノ里","gameArrSec":160},
+              {"st":"岡田浦","gameArrSec":210},
+              {"st":"樽井","gameArrSec":275},
+              {"st":"尾崎","realDepMin":9,"gameArrSec":405,"gameDepSec":430},
+              {"st":"鳥取ノ荘","gameArrSec":525},
+              {"st":"箱作","gameArrSec":605},
+              {"st":"淡輪","gameArrSec":765},
+              {"st":"みさき公園","realDepMin":16,"gameArrSec":870}
+            ]
+          },
+          "times": [
+            {"st":"泉佐野","dep":"17:51"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"18:00"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"18:07"}
+          ]
+        },
+        "southern": {
+          "section": "泉佐野 → みさき公園",
+          "train": "0539",
+          "type": "サザン41号",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "17:41",
+          "offsetFromStartMin": 11,
+          "inWindow": true,
+          "reason": "泉佐野を発車してみさき公園に停車する特急サザンのうち、開始時刻 17:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "0537 17:15",
+          "nextCandidate": "0603 18:11",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 16,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 16,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 870,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"泉佐野","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"羽倉崎","gameArrSec":110},
+              {"st":"吉見ノ里","gameArrSec":160},
+              {"st":"岡田浦","gameArrSec":210},
+              {"st":"樽井","gameArrSec":275},
+              {"st":"尾崎","realDepMin":9,"gameArrSec":405,"gameDepSec":430},
+              {"st":"鳥取ノ荘","gameArrSec":525},
+              {"st":"箱作","gameArrSec":605},
+              {"st":"淡輪","gameArrSec":770},
+              {"st":"みさき公園","realDepMin":16,"gameArrSec":870}
+            ]
+          },
+          "times": [
+            {"st":"泉佐野","dep":"17:41"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"17:50"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"17:57"}
+          ]
+        }
+      },
+      "trains": [
+        {
+          "train": "6883",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"16:30"},
+            {"st":"羽倉崎","dep":"16:33"},
+            {"st":"吉見ノ里","dep":"16:35"},
+            {"st":"岡田浦","dep":"16:37"},
+            {"st":"樽井","dep":"16:40"},
+            {"st":"尾崎","dep":"16:43"},
+            {"st":"鳥取ノ荘","dep":"16:45"},
+            {"st":"箱作","dep":"16:48"},
+            {"st":"淡輪","dep":"16:52"},
+            {"st":"みさき公園","dep":"16:54"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2185","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "0535",
+          "type": "サザン37号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"16:43"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"16:51"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"16:58"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6885",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"16:44"},
+            {"st":"羽倉崎","dep":"16:47"},
+            {"st":"吉見ノ里","dep":"16:49"},
+            {"st":"岡田浦","dep":"16:51"},
+            {"st":"樽井","dep":"16:53"},
+            {"st":"尾崎","dep":"16:57"},
+            {"st":"鳥取ノ荘","dep":"16:59"},
+            {"st":"箱作","dep":"17:01"},
+            {"st":"淡輪","dep":"17:05"},
+            {"st":"みさき公園","dep":"17:07"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2187","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0535","byType":"サザン37号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "6887",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"17:02"},
+            {"st":"羽倉崎","dep":"17:05"},
+            {"st":"吉見ノ里","dep":"17:07"},
+            {"st":"岡田浦","dep":"17:09"},
+            {"st":"樽井","dep":"17:12"},
+            {"st":"尾崎","dep":"17:15"},
+            {"st":"鳥取ノ荘","dep":"17:17"},
+            {"st":"箱作","dep":"17:20"},
+            {"st":"淡輪","dep":"17:24"},
+            {"st":"みさき公園","dep":"17:26"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0213","byType":"ラピートβ53号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":10,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "0537",
+          "type": "サザン39号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"17:15"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"17:23"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"17:30"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6889",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"17:16"},
+            {"st":"羽倉崎","dep":"17:19"},
+            {"st":"吉見ノ里","dep":"17:21"},
+            {"st":"岡田浦","dep":"17:23"},
+            {"st":"樽井","dep":"17:26"},
+            {"st":"尾崎","dep":"17:29"},
+            {"st":"鳥取ノ荘","dep":"17:31"},
+            {"st":"箱作","dep":"17:33"},
+            {"st":"淡輪","dep":"17:38"},
+            {"st":"みさき公園","dep":"17:39"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2191","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0537","byType":"サザン39号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "6703",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "みさき公園",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"17:35"},
+            {"st":"羽倉崎","dep":"17:38"},
+            {"st":"吉見ノ里","dep":"17:40"},
+            {"st":"岡田浦","dep":"17:42"},
+            {"st":"樽井","dep":"17:44"},
+            {"st":"尾崎","dep":"17:51"},
+            {"st":"鳥取ノ荘","dep":"17:53"},
+            {"st":"箱作","dep":"17:56"},
+            {"st":"淡輪","dep":"18:00"},
+            {"st":"みさき公園","arr":"18:02"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2193","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":12,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0215","byType":"ラピートβ55号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":12,"atCourseOrigin":true},
+            {"at":"尾崎","between":["泉佐野","尾崎"],"by":"0539","byType":"サザン41号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4}
+          ]
+        },
+        {
+          "train": "0539",
+          "type": "サザン41号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"17:41"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"17:50"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"17:57"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6891",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"17:46"},
+            {"st":"羽倉崎","dep":"17:49"},
+            {"st":"吉見ノ里","dep":"17:51"},
+            {"st":"岡田浦","dep":"17:53"},
+            {"st":"樽井","dep":"17:55"},
+            {"st":"尾崎","dep":"18:01"},
+            {"st":"鳥取ノ荘","dep":"18:03"},
+            {"st":"箱作","dep":"18:06"},
+            {"st":"淡輪","dep":"18:10"},
+            {"st":"みさき公園","dep":"18:12"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"尾崎","between":["泉佐野","尾崎"],"by":"1713","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":3},
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2195","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0539","byType":"サザン41号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "1713",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"17:51"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"18:00"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"18:07"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "3801",
+          "type": "区急",
+          "service": null,
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"18:03"},
+            {"st":"羽倉崎","dep":"18:06"},
+            {"st":"吉見ノ里","dep":"18:08"},
+            {"st":"岡田浦","dep":"18:10"},
+            {"st":"樽井","dep":"18:12"},
+            {"st":"尾崎","dep":"18:20"},
+            {"st":"鳥取ノ荘","dep":"18:22"},
+            {"st":"箱作","dep":"18:24"},
+            {"st":"淡輪","dep":"18:28"},
+            {"st":"みさき公園","dep":"18:30"}
+          ],
+          "overtakenBy": [
+            {"at":"尾崎","between":["泉佐野","尾崎"],"by":"0603","byType":"サザン43号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5}
+          ]
+        },
+        {
+          "train": "0603",
+          "type": "サザン43号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山港",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"18:11"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"18:18"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"18:26"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "1715",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"18:19"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"18:27"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"18:34"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6893",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"18:20"},
+            {"st":"羽倉崎","dep":"18:23"},
+            {"st":"吉見ノ里","dep":"18:25"},
+            {"st":"岡田浦","dep":"18:27"},
+            {"st":"樽井","dep":"18:30"},
+            {"st":"尾崎","dep":"18:33"},
+            {"st":"鳥取ノ荘","dep":"18:35"},
+            {"st":"箱作","dep":"18:38"},
+            {"st":"淡輪","dep":"18:42"},
+            {"st":"みさき公園","dep":"18:44"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"1715","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":12,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2197","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":12,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0603","byType":"サザン43号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":12,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "6513",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "泉佐野",
+          "courseTo": "羽倉崎",
+          "coversCourse": false,
+          "startsAtOrigin": true,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"泉佐野","dep":"18:24"},
+            {"st":"羽倉崎","arr":"18:27"}
+          ],
+          "stopsVsGame": "same"
+        }
+      ]
+    },
+    "night": {
+      "startClock": "21:30",
+      "window": ["20:30","22:30"],
+      "windowRule": "コースの最初の駅の時刻（発・着・通過）が 20:30 以上 22:30 未満の列車",
+      "pattern": {
+        "local": {
+          "count": 10,
+          "perHour": 5,
+          "originTimes": ["20:33","21:02","21:09","21:19","21:26","21:33","21:43","21:50","22:03","22:15"],
+          "destinations": {"和歌山市":6,"羽倉崎":2,"みさき公園":2},
+          "stopPatterns": {"泉佐野 羽倉崎 吉見ノ里 岡田浦 樽井 尾崎 鳥取ノ荘 箱作 淡輪 みさき公園":8,"泉佐野 羽倉崎":2}
+        },
+        "southern": {
+          "count": 4,
+          "perHour": 2,
+          "originTimes": ["20:43","21:14","21:41","22:14"],
+          "destinations": {"和歌山港":1,"和歌山市":3},
+          "stopPatterns": {"泉佐野 尾崎 みさき公園":4}
+        },
+        "区急": {
+          "count": 2,
+          "perHour": 1,
+          "originTimes": ["20:50","22:25"],
+          "destinations": {"和歌山市":1,"羽倉崎":1},
+          "stopPatterns": {"泉佐野 羽倉崎 吉見ノ里 岡田浦 樽井 尾崎 鳥取ノ荘 箱作 淡輪 みさき公園":1,"泉佐野 羽倉崎":1}
+        },
+        "express": {
+          "count": 3,
+          "perHour": 1.5,
+          "originTimes": ["20:55","21:25","21:57"],
+          "destinations": {"和歌山市":3},
+          "stopPatterns": {"泉佐野 尾崎 みさき公園":3}
+        }
+      },
+      "waitSummary": {"普通 が 泉佐野 で 急行系 に 緩急接続（コースの始発駅）":8,"普通 が 泉佐野 で 特急 に 緩急接続（コースの始発駅）":7,"普通 が 尾崎 で 特急 に 緩急接続":2,"区急 が 尾崎 で 急行系 に 緩急接続":1,"区急 が 泉佐野 で 急行系 に 緩急接続（コースの始発駅）":1,"普通 が 尾崎 で 急行系 に 緩急接続":2},
+      "representatives": {
+        "local": {
+          "section": "泉佐野 → みさき公園",
+          "train": "6709",
+          "type": "普通",
+          "from": "なんば",
+          "to": "みさき公園",
+          "originDep": "21:33",
+          "offsetFromStartMin": 3,
+          "inWindow": true,
+          "reason": "泉佐野を発車してみさき公園に停車する普通のうち、開始時刻 21:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "6907 21:19",
+          "nextCandidate": "6909 21:43",
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0231","byType":"ラピートβ71号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5,"atCourseOrigin":true}
+          ],
+          "gameWaits": [
+            ["尾崎","express"]
+          ],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 24,
+            "realArrEstNote": "到着時刻（Hub の値）",
+            "realCourseMin": 24,
+            "realLastKind": "arr",
+            "gameCourseSec": 1525,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"泉佐野","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"羽倉崎","realDepMin":3,"gameArrSec":155,"gameDepSec":180},
+              {"st":"吉見ノ里","realDepMin":5,"gameArrSec":275,"gameDepSec":300},
+              {"st":"岡田浦","realDepMin":7,"gameArrSec":400,"gameDepSec":425},
+              {"st":"樽井","realDepMin":9,"gameArrSec":540,"gameDepSec":565},
+              {"st":"尾崎","realDepMin":12,"gameArrSec":755,"gameDepSec":854},
+              {"st":"鳥取ノ荘","realDepMin":14,"gameArrSec":964,"gameDepSec":989},
+              {"st":"箱作","realDepMin":17,"gameArrSec":1130,"gameDepSec":1155},
+              {"st":"淡輪","realDepMin":21,"gameArrSec":1370,"gameDepSec":1395},
+              {"st":"みさき公園","realArrMin":24,"gameArrSec":1525}
+            ]
+          },
+          "times": [
+            {"st":"泉佐野","dep":"21:33"},
+            {"st":"羽倉崎","dep":"21:36"},
+            {"st":"吉見ノ里","dep":"21:38"},
+            {"st":"岡田浦","dep":"21:40"},
+            {"st":"樽井","dep":"21:42"},
+            {"st":"尾崎","dep":"21:45"},
+            {"st":"鳥取ノ荘","dep":"21:47"},
+            {"st":"箱作","dep":"21:50"},
+            {"st":"淡輪","dep":"21:54"},
+            {"st":"みさき公園","arr":"21:57"}
+          ]
+        },
+        "express": {
+          "section": "泉佐野 → みさき公園",
+          "train": "1727",
+          "type": "急行",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "21:25",
+          "offsetFromStartMin": -5,
+          "inWindow": true,
+          "reason": "泉佐野を発車してみさき公園に停車する急行のうち、開始時刻 21:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "1725 20:55",
+          "nextCandidate": "1729 21:57",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 15,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 16,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 870,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"泉佐野","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"羽倉崎","gameArrSec":110},
+              {"st":"吉見ノ里","gameArrSec":160},
+              {"st":"岡田浦","gameArrSec":210},
+              {"st":"樽井","gameArrSec":275},
+              {"st":"尾崎","realDepMin":8,"gameArrSec":405,"gameDepSec":430},
+              {"st":"鳥取ノ荘","gameArrSec":525},
+              {"st":"箱作","gameArrSec":605},
+              {"st":"淡輪","gameArrSec":765},
+              {"st":"みさき公園","realDepMin":16,"gameArrSec":870}
+            ]
+          },
+          "times": [
+            {"st":"泉佐野","dep":"21:25"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"21:33"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"21:41"}
+          ]
+        },
+        "southern": {
+          "section": "泉佐野 → みさき公園",
+          "train": "0551",
+          "type": "サザン57号",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "21:41",
+          "offsetFromStartMin": 11,
+          "inWindow": true,
+          "reason": "泉佐野を発車してみさき公園に停車する特急サザンのうち、開始時刻 21:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "0549 21:14",
+          "nextCandidate": "0553 22:14",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 15,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 17,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 870,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"泉佐野","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"羽倉崎","gameArrSec":110},
+              {"st":"吉見ノ里","gameArrSec":160},
+              {"st":"岡田浦","gameArrSec":210},
+              {"st":"樽井","gameArrSec":275},
+              {"st":"尾崎","realDepMin":8,"gameArrSec":405,"gameDepSec":430},
+              {"st":"鳥取ノ荘","gameArrSec":525},
+              {"st":"箱作","gameArrSec":605},
+              {"st":"淡輪","gameArrSec":770},
+              {"st":"みさき公園","realDepMin":17,"gameArrSec":870}
+            ]
+          },
+          "times": [
+            {"st":"泉佐野","dep":"21:41"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"21:49"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"21:58"}
+          ]
+        }
+      },
+      "trains": [
+        {
+          "train": "6903",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"20:33"},
+            {"st":"羽倉崎","dep":"20:36"},
+            {"st":"吉見ノ里","dep":"20:38"},
+            {"st":"岡田浦","dep":"20:40"},
+            {"st":"樽井","dep":"20:43"},
+            {"st":"尾崎","dep":"20:53"},
+            {"st":"鳥取ノ荘","dep":"20:55"},
+            {"st":"箱作","dep":"20:58"},
+            {"st":"淡輪","dep":"21:02"},
+            {"st":"みさき公園","dep":"21:04"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"1723","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0227","byType":"ラピートβ67号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7,"atCourseOrigin":true},
+            {"at":"尾崎","between":["泉佐野","尾崎"],"by":"0605","byType":"サザン53号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7}
+          ]
+        },
+        {
+          "train": "0605",
+          "type": "サザン53号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山港",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"20:43"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"20:51"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"20:59"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "3807",
+          "type": "区急",
+          "service": null,
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"20:50"},
+            {"st":"羽倉崎","dep":"20:53"},
+            {"st":"吉見ノ里","dep":"20:55"},
+            {"st":"岡田浦","dep":"20:56"},
+            {"st":"樽井","dep":"20:59"},
+            {"st":"尾崎","dep":"21:05"},
+            {"st":"鳥取ノ荘","dep":"21:07"},
+            {"st":"箱作","dep":"21:09"},
+            {"st":"淡輪","dep":"21:13"},
+            {"st":"みさき公園","dep":"21:15"}
+          ],
+          "overtakenBy": [
+            {"at":"尾崎","between":["泉佐野","尾崎"],"by":"1725","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":3},
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2211","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":0,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "1725",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"20:55"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"21:04"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"21:11"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6905",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"21:02"},
+            {"st":"羽倉崎","dep":"21:05"},
+            {"st":"吉見ノ里","dep":"21:07"},
+            {"st":"岡田浦","dep":"21:10"},
+            {"st":"樽井","dep":"21:12"},
+            {"st":"尾崎","dep":"21:22"},
+            {"st":"鳥取ノ荘","dep":"21:25"},
+            {"st":"箱作","dep":"21:27"},
+            {"st":"淡輪","dep":"21:32"},
+            {"st":"みさき公園","dep":"21:33"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"1725","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":10,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0229","byType":"ラピートβ69号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":10,"atCourseOrigin":true},
+            {"at":"尾崎","between":["泉佐野","尾崎"],"by":"0549","byType":"サザン55号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7}
+          ]
+        },
+        {
+          "train": "6519",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "泉佐野",
+          "courseTo": "羽倉崎",
+          "coversCourse": false,
+          "startsAtOrigin": true,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"泉佐野","dep":"21:09"},
+            {"st":"羽倉崎","arr":"21:12"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2213","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "0549",
+          "type": "サザン55号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"21:14"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"21:21"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"21:29"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6907",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"21:19"},
+            {"st":"羽倉崎","dep":"21:22"},
+            {"st":"吉見ノ里","dep":"21:24"},
+            {"st":"岡田浦","dep":"21:26"},
+            {"st":"樽井","dep":"21:29"},
+            {"st":"尾崎","dep":"21:34"},
+            {"st":"鳥取ノ荘","dep":"21:37"},
+            {"st":"箱作","dep":"21:39"},
+            {"st":"淡輪","dep":"21:44"},
+            {"st":"みさき公園","dep":"21:45"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"尾崎","between":["泉佐野","尾崎"],"by":"1727","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":2},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0549","byType":"サザン55号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "1727",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"21:25"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"21:33"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"21:41"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6521",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "泉佐野",
+          "courseTo": "羽倉崎",
+          "coversCourse": false,
+          "startsAtOrigin": true,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"泉佐野","dep":"21:26"},
+            {"st":"羽倉崎","arr":"21:30"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"1727","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "6709",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "みさき公園",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"21:33"},
+            {"st":"羽倉崎","dep":"21:36"},
+            {"st":"吉見ノ里","dep":"21:38"},
+            {"st":"岡田浦","dep":"21:40"},
+            {"st":"樽井","dep":"21:42"},
+            {"st":"尾崎","dep":"21:45"},
+            {"st":"鳥取ノ荘","dep":"21:47"},
+            {"st":"箱作","dep":"21:50"},
+            {"st":"淡輪","dep":"21:54"},
+            {"st":"みさき公園","arr":"21:57"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0231","byType":"ラピートβ71号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "0551",
+          "type": "サザン57号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"21:41"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"21:49"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"21:58"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6909",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"21:43"},
+            {"st":"羽倉崎","dep":"21:46"},
+            {"st":"吉見ノ里","dep":"21:48"},
+            {"st":"岡田浦","dep":"21:50"},
+            {"st":"樽井","dep":"21:53"},
+            {"st":"尾崎","dep":"21:56"},
+            {"st":"鳥取ノ荘","dep":"21:58"},
+            {"st":"箱作","dep":"22:01"},
+            {"st":"淡輪","dep":"22:05"},
+            {"st":"みさき公園","dep":"22:07"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2217","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0551","byType":"サザン57号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "6711",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "みさき公園",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"21:50"},
+            {"st":"羽倉崎","dep":"21:53"},
+            {"st":"吉見ノ里","dep":"21:55"},
+            {"st":"岡田浦","dep":"21:57"},
+            {"st":"樽井","dep":"22:00"},
+            {"st":"尾崎","dep":"22:06"},
+            {"st":"鳥取ノ荘","dep":"22:08"},
+            {"st":"箱作","dep":"22:11"},
+            {"st":"淡輪","dep":"22:15"},
+            {"st":"みさき公園","arr":"22:17"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"尾崎","between":["泉佐野","尾崎"],"by":"1729","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":3},
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2219","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "1729",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"21:57"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"22:05"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"22:12"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6911",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"22:03"},
+            {"st":"羽倉崎","dep":"22:06"},
+            {"st":"吉見ノ里","dep":"22:08"},
+            {"st":"岡田浦","dep":"22:10"},
+            {"st":"樽井","dep":"22:12"},
+            {"st":"尾崎","dep":"22:15"},
+            {"st":"鳥取ノ荘","dep":"22:17"},
+            {"st":"箱作","dep":"22:20"},
+            {"st":"淡輪","dep":"22:24"},
+            {"st":"みさき公園","dep":"22:26"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"1729","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":9,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0233","byType":"ラピートβ73号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":9,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "0553",
+          "type": "サザン59号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"22:14"},
+            {"st":"羽倉崎","pass":null},
+            {"st":"吉見ノ里","pass":null},
+            {"st":"岡田浦","pass":null},
+            {"st":"樽井","pass":null},
+            {"st":"尾崎","dep":"22:22"},
+            {"st":"鳥取ノ荘","pass":null},
+            {"st":"箱作","pass":null},
+            {"st":"淡輪","pass":null},
+            {"st":"みさき公園","dep":"22:30"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6913",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "泉佐野",
+          "courseTo": "みさき公園",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"泉佐野","dep":"22:15"},
+            {"st":"羽倉崎","dep":"22:18"},
+            {"st":"吉見ノ里","dep":"22:20"},
+            {"st":"岡田浦","dep":"22:22"},
+            {"st":"樽井","dep":"22:25"},
+            {"st":"尾崎","dep":"22:28"},
+            {"st":"鳥取ノ荘","dep":"22:30"},
+            {"st":"箱作","dep":"22:33"},
+            {"st":"淡輪","dep":"22:37"},
+            {"st":"みさき公園","dep":"22:39"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2221","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":9,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0553","byType":"サザン59号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":9,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "3503",
+          "type": "区急",
+          "service": null,
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "泉佐野",
+          "courseTo": "羽倉崎",
+          "coversCourse": false,
+          "startsAtOrigin": true,
+          "endsAtTerminal": false,
+          "times": [
+            {"st":"泉佐野","dep":"22:25"},
+            {"st":"羽倉崎","arr":"22:28"}
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,3831 @@
+{
+  "source": "鉄道運用Hub 南海電鉄 時刻表データ（https://unyohub.2pd.jp/railroad_nankai/ 。API timetable.php、railroad_id=nankai、diagram_revision=2024-12-21、timetable_id=weekday）。scripts/oncoming-meets.ts が node_modules/.cache/unyohub に保存したものを読んだ",
+  "license": "運用表データは CC BY 4.0（https://creativecommons.org/licenses/by/4.0/deed.ja ）。出典: 鉄道運用Hub",
+  "revision": "2024-12-21",
+  "dayType": "平日",
+  "generatedBy": "2026-11-04 に調査用の一時スクリプトで抽出（リポジトリには入れていない）。ゲーム側の値は src/route の ROUTES に applyService を時間帯ごとに当てて読んだ",
+  "fieldNotes": {
+    "time": "HH:MM（分単位。秒は無い）。24時を過ぎた時刻は 24:xx のまま",
+    "dep": "その駅の発車時刻（Hub の値）",
+    "arr": "到着時刻。Hub は線の終点の値だけが到着。途中駅の到着時刻は Hub に無い（不明）",
+    "pass": "通過。値があれば通過時刻（Hub に |HH:MM の形で入っている場合だけ）。null は通過で時刻不明",
+    "arr と dep が両方": "空港線・和歌山港線との境（泉佐野・和歌山市）で、前の線の到着と次の線の発車が別に入っている",
+    "overtakenBy": "同じ向きの格上の列車と発車順が入れ替わる所から推定（通過待ち・緩急接続・走行中）。extraMin は前の駅からその駅の発車までが、普通の終日の最小値より何分長いか（待ちの長さの目安）",
+    "representatives": "自列車にする代表の1本の案（種別ごと）。inWindow=false は開始時刻の前後60分に該当列車が無いもの",
+    "vsGame": "realXxxMin は代表列車のコース始発駅の発車からの分。gameArrSec/gameDepSec はゲームの時刻表（自動生成、秒）。realCourseMin は始発駅の発車から終着駅の値（arr か dep）まで"
+  },
+  "course": "izumisano",
+  "direction": "下り（なんば → 和歌山市方面）",
+  "stations": ["岸和田","蛸地蔵","貝塚","二色浜","鶴原","井原里","泉佐野"],
+  "selectableServices": [
+    {"id":"local","name":"普通","gameStops":["岸和田","蛸地蔵","貝塚","二色浜","鶴原","井原里","泉佐野"],"gameDestination":"羽倉崎"},
+    {"id":"express","name":"急行","gameStops":["岸和田","貝塚","泉佐野"],"gameDestination":"和歌山市"},
+    {"id":"airport","name":"空港急行","gameStops":["岸和田","貝塚","泉佐野"],"gameDestination":"関西空港"},
+    {"id":"southern","name":"特急サザン","gameStops":["岸和田","泉佐野"],"gameDestination":"和歌山港"},
+    {"id":"limited","name":"特急ラピートβ","gameStops":["岸和田","泉佐野"],"gameDestination":"関西空港"}
+  ],
+  "timeOfDay": {
+    "morning": {
+      "startClock": "07:30",
+      "window": ["06:30","08:30"],
+      "windowRule": "コースの最初の駅の時刻（発・着・通過）が 06:30 以上 08:30 未満の列車",
+      "pattern": {
+        "express": {
+          "count": 5,
+          "perHour": 2.5,
+          "originTimes": ["06:40","07:05","07:29","07:50","08:25"],
+          "destinations": {"和歌山市":5},
+          "stopPatterns": {"岸和田 貝塚 泉佐野":5}
+        },
+        "local": {
+          "count": 9,
+          "perHour": 4.5,
+          "originTimes": ["06:42","06:56","07:09","07:21","07:33","07:46","07:58","08:12","08:19"],
+          "destinations": {"和歌山市":6,"みさき公園":1,"羽倉崎":2},
+          "stopPatterns": {"岸和田 蛸地蔵 貝塚 二色浜 鶴原 井原里 泉佐野":9}
+        },
+        "ラピートα": {
+          "count": 4,
+          "perHour": 2,
+          "originTimes": ["06:52(通過)","07:21(貝塚から)","07:55(通過)","08:24(通過)"],
+          "destinations": {"関西空港":4},
+          "stopPatterns": {"泉佐野":4}
+        },
+        "airport": {
+          "count": 6,
+          "perHour": 3,
+          "originTimes": ["06:55","07:15","07:37","07:57","08:05","08:18"],
+          "destinations": {"関西空港":6},
+          "stopPatterns": {"岸和田 貝塚 泉佐野":6}
+        },
+        "southern": {
+          "count": 2,
+          "perHour": 1,
+          "originTimes": ["07:41","08:10"],
+          "destinations": {"和歌山市":2},
+          "stopPatterns": {"岸和田 泉佐野":2}
+        }
+      },
+      "waitSummary": {
+        "普通 が 岸和田 で 急行系 に 緩急接続（コースの始発駅）": 4,
+        "普通 が 岸和田 で 特急 に 通過待ち（コースの始発駅）": 3,
+        "普通 が 泉佐野 で 特急 に 緩急接続（コースの終着駅）": 3,
+        "普通 が 泉佐野 で 急行系 に 緩急接続（コースの終着駅）": 6,
+        "普通 が 岸和田 で 特急 に 緩急接続（コースの始発駅）": 1,
+        "普通 が 貝塚 で 急行系 に 緩急接続": 1,
+        "普通 が 貝塚 で 特急 に 通過待ち": 1
+      },
+      "representatives": {
+        "local": {
+          "section": "岸和田 → 泉佐野",
+          "train": "6815",
+          "type": "普通",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "07:33",
+          "offsetFromStartMin": 3,
+          "inWindow": true,
+          "reason": "岸和田を発車して泉佐野に停車する普通のうち、開始時刻 07:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "6701 07:21",
+          "nextCandidate": "6501 07:46",
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2113","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7,"atCourseEnd":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0501","byType":"サザン1号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7,"atCourseEnd":true}
+          ],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 11,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 19,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 720,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"岸和田","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"蛸地蔵","realDepMin":1,"gameArrSec":85,"gameDepSec":110},
+              {"st":"貝塚","realDepMin":4,"gameArrSec":220,"gameDepSec":245},
+              {"st":"二色浜","realDepMin":6,"gameArrSec":360,"gameDepSec":385},
+              {"st":"鶴原","realDepMin":8,"gameArrSec":460,"gameDepSec":485},
+              {"st":"井原里","realDepMin":10,"gameArrSec":570,"gameDepSec":595},
+              {"st":"泉佐野","realDepMin":19,"gameArrSec":720}
+            ]
+          },
+          "times": [
+            {"st":"岸和田","dep":"07:33"},
+            {"st":"蛸地蔵","dep":"07:34"},
+            {"st":"貝塚","dep":"07:37"},
+            {"st":"二色浜","dep":"07:39"},
+            {"st":"鶴原","dep":"07:41"},
+            {"st":"井原里","dep":"07:43"},
+            {"st":"泉佐野","dep":"07:52"}
+          ]
+        },
+        "express": {
+          "section": "岸和田 → 泉佐野",
+          "train": "1705",
+          "type": "急行",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "07:29",
+          "offsetFromStartMin": -1,
+          "inWindow": true,
+          "reason": "岸和田を発車して泉佐野に停車する急行のうち、開始時刻 07:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "1703 07:05",
+          "nextCandidate": "1707 07:50",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 8,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 8,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 450,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"岸和田","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"蛸地蔵","gameArrSec":65},
+              {"st":"貝塚","realDepMin":3,"gameArrSec":160,"gameDepSec":185},
+              {"st":"二色浜","gameArrSec":285},
+              {"st":"鶴原","gameArrSec":320},
+              {"st":"井原里","gameArrSec":360},
+              {"st":"泉佐野","realDepMin":8,"gameArrSec":450}
+            ]
+          },
+          "times": [
+            {"st":"岸和田","dep":"07:29"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"07:32"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"07:37"}
+          ]
+        },
+        "airport": {
+          "section": "岸和田 → 泉佐野",
+          "train": "2113",
+          "type": "空港急行",
+          "from": "なんば",
+          "to": "関西空港",
+          "originDep": "07:37",
+          "offsetFromStartMin": 7,
+          "inWindow": true,
+          "reason": "岸和田を発車して泉佐野に停車する空港急行のうち、開始時刻 07:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "2111 07:15",
+          "nextCandidate": "2115 07:57",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 9,
+            "realArrEstNote": "到着時刻（Hub の値）",
+            "realCourseMin": 10,
+            "realLastKind": "arr",
+            "gameCourseSec": 440,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"岸和田","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"蛸地蔵","gameArrSec":55},
+              {"st":"貝塚","realDepMin":4,"gameArrSec":145,"gameDepSec":170},
+              {"st":"二色浜","gameArrSec":260},
+              {"st":"鶴原","gameArrSec":295},
+              {"st":"井原里","gameArrSec":335},
+              {"st":"泉佐野","realDepMin":10,"realArrMin":9,"gameArrSec":440}
+            ]
+          },
+          "times": [
+            {"st":"岸和田","dep":"07:37"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"07:41"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"07:46","dep":"07:47"}
+          ]
+        },
+        "southern": {
+          "section": "岸和田 → 泉佐野",
+          "train": "0501",
+          "type": "サザン1号",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "07:41",
+          "offsetFromStartMin": 11,
+          "inWindow": true,
+          "reason": "岸和田を発車して泉佐野に停車する特急サザンのうち、開始時刻 07:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": null,
+          "nextCandidate": "0503 08:10",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 7,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 9,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 370,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"岸和田","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"蛸地蔵","gameArrSec":65},
+              {"st":"貝塚","gameArrSec":140},
+              {"st":"二色浜","gameArrSec":205},
+              {"st":"鶴原","gameArrSec":240},
+              {"st":"井原里","gameArrSec":280},
+              {"st":"泉佐野","realDepMin":9,"gameArrSec":370}
+            ]
+          },
+          "times": [
+            {"st":"岸和田","dep":"07:41"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"07:50"}
+          ]
+        },
+        "limited": {
+          "section": "岸和田 → 泉佐野",
+          "train": "0201",
+          "type": "ラピートβ41号",
+          "from": "なんば",
+          "to": "関西空港",
+          "originDep": "10:58",
+          "offsetFromStartMin": 208,
+          "inWindow": false,
+          "reason": "開始時刻の前後60分に岸和田発の特急ラピートβが無い。終日で最も近い列車を参考に入れた。この時間帯の自列車には向かない",
+          "prevCandidate": null,
+          "nextCandidate": "0203 11:56",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 8,
+            "realArrEstNote": "到着時刻（Hub の値）",
+            "realCourseMin": 9,
+            "realLastKind": "arr",
+            "gameCourseSec": 375,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"岸和田","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"蛸地蔵","gameArrSec":60},
+              {"st":"貝塚","gameArrSec":130},
+              {"st":"二色浜","gameArrSec":195},
+              {"st":"鶴原","gameArrSec":230},
+              {"st":"井原里","gameArrSec":270},
+              {"st":"泉佐野","realDepMin":9,"realArrMin":8,"gameArrSec":375}
+            ]
+          },
+          "times": [
+            {"st":"岸和田","dep":"10:58"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"11:06","dep":"11:07"}
+          ]
+        }
+      },
+      "trains": [
+        {
+          "train": "1701",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"06:40"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"06:43"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"06:49"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6809",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"06:42"},
+            {"st":"蛸地蔵","dep":"06:44"},
+            {"st":"貝塚","dep":"06:46"},
+            {"st":"二色浜","dep":"06:49"},
+            {"st":"鶴原","dep":"06:50"},
+            {"st":"井原里","dep":"06:52"},
+            {"st":"泉佐野","dep":"06:55"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["泉大津","岸和田"],"by":"1701","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "0703",
+          "type": "ラピートα3号",
+          "service": null,
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","pass":"06:52"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"06:59","dep":"07:00"}
+          ]
+        },
+        {
+          "train": "2109",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"06:55"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"06:58"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"07:04","dep":"07:05"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6811",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"06:56"},
+            {"st":"蛸地蔵","dep":"06:58"},
+            {"st":"貝塚","dep":"07:01"},
+            {"st":"二色浜","dep":"07:03"},
+            {"st":"鶴原","dep":"07:05"},
+            {"st":"井原里","dep":"07:06"},
+            {"st":"泉佐野","dep":"07:09"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["春木","岸和田"],"by":"2109","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":6,"atCourseOrigin":true},
+            {"at":"岸和田","between":["泉大津","岸和田"],"by":"0703","byType":"ラピートα3号","kind":"通過待ち","extraMin":6,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "1703",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"07:05"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"07:08"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"07:15"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6813",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"07:09"},
+            {"st":"蛸地蔵","dep":"07:11"},
+            {"st":"貝塚","dep":"07:13"},
+            {"st":"二色浜","dep":"07:16"},
+            {"st":"鶴原","dep":"07:17"},
+            {"st":"井原里","dep":"07:19"},
+            {"st":"泉佐野","dep":"07:29"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"0705","byType":"ラピートα5号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "2111",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"07:15"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"07:22"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"07:28","dep":"07:30"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"貝塚","between":["天下茶屋","貝塚"],"by":"0705","byType":"ラピートα5号","kind":"通過待ち（推定。長い停車が見えない）","extraMin":0}
+          ]
+        },
+        {
+          "train": "6701",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "みさき公園",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"07:21"},
+            {"st":"蛸地蔵","dep":"07:23"},
+            {"st":"貝塚","dep":"07:25"},
+            {"st":"二色浜","dep":"07:28"},
+            {"st":"鶴原","dep":"07:29"},
+            {"st":"井原里","dep":"07:31"},
+            {"st":"泉佐野","dep":"07:40"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"1705","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7,"atCourseEnd":true},
+            {"at":"岸和田","between":["天下茶屋","貝塚"],"by":"0705","byType":"ラピートα5号","kind":"通過待ち","extraMin":3,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "0705",
+          "type": "ラピートα5号",
+          "service": null,
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "貝塚",
+          "courseTo": "泉佐野",
+          "coversCourse": false,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"貝塚","pass":"07:21"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"07:25","dep":"07:26"}
+          ]
+        },
+        {
+          "train": "1705",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"07:29"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"07:32"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"07:37"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6815",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"07:33"},
+            {"st":"蛸地蔵","dep":"07:34"},
+            {"st":"貝塚","dep":"07:37"},
+            {"st":"二色浜","dep":"07:39"},
+            {"st":"鶴原","dep":"07:41"},
+            {"st":"井原里","dep":"07:43"},
+            {"st":"泉佐野","dep":"07:52"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2113","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7,"atCourseEnd":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0501","byType":"サザン1号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "2113",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"07:37"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"07:41"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"07:46","dep":"07:47"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "0501",
+          "type": "サザン1号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"07:41"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"07:50"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6501",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"07:46"},
+            {"st":"蛸地蔵","dep":"07:47"},
+            {"st":"貝塚","dep":"07:50"},
+            {"st":"二色浜","dep":"07:52"},
+            {"st":"鶴原","dep":"07:54"},
+            {"st":"井原里","dep":"07:55"},
+            {"st":"泉佐野","dep":"08:04"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"1707","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7,"atCourseEnd":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0707","byType":"ラピートα7号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "1707",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"07:50"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"07:53"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"08:00"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "0707",
+          "type": "ラピートα7号",
+          "service": null,
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","pass":"07:55"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"08:01","dep":"08:02"}
+          ]
+        },
+        {
+          "train": "2115",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"07:57"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"08:00"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"08:05","dep":"08:06"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6817",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"07:58"},
+            {"st":"蛸地蔵","dep":"08:00"},
+            {"st":"貝塚","dep":"08:03"},
+            {"st":"二色浜","dep":"08:05"},
+            {"st":"鶴原","dep":"08:07"},
+            {"st":"井原里","dep":"08:08"},
+            {"st":"泉佐野","dep":"08:15"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["春木","岸和田"],"by":"2115","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":6,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2117","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5,"atCourseEnd":true},
+            {"at":"岸和田","between":["泉大津","岸和田"],"by":"0707","byType":"ラピートα7号","kind":"通過待ち","extraMin":6,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "2117",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"08:05"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"08:08"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"08:12","dep":"08:13"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "0503",
+          "type": "サザン3号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"08:10"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"08:20"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6819",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"08:12"},
+            {"st":"蛸地蔵","dep":"08:14"},
+            {"st":"貝塚","dep":"08:16"},
+            {"st":"二色浜","dep":"08:18"},
+            {"st":"鶴原","dep":"08:20"},
+            {"st":"井原里","dep":"08:22"},
+            {"st":"泉佐野","dep":"08:28"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2119","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseEnd":true},
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0503","byType":"サザン3号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "2119",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"08:18"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"08:22"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"08:26","dep":"08:27"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6503",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"08:19"},
+            {"st":"蛸地蔵","dep":"08:21"},
+            {"st":"貝塚","dep":"08:30"},
+            {"st":"二色浜","dep":"08:33"},
+            {"st":"鶴原","dep":"08:34"},
+            {"st":"井原里","dep":"08:36"},
+            {"st":"泉佐野","dep":"08:42"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"貝塚","between":["岸和田","貝塚"],"by":"1709","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7},
+            {"at":"岸和田","between":["春木","岸和田"],"by":"2119","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2121","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseEnd":true},
+            {"at":"貝塚","between":["岸和田","泉佐野"],"by":"0709","byType":"ラピートα9号","kind":"通過待ち","extraMin":7}
+          ]
+        },
+        {
+          "train": "0709",
+          "type": "ラピートα9号",
+          "service": null,
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","pass":"08:24"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"08:30","dep":"08:31"}
+          ]
+        },
+        {
+          "train": "1709",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"08:25"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"08:29"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"08:34"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0709","byType":"ラピートα9号","kind":"通過待ち（推定。長い停車が見えない）","extraMin":0,"atCourseOrigin":true}
+          ]
+        }
+      ]
+    },
+    "noon": {
+      "startClock": "10:00",
+      "window": ["09:00","11:00"],
+      "windowRule": "コースの最初の駅の時刻（発・着・通過）が 09:00 以上 11:00 未満の列車",
+      "pattern": {
+        "airport": {
+          "count": 9,
+          "perHour": 4.5,
+          "originTimes": ["09:00","09:15","09:29","09:42","09:56","10:09","10:21","10:35","10:50"],
+          "destinations": {"関西空港":9},
+          "stopPatterns": {"岸和田 貝塚 泉佐野":9}
+        },
+        "southern": {
+          "count": 4,
+          "perHour": 2,
+          "originTimes": ["09:06","09:32","10:08","10:42"],
+          "destinations": {"和歌山市":3,"和歌山港":1},
+          "stopPatterns": {"岸和田 泉佐野":4}
+        },
+        "local": {
+          "count": 11,
+          "perHour": 5.5,
+          "originTimes": ["09:07","09:10","09:18","09:35","09:37","09:45","10:01","10:12","10:27","10:43","10:53"],
+          "destinations": {"羽倉崎":3,"和歌山市":8},
+          "stopPatterns": {"岸和田 蛸地蔵 貝塚 二色浜 鶴原 井原里 泉佐野":11}
+        },
+        "ラピートα": {
+          "count": 2,
+          "perHour": 1,
+          "originTimes": ["09:55(通過)","10:25(通過)"],
+          "destinations": {"関西空港":2},
+          "stopPatterns": {"泉佐野":2}
+        },
+        "limited": {
+          "count": 1,
+          "perHour": 0.5,
+          "originTimes": ["10:58"],
+          "destinations": {"関西空港":1},
+          "stopPatterns": {"岸和田 泉佐野":1}
+        }
+      },
+      "waitSummary": {
+        "普通 が 岸和田 で 特急 に 緩急接続（コースの始発駅）": 3,
+        "普通 が 貝塚 で 急行系 に 緩急接続": 2,
+        "普通 が 泉佐野 で 特急 に 緩急接続（コースの終着駅）": 7,
+        "普通 が 泉佐野 で 急行系 に 緩急接続（コースの終着駅）": 7,
+        "普通 が 貝塚 で 特急 に 通過待ち": 1,
+        "普通 が 岸和田 で 急行系 に 緩急接続（コースの始発駅）": 1,
+        "普通 が 岸和田 で 特急 に 通過待ち（コースの始発駅）": 1
+      },
+      "representatives": {
+        "local": {
+          "section": "岸和田 → 泉佐野",
+          "train": "6833",
+          "type": "普通",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "10:01",
+          "offsetFromStartMin": 1,
+          "inWindow": true,
+          "reason": "岸和田を発車して泉佐野に停車する普通のうち、開始時刻 10:00 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "6831 09:45",
+          "nextCandidate": "6835 10:12",
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2135","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseEnd":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0509","byType":"サザン11号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseEnd":true}
+          ],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 10,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 19,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 720,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"岸和田","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"蛸地蔵","realDepMin":1,"gameArrSec":85,"gameDepSec":110},
+              {"st":"貝塚","realDepMin":4,"gameArrSec":220,"gameDepSec":245},
+              {"st":"二色浜","realDepMin":6,"gameArrSec":360,"gameDepSec":385},
+              {"st":"鶴原","realDepMin":8,"gameArrSec":460,"gameDepSec":485},
+              {"st":"井原里","realDepMin":9,"gameArrSec":570,"gameDepSec":595},
+              {"st":"泉佐野","realDepMin":19,"gameArrSec":720}
+            ]
+          },
+          "times": [
+            {"st":"岸和田","dep":"10:01"},
+            {"st":"蛸地蔵","dep":"10:02"},
+            {"st":"貝塚","dep":"10:05"},
+            {"st":"二色浜","dep":"10:07"},
+            {"st":"鶴原","dep":"10:09"},
+            {"st":"井原里","dep":"10:10"},
+            {"st":"泉佐野","dep":"10:20"}
+          ]
+        },
+        "express": {
+          "section": "岸和田 → 泉佐野",
+          "train": "1711",
+          "type": "急行",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "08:53",
+          "offsetFromStartMin": -67,
+          "inWindow": false,
+          "reason": "開始時刻の前後60分に岸和田発の急行が無い。終日で最も近い列車を参考に入れた。この時間帯の自列車には向かない",
+          "prevCandidate": "1709 08:25",
+          "nextCandidate": "1713 17:43",
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["堺","貝塚"],"by":"0711","byType":"ラピートα11号","kind":"通過待ち（推定。長い停車が見えない）","extraMin":0,"atCourseOrigin":true}
+          ],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 9,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 11,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 450,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"岸和田","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"蛸地蔵","gameArrSec":65},
+              {"st":"貝塚","realDepMin":4,"gameArrSec":160,"gameDepSec":185},
+              {"st":"二色浜","gameArrSec":285},
+              {"st":"鶴原","gameArrSec":320},
+              {"st":"井原里","gameArrSec":360},
+              {"st":"泉佐野","realDepMin":11,"gameArrSec":450}
+            ]
+          },
+          "times": [
+            {"st":"岸和田","dep":"08:53"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"08:57"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"09:04"}
+          ]
+        },
+        "airport": {
+          "section": "岸和田 → 泉佐野",
+          "train": "2133",
+          "type": "空港急行",
+          "from": "なんば",
+          "to": "関西空港",
+          "originDep": "09:56",
+          "offsetFromStartMin": -4,
+          "inWindow": true,
+          "reason": "岸和田を発車して泉佐野に停車する空港急行のうち、開始時刻 10:00 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "2131 09:42",
+          "nextCandidate": "2135 10:09",
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["泉大津","岸和田"],"by":"0715","byType":"ラピートα15号","kind":"通過待ち（推定。長い停車が見えない）","extraMin":0,"atCourseOrigin":true}
+          ],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 8,
+            "realArrEstNote": "到着時刻（Hub の値）",
+            "realCourseMin": 9,
+            "realLastKind": "arr",
+            "gameCourseSec": 440,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"岸和田","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"蛸地蔵","gameArrSec":55},
+              {"st":"貝塚","realDepMin":3,"gameArrSec":145,"gameDepSec":170},
+              {"st":"二色浜","gameArrSec":260},
+              {"st":"鶴原","gameArrSec":295},
+              {"st":"井原里","gameArrSec":335},
+              {"st":"泉佐野","realDepMin":9,"realArrMin":8,"gameArrSec":440}
+            ]
+          },
+          "times": [
+            {"st":"岸和田","dep":"09:56"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"09:59"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"10:04","dep":"10:05"}
+          ]
+        },
+        "southern": {
+          "section": "岸和田 → 泉佐野",
+          "train": "0509",
+          "type": "サザン11号",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "10:08",
+          "offsetFromStartMin": 8,
+          "inWindow": true,
+          "reason": "岸和田を発車して泉佐野に停車する特急サザンのうち、開始時刻 10:00 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "0601 09:32",
+          "nextCandidate": "0511 10:42",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 7,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 7,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 370,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"岸和田","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"蛸地蔵","gameArrSec":65},
+              {"st":"貝塚","gameArrSec":140},
+              {"st":"二色浜","gameArrSec":205},
+              {"st":"鶴原","gameArrSec":240},
+              {"st":"井原里","gameArrSec":280},
+              {"st":"泉佐野","realDepMin":7,"gameArrSec":370}
+            ]
+          },
+          "times": [
+            {"st":"岸和田","dep":"10:08"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"10:15"}
+          ]
+        },
+        "limited": {
+          "section": "岸和田 → 泉佐野",
+          "train": "0201",
+          "type": "ラピートβ41号",
+          "from": "なんば",
+          "to": "関西空港",
+          "originDep": "10:58",
+          "offsetFromStartMin": 58,
+          "inWindow": true,
+          "reason": "岸和田を発車して泉佐野に停車する特急ラピートβのうち、開始時刻 10:00 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": null,
+          "nextCandidate": "0203 11:56",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 8,
+            "realArrEstNote": "到着時刻（Hub の値）",
+            "realCourseMin": 9,
+            "realLastKind": "arr",
+            "gameCourseSec": 375,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"岸和田","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"蛸地蔵","gameArrSec":60},
+              {"st":"貝塚","gameArrSec":130},
+              {"st":"二色浜","gameArrSec":195},
+              {"st":"鶴原","gameArrSec":230},
+              {"st":"井原里","gameArrSec":270},
+              {"st":"泉佐野","realDepMin":9,"realArrMin":8,"gameArrSec":375}
+            ]
+          },
+          "times": [
+            {"st":"岸和田","dep":"10:58"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"11:06","dep":"11:07"}
+          ]
+        }
+      },
+      "trains": [
+        {
+          "train": "2125",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"09:00"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"09:03"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"09:09","dep":"09:11"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "0507",
+          "type": "サザン7号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"09:06"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"09:15"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6507",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"09:07"},
+            {"st":"蛸地蔵","dep":"09:09"},
+            {"st":"貝塚","dep":"09:11"},
+            {"st":"二色浜","dep":"09:14"},
+            {"st":"鶴原","dep":"09:15"},
+            {"st":"井原里","dep":"09:17"},
+            {"st":"泉佐野","dep":"09:20"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["泉大津","岸和田"],"by":"0507","byType":"サザン7号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "6827",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"09:10"},
+            {"st":"蛸地蔵","dep":"09:12"},
+            {"st":"貝塚","dep":"09:19"},
+            {"st":"二色浜","dep":"09:22"},
+            {"st":"鶴原","dep":"09:23"},
+            {"st":"井原里","dep":"09:25"},
+            {"st":"泉佐野","dep":"09:33"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"貝塚","between":["岸和田","貝塚"],"by":"2127","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5},
+            {"at":"泉佐野","between":["泉大津","泉佐野"],"by":"0713","byType":"ラピートα13号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":6,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "2127",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"09:15"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"09:18"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"09:23","dep":"09:24"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6509",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"09:18"},
+            {"st":"蛸地蔵","dep":"09:19"},
+            {"st":"貝塚","dep":"09:28"},
+            {"st":"二色浜","dep":"09:31"},
+            {"st":"鶴原","dep":"09:32"},
+            {"st":"井原里","dep":"09:34"},
+            {"st":"泉佐野","dep":"09:42"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2129","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":6,"atCourseEnd":true},
+            {"at":"貝塚","between":["泉大津","泉佐野"],"by":"0713","byType":"ラピートα13号","kind":"通過待ち","extraMin":7},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0601","byType":"サザン9号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":6,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "2129",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"09:29"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"09:32"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"09:38","dep":"09:39"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "0601",
+          "type": "サザン9号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"09:32"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"09:41"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6511",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"09:35"},
+            {"st":"蛸地蔵","dep":"09:36"},
+            {"st":"貝塚","dep":"09:39"},
+            {"st":"二色浜","dep":"09:41"},
+            {"st":"鶴原","dep":"09:43"},
+            {"st":"井原里","dep":"09:45"},
+            {"st":"泉佐野","dep":"09:47"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["春木","岸和田"],"by":"2129","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":9,"atCourseOrigin":true},
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0601","byType":"サザン9号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":9,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "6829",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"09:37"},
+            {"st":"蛸地蔵","dep":"09:39"},
+            {"st":"貝塚","dep":"09:46"},
+            {"st":"二色浜","dep":"09:49"},
+            {"st":"鶴原","dep":"09:50"},
+            {"st":"井原里","dep":"09:52"},
+            {"st":"泉佐野","dep":"09:55"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"貝塚","between":["岸和田","貝塚"],"by":"2131","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5}
+          ]
+        },
+        {
+          "train": "2131",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"09:42"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"09:45"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"09:49","dep":"09:50"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6831",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"09:45"},
+            {"st":"蛸地蔵","dep":"09:47"},
+            {"st":"貝塚","dep":"09:49"},
+            {"st":"二色浜","dep":"09:52"},
+            {"st":"鶴原","dep":"09:53"},
+            {"st":"井原里","dep":"09:55"},
+            {"st":"泉佐野","dep":"10:06"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2133","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":9,"atCourseEnd":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0715","byType":"ラピートα15号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":9,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "0715",
+          "type": "ラピートα15号",
+          "service": null,
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","pass":"09:55"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"10:01","dep":"10:02"}
+          ]
+        },
+        {
+          "train": "2133",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"09:56"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"09:59"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"10:04","dep":"10:05"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["泉大津","岸和田"],"by":"0715","byType":"ラピートα15号","kind":"通過待ち（推定。長い停車が見えない）","extraMin":0,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "6833",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"10:01"},
+            {"st":"蛸地蔵","dep":"10:02"},
+            {"st":"貝塚","dep":"10:05"},
+            {"st":"二色浜","dep":"10:07"},
+            {"st":"鶴原","dep":"10:09"},
+            {"st":"井原里","dep":"10:10"},
+            {"st":"泉佐野","dep":"10:20"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2135","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseEnd":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0509","byType":"サザン11号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "0509",
+          "type": "サザン11号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"10:08"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"10:15"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "2135",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"10:09"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"10:12"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"10:18","dep":"10:19"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0509","byType":"サザン11号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":0,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "6835",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"10:12"},
+            {"st":"蛸地蔵","dep":"10:13"},
+            {"st":"貝塚","dep":"10:16"},
+            {"st":"二色浜","dep":"10:18"},
+            {"st":"鶴原","dep":"10:20"},
+            {"st":"井原里","dep":"10:22"},
+            {"st":"泉佐野","dep":"10:34"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2137","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":10,"atCourseEnd":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0717","byType":"ラピートα17号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":10,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "2137",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"10:21"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"10:24"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"10:29","dep":"10:30"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "0717",
+          "type": "ラピートα17号",
+          "service": null,
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": false,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","pass":"10:25"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"10:32","dep":"10:33"}
+          ]
+        },
+        {
+          "train": "6837",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"10:27"},
+            {"st":"蛸地蔵","dep":"10:29"},
+            {"st":"貝塚","dep":"10:31"},
+            {"st":"二色浜","dep":"10:34"},
+            {"st":"鶴原","dep":"10:35"},
+            {"st":"井原里","dep":"10:37"},
+            {"st":"泉佐野","dep":"10:51"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2139","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":12,"atCourseEnd":true},
+            {"at":"岸和田","between":["高石","岸和田"],"by":"0717","byType":"ラピートα17号","kind":"通過待ち","extraMin":4,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0511","byType":"サザン13号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":12,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "2139",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"10:35"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"10:38"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"10:42","dep":"10:43"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "0511",
+          "type": "サザン13号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"10:42"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"10:50"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6839",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"10:43"},
+            {"st":"蛸地蔵","dep":"10:45"},
+            {"st":"貝塚","dep":"10:47"},
+            {"st":"二色浜","dep":"10:50"},
+            {"st":"鶴原","dep":"10:51"},
+            {"st":"井原里","dep":"10:53"},
+            {"st":"泉佐野","dep":"11:01"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2141","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":6,"atCourseEnd":true},
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0511","byType":"サザン13号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":6,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "2141",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"10:50"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"10:53"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"10:58","dep":"10:59"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6841",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"10:53"},
+            {"st":"蛸地蔵","dep":"10:54"},
+            {"st":"貝塚","dep":"10:57"},
+            {"st":"二色浜","dep":"10:59"},
+            {"st":"鶴原","dep":"11:01"},
+            {"st":"井原里","dep":"11:03"},
+            {"st":"泉佐野","dep":"11:14"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2143","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":9,"atCourseEnd":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0201","byType":"ラピートβ41号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":9,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "0201",
+          "type": "ラピートβ41号",
+          "service": "limited",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"10:58"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"11:06","dep":"11:07"}
+          ],
+          "stopsVsGame": "same"
+        }
+      ]
+    },
+    "evening": {
+      "startClock": "17:30",
+      "window": ["16:30","18:30"],
+      "windowRule": "コースの最初の駅の時刻（発・着・通過）が 16:30 以上 18:30 未満の列車",
+      "pattern": {
+        "airport": {
+          "count": 6,
+          "perHour": 3,
+          "originTimes": ["16:31","16:52","17:04","17:23","17:35","18:05"],
+          "destinations": {"関西空港":6},
+          "stopPatterns": {"岸和田 貝塚 泉佐野":6}
+        },
+        "southern": {
+          "count": 4,
+          "perHour": 2,
+          "originTimes": ["16:35","17:07","17:34","18:03"],
+          "destinations": {"和歌山市":3,"和歌山港":1},
+          "stopPatterns": {"岸和田 泉佐野":4}
+        },
+        "local": {
+          "count": 9,
+          "perHour": 4.5,
+          "originTimes": ["16:40","16:56","17:12","17:26","17:44","17:56","18:07","18:15","18:24"],
+          "destinations": {"和歌山市":4,"みさき公園":1,"関西空港":2,"羽倉崎":1,"樽井":1},
+          "stopPatterns": {"岸和田 蛸地蔵 貝塚 二色浜 鶴原 井原里 泉佐野":9}
+        },
+        "limited": {
+          "count": 4,
+          "perHour": 2,
+          "originTimes": ["16:51","17:21","17:51","18:23"],
+          "destinations": {"関西空港":4},
+          "stopPatterns": {"岸和田 泉佐野":4}
+        },
+        "express": {
+          "count": 3,
+          "perHour": 1.5,
+          "originTimes": ["17:43","18:11","18:27"],
+          "destinations": {"和歌山市":3},
+          "stopPatterns": {"岸和田 貝塚 泉佐野":3}
+        },
+        "区急": {
+          "count": 2,
+          "perHour": 1,
+          "originTimes": ["17:54","18:19"],
+          "destinations": {"和歌山市":2},
+          "stopPatterns": {"岸和田 貝塚 泉佐野":2}
+        }
+      },
+      "waitSummary": {
+        "普通 が 泉佐野 で 特急 に 緩急接続（コースの終着駅）": 7,
+        "普通 が 泉佐野 で 急行系 に 緩急接続（コースの終着駅）": 7,
+        "普通 が 岸和田 で 急行系 に 緩急接続（コースの始発駅）": 1,
+        "普通 が 泉佐野 で 区急 に 緩急接続（コースの終着駅）": 1,
+        "普通 が 岸和田 で 区急 に 緩急接続（コースの始発駅）": 1,
+        "普通 が 岸和田 で 特急 に 緩急接続（コースの始発駅）": 2,
+        "普通 が 貝塚 で 急行系 に 緩急接続": 2,
+        "普通 が 貝塚 で 区急 に 緩急接続": 1,
+        "普通 が 貝塚 で 特急 に 通過待ち": 1,
+        "区急 が 泉佐野 で 特急 に 緩急接続（コースの終着駅）": 1
+      },
+      "representatives": {
+        "local": {
+          "section": "岸和田 → 泉佐野",
+          "train": "6891",
+          "type": "普通",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "17:26",
+          "offsetFromStartMin": -4,
+          "inWindow": true,
+          "reason": "岸和田を発車して泉佐野に停車する普通のうち、開始時刻 17:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "6703 17:12",
+          "nextCandidate": "7001 17:44",
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2195","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseEnd":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0539","byType":"サザン41号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseEnd":true}
+          ],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 11,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 20,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 720,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"岸和田","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"蛸地蔵","realDepMin":2,"gameArrSec":85,"gameDepSec":110},
+              {"st":"貝塚","realDepMin":4,"gameArrSec":220,"gameDepSec":245},
+              {"st":"二色浜","realDepMin":7,"gameArrSec":360,"gameDepSec":385},
+              {"st":"鶴原","realDepMin":8,"gameArrSec":460,"gameDepSec":485},
+              {"st":"井原里","realDepMin":10,"gameArrSec":570,"gameDepSec":595},
+              {"st":"泉佐野","realDepMin":20,"gameArrSec":720}
+            ]
+          },
+          "times": [
+            {"st":"岸和田","dep":"17:26"},
+            {"st":"蛸地蔵","dep":"17:28"},
+            {"st":"貝塚","dep":"17:30"},
+            {"st":"二色浜","dep":"17:33"},
+            {"st":"鶴原","dep":"17:34"},
+            {"st":"井原里","dep":"17:36"},
+            {"st":"泉佐野","dep":"17:46"}
+          ]
+        },
+        "express": {
+          "section": "岸和田 → 泉佐野",
+          "train": "1713",
+          "type": "急行",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "17:43",
+          "offsetFromStartMin": 13,
+          "inWindow": true,
+          "reason": "岸和田を発車して泉佐野に停車する急行のうち、開始時刻 17:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "1711 08:53",
+          "nextCandidate": "1715 18:11",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 8,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 8,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 450,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"岸和田","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"蛸地蔵","gameArrSec":65},
+              {"st":"貝塚","realDepMin":3,"gameArrSec":160,"gameDepSec":185},
+              {"st":"二色浜","gameArrSec":285},
+              {"st":"鶴原","gameArrSec":320},
+              {"st":"井原里","gameArrSec":360},
+              {"st":"泉佐野","realDepMin":8,"gameArrSec":450}
+            ]
+          },
+          "times": [
+            {"st":"岸和田","dep":"17:43"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"17:46"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"17:51"}
+          ]
+        },
+        "airport": {
+          "section": "岸和田 → 泉佐野",
+          "train": "2195",
+          "type": "空港急行",
+          "from": "なんば",
+          "to": "関西空港",
+          "originDep": "17:35",
+          "offsetFromStartMin": 5,
+          "inWindow": true,
+          "reason": "岸和田を発車して泉佐野に停車する空港急行のうち、開始時刻 17:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "2193 17:23",
+          "nextCandidate": "2197 18:05",
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0539","byType":"サザン41号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":0,"atCourseOrigin":true}
+          ],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 8,
+            "realArrEstNote": "到着時刻（Hub の値）",
+            "realCourseMin": 9,
+            "realLastKind": "arr",
+            "gameCourseSec": 440,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"岸和田","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"蛸地蔵","gameArrSec":55},
+              {"st":"貝塚","realDepMin":4,"gameArrSec":145,"gameDepSec":170},
+              {"st":"二色浜","gameArrSec":260},
+              {"st":"鶴原","gameArrSec":295},
+              {"st":"井原里","gameArrSec":335},
+              {"st":"泉佐野","realDepMin":9,"realArrMin":8,"gameArrSec":440}
+            ]
+          },
+          "times": [
+            {"st":"岸和田","dep":"17:35"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"17:39"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"17:43","dep":"17:44"}
+          ]
+        },
+        "southern": {
+          "section": "岸和田 → 泉佐野",
+          "train": "0539",
+          "type": "サザン41号",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "17:34",
+          "offsetFromStartMin": 4,
+          "inWindow": true,
+          "reason": "岸和田を発車して泉佐野に停車する特急サザンのうち、開始時刻 17:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "0537 17:07",
+          "nextCandidate": "0603 18:03",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 7,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 7,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 370,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"岸和田","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"蛸地蔵","gameArrSec":65},
+              {"st":"貝塚","gameArrSec":140},
+              {"st":"二色浜","gameArrSec":205},
+              {"st":"鶴原","gameArrSec":240},
+              {"st":"井原里","gameArrSec":280},
+              {"st":"泉佐野","realDepMin":7,"gameArrSec":370}
+            ]
+          },
+          "times": [
+            {"st":"岸和田","dep":"17:34"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"17:41"}
+          ]
+        },
+        "limited": {
+          "section": "岸和田 → 泉佐野",
+          "train": "0215",
+          "type": "ラピートβ55号",
+          "from": "なんば",
+          "to": "関西空港",
+          "originDep": "17:21",
+          "offsetFromStartMin": -9,
+          "inWindow": true,
+          "reason": "岸和田を発車して泉佐野に停車する特急ラピートβのうち、開始時刻 17:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "0213 16:51",
+          "nextCandidate": "0217 17:51",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 7,
+            "realArrEstNote": "到着時刻（Hub の値）",
+            "realCourseMin": 8,
+            "realLastKind": "arr",
+            "gameCourseSec": 375,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"岸和田","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"蛸地蔵","gameArrSec":60},
+              {"st":"貝塚","gameArrSec":130},
+              {"st":"二色浜","gameArrSec":195},
+              {"st":"鶴原","gameArrSec":230},
+              {"st":"井原里","gameArrSec":270},
+              {"st":"泉佐野","realDepMin":8,"realArrMin":7,"gameArrSec":375}
+            ]
+          },
+          "times": [
+            {"st":"岸和田","dep":"17:21"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"17:28","dep":"17:29"}
+          ]
+        }
+      },
+      "trains": [
+        {
+          "train": "2187",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"16:31"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"16:34"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"16:39","dep":"16:40"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "0535",
+          "type": "サザン37号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"16:35"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"16:43"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6887",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"16:40"},
+            {"st":"蛸地蔵","dep":"16:41"},
+            {"st":"貝塚","dep":"16:44"},
+            {"st":"二色浜","dep":"16:46"},
+            {"st":"鶴原","dep":"16:48"},
+            {"st":"井原里","dep":"16:50"},
+            {"st":"泉佐野","dep":"17:02"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0213","byType":"ラピートβ53号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":10,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "0213",
+          "type": "ラピートβ53号",
+          "service": "limited",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"16:51"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"16:58","dep":"16:59"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "2189",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"16:52"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"16:56"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"17:01","dep":"17:04"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["泉大津","岸和田"],"by":"0213","byType":"ラピートβ53号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":0,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "6889",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"16:56"},
+            {"st":"蛸地蔵","dep":"16:58"},
+            {"st":"貝塚","dep":"17:00"},
+            {"st":"二色浜","dep":"17:03"},
+            {"st":"鶴原","dep":"17:04"},
+            {"st":"井原里","dep":"17:06"},
+            {"st":"泉佐野","dep":"17:16"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2191","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseEnd":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0537","byType":"サザン39号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "2191",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"17:04"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"17:07"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"17:11","dep":"17:12"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "0537",
+          "type": "サザン39号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"17:07"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"17:15"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6703",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "みさき公園",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"17:12"},
+            {"st":"蛸地蔵","dep":"17:13"},
+            {"st":"貝塚","dep":"17:16"},
+            {"st":"二色浜","dep":"17:18"},
+            {"st":"鶴原","dep":"17:20"},
+            {"st":"井原里","dep":"17:21"},
+            {"st":"泉佐野","dep":"17:35"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2193","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":12,"atCourseEnd":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0215","byType":"ラピートβ55号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":12,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "0215",
+          "type": "ラピートβ55号",
+          "service": "limited",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"17:21"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"17:28","dep":"17:29"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "2193",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"17:23"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"17:26"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"17:32","dep":"17:33"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0215","byType":"ラピートβ55号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":0,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "6891",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"17:26"},
+            {"st":"蛸地蔵","dep":"17:28"},
+            {"st":"貝塚","dep":"17:30"},
+            {"st":"二色浜","dep":"17:33"},
+            {"st":"鶴原","dep":"17:34"},
+            {"st":"井原里","dep":"17:36"},
+            {"st":"泉佐野","dep":"17:46"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2195","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseEnd":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0539","byType":"サザン41号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "0539",
+          "type": "サザン41号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"17:34"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"17:41"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "2195",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"17:35"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"17:39"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"17:43","dep":"17:44"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0539","byType":"サザン41号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":0,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "1713",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"17:43"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"17:46"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"17:51"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "7001",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"17:44"},
+            {"st":"蛸地蔵","dep":"17:46"},
+            {"st":"貝塚","dep":"17:48"},
+            {"st":"二色浜","dep":"17:51"},
+            {"st":"鶴原","dep":"17:52"},
+            {"st":"井原里","dep":"17:54"},
+            {"st":"泉佐野","arr":"17:56","dep":"18:04"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["泉大津","岸和田"],"by":"1713","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":6,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"3801","byType":"区急","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseEnd":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0217","byType":"ラピートβ57号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "0217",
+          "type": "ラピートβ57号",
+          "service": "limited",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"17:51"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"17:58","dep":"17:59"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "3801",
+          "type": "区急",
+          "service": null,
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"17:54"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"17:57"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"18:03"}
+          ]
+        },
+        {
+          "train": "6893",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"17:56"},
+            {"st":"蛸地蔵","dep":"17:57"},
+            {"st":"貝塚","dep":"18:00"},
+            {"st":"二色浜","dep":"18:02"},
+            {"st":"鶴原","dep":"18:04"},
+            {"st":"井原里","dep":"18:06"},
+            {"st":"泉佐野","dep":"18:20"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"1715","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":12,"atCourseEnd":true},
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2197","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":12,"atCourseEnd":true},
+            {"at":"岸和田","between":["春木","岸和田"],"by":"3801","byType":"区急","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7,"atCourseOrigin":true},
+            {"at":"岸和田","between":["泉大津","岸和田"],"by":"0217","byType":"ラピートβ57号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":7,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0603","byType":"サザン43号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":12,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "0603",
+          "type": "サザン43号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"18:03"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"18:11"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "2197",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"18:05"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"18:08"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"18:13","dep":"18:14"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0603","byType":"サザン43号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":0,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "6513",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"18:07"},
+            {"st":"蛸地蔵","dep":"18:09"},
+            {"st":"貝塚","dep":"18:15"},
+            {"st":"二色浜","dep":"18:18"},
+            {"st":"鶴原","dep":"18:19"},
+            {"st":"井原里","dep":"18:21"},
+            {"st":"泉佐野","dep":"18:24"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"貝塚","between":["岸和田","貝塚"],"by":"1715","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4}
+          ]
+        },
+        {
+          "train": "1715",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"18:11"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"18:14"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"18:19"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "7003",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"18:15"},
+            {"st":"蛸地蔵","dep":"18:17"},
+            {"st":"貝塚","dep":"18:27"},
+            {"st":"二色浜","dep":"18:29"},
+            {"st":"鶴原","dep":"18:31"},
+            {"st":"井原里","dep":"18:33"},
+            {"st":"泉佐野","arr":"18:35","dep":"18:38"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"1717","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":3,"atCourseEnd":true},
+            {"at":"貝塚","between":["岸和田","貝塚"],"by":"3803","byType":"区急","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8},
+            {"at":"貝塚","between":["岸和田","泉佐野"],"by":"0219","byType":"ラピートβ59号","kind":"通過待ち","extraMin":8}
+          ]
+        },
+        {
+          "train": "3803",
+          "type": "区急",
+          "service": null,
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"18:19"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"18:22"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"18:32"}
+          ],
+          "overtakenBy": [
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0219","byType":"ラピートβ59号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":0,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "0219",
+          "type": "ラピートβ59号",
+          "service": "limited",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"18:23"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"18:30","dep":"18:31"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6601",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "樽井",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"18:24"},
+            {"st":"蛸地蔵","dep":"18:26"},
+            {"st":"貝塚","dep":"18:32"},
+            {"st":"二色浜","dep":"18:34"},
+            {"st":"鶴原","dep":"18:36"},
+            {"st":"井原里","dep":"18:38"},
+            {"st":"泉佐野","dep":"18:49"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"貝塚","between":["岸和田","貝塚"],"by":"1717","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4},
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2199","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":9,"atCourseEnd":true},
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0219","byType":"ラピートβ59号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":3,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0541","byType":"サザン45号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":9,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "1717",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"18:27"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"18:30"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"18:37"}
+          ],
+          "stopsVsGame": "same"
+        }
+      ]
+    },
+    "night": {
+      "startClock": "21:30",
+      "window": ["20:30","22:30"],
+      "windowRule": "コースの最初の駅の時刻（発・着・通過）が 20:30 以上 22:30 未満の列車",
+      "pattern": {
+        "区急": {
+          "count": 3,
+          "perHour": 1.5,
+          "originTimes": ["20:30","22:16","22:28"],
+          "destinations": {"和歌山市":2,"羽倉崎":1},
+          "stopPatterns": {"岸和田 貝塚 泉佐野":3}
+        },
+        "southern": {
+          "count": 4,
+          "perHour": 2,
+          "originTimes": ["20:35","21:05","21:33","22:07"],
+          "destinations": {"和歌山港":1,"和歌山市":3},
+          "stopPatterns": {"岸和田 泉佐野":4}
+        },
+        "local": {
+          "count": 12,
+          "perHour": 6,
+          "originTimes": ["20:36","20:48","20:55","21:06","21:12","21:23","21:34","21:43","21:54","22:01","22:10","22:23"],
+          "destinations": {"和歌山市":5,"羽倉崎":3,"みさき公園":3,"関西空港":1},
+          "stopPatterns": {"岸和田 蛸地蔵 貝塚 二色浜 鶴原 井原里 泉佐野":12}
+        },
+        "airport": {
+          "count": 6,
+          "perHour": 3,
+          "originTimes": ["20:40","20:59","21:09","21:28","21:40","22:00"],
+          "destinations": {"関西空港":6},
+          "stopPatterns": {"岸和田 貝塚 泉佐野":6}
+        },
+        "express": {
+          "count": 3,
+          "perHour": 1.5,
+          "originTimes": ["20:47","21:16","21:47"],
+          "destinations": {"和歌山市":3},
+          "stopPatterns": {"岸和田 貝塚 泉佐野":3}
+        },
+        "limited": {
+          "count": 4,
+          "perHour": 2,
+          "originTimes": ["20:53","21:22","21:53","22:22"],
+          "destinations": {"関西空港":4},
+          "stopPatterns": {"岸和田 泉佐野":4}
+        }
+      },
+      "waitSummary": {
+        "区急 が 泉佐野 で 急行系 に 緩急接続（コースの終着駅）": 1,
+        "区急 が 貝塚 で 特急 に 不明": 1,
+        "普通 が 泉佐野 で 急行系 に 緩急接続（コースの終着駅）": 7,
+        "普通 が 貝塚 で 急行系 に 緩急接続": 4,
+        "普通 が 岸和田 で 特急 に 緩急接続（コースの始発駅）": 8,
+        "普通 が 泉佐野 で 特急 に 緩急接続（コースの終着駅）": 7,
+        "普通 が 岸和田 で 急行系 に 緩急接続（コースの始発駅）": 2,
+        "普通 が 貝塚 で 特急 に 通過待ち": 2,
+        "普通 が 泉佐野 で 区急 に 緩急接続（コースの終着駅）": 1,
+        "区急 が 泉佐野 で 特急 に 緩急接続（コースの終着駅）": 1
+      },
+      "representatives": {
+        "local": {
+          "section": "岸和田 → 泉佐野",
+          "train": "6711",
+          "type": "普通",
+          "from": "なんば",
+          "to": "みさき公園",
+          "originDep": "21:34",
+          "offsetFromStartMin": 4,
+          "inWindow": true,
+          "reason": "岸和田を発車して泉佐野に停車する普通のうち、開始時刻 21:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "6909 21:23",
+          "nextCandidate": "6911 21:43",
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2219","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseEnd":true},
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0551","byType":"サザン57号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":3,"atCourseOrigin":true}
+          ],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 11,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 16,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 720,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"岸和田","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"蛸地蔵","realDepMin":2,"gameArrSec":85,"gameDepSec":110},
+              {"st":"貝塚","realDepMin":4,"gameArrSec":220,"gameDepSec":245},
+              {"st":"二色浜","realDepMin":7,"gameArrSec":360,"gameDepSec":385},
+              {"st":"鶴原","realDepMin":8,"gameArrSec":460,"gameDepSec":485},
+              {"st":"井原里","realDepMin":10,"gameArrSec":570,"gameDepSec":595},
+              {"st":"泉佐野","realDepMin":16,"gameArrSec":720}
+            ]
+          },
+          "times": [
+            {"st":"岸和田","dep":"21:34"},
+            {"st":"蛸地蔵","dep":"21:36"},
+            {"st":"貝塚","dep":"21:38"},
+            {"st":"二色浜","dep":"21:41"},
+            {"st":"鶴原","dep":"21:42"},
+            {"st":"井原里","dep":"21:44"},
+            {"st":"泉佐野","dep":"21:50"}
+          ]
+        },
+        "express": {
+          "section": "岸和田 → 泉佐野",
+          "train": "1727",
+          "type": "急行",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "21:16",
+          "offsetFromStartMin": -14,
+          "inWindow": true,
+          "reason": "岸和田を発車して泉佐野に停車する急行のうち、開始時刻 21:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "1725 20:47",
+          "nextCandidate": "1729 21:47",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 8,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 9,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 450,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"岸和田","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"蛸地蔵","gameArrSec":65},
+              {"st":"貝塚","realDepMin":3,"gameArrSec":160,"gameDepSec":185},
+              {"st":"二色浜","gameArrSec":285},
+              {"st":"鶴原","gameArrSec":320},
+              {"st":"井原里","gameArrSec":360},
+              {"st":"泉佐野","realDepMin":9,"gameArrSec":450}
+            ]
+          },
+          "times": [
+            {"st":"岸和田","dep":"21:16"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"21:19"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"21:25"}
+          ]
+        },
+        "airport": {
+          "section": "岸和田 → 泉佐野",
+          "train": "2217",
+          "type": "空港急行",
+          "from": "なんば",
+          "to": "関西空港",
+          "originDep": "21:28",
+          "offsetFromStartMin": -2,
+          "inWindow": true,
+          "reason": "岸和田を発車して泉佐野に停車する空港急行のうち、開始時刻 21:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "2215 21:09",
+          "nextCandidate": "2219 21:40",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 9,
+            "realArrEstNote": "到着時刻（Hub の値）",
+            "realCourseMin": 10,
+            "realLastKind": "arr",
+            "gameCourseSec": 440,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"岸和田","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"蛸地蔵","gameArrSec":55},
+              {"st":"貝塚","realDepMin":4,"gameArrSec":145,"gameDepSec":170},
+              {"st":"二色浜","gameArrSec":260},
+              {"st":"鶴原","gameArrSec":295},
+              {"st":"井原里","gameArrSec":335},
+              {"st":"泉佐野","realDepMin":10,"realArrMin":9,"gameArrSec":440}
+            ]
+          },
+          "times": [
+            {"st":"岸和田","dep":"21:28"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"21:32"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"21:37","dep":"21:38"}
+          ]
+        },
+        "southern": {
+          "section": "岸和田 → 泉佐野",
+          "train": "0551",
+          "type": "サザン57号",
+          "from": "なんば",
+          "to": "和歌山市",
+          "originDep": "21:33",
+          "offsetFromStartMin": 3,
+          "inWindow": true,
+          "reason": "岸和田を発車して泉佐野に停車する特急サザンのうち、開始時刻 21:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "0549 21:05",
+          "nextCandidate": "0553 22:07",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 7,
+            "realArrEstNote": "推定: 終着駅の1つ前の停車駅の発車 + その区間のこの種別の終日最短（発車〜次の駅の発車、分）。終着駅での停車・待ちは含まない",
+            "realCourseMin": 8,
+            "realLastKind": "dep（到着時刻は無い。停車時間を含む）",
+            "gameCourseSec": 370,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"岸和田","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"蛸地蔵","gameArrSec":65},
+              {"st":"貝塚","gameArrSec":140},
+              {"st":"二色浜","gameArrSec":205},
+              {"st":"鶴原","gameArrSec":240},
+              {"st":"井原里","gameArrSec":280},
+              {"st":"泉佐野","realDepMin":8,"gameArrSec":370}
+            ]
+          },
+          "times": [
+            {"st":"岸和田","dep":"21:33"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"21:41"}
+          ]
+        },
+        "limited": {
+          "section": "岸和田 → 泉佐野",
+          "train": "0231",
+          "type": "ラピートβ71号",
+          "from": "なんば",
+          "to": "関西空港",
+          "originDep": "21:22",
+          "offsetFromStartMin": -8,
+          "inWindow": true,
+          "reason": "岸和田を発車して泉佐野に停車する特急ラピートβのうち、開始時刻 21:30 に最も近い（同じ差なら後の列車）",
+          "prevCandidate": "0229 20:53",
+          "nextCandidate": "0233 21:53",
+          "stopsVsGame": "same",
+          "overtakenBy": [],
+          "gameWaits": [],
+          "gameRunPasses": [],
+          "vsGame": {
+            "realArrEstMin": 8,
+            "realArrEstNote": "到着時刻（Hub の値）",
+            "realCourseMin": 9,
+            "realLastKind": "arr",
+            "gameCourseSec": 375,
+            "gameOriginDepSec": 0,
+            "perStation": [
+              {"st":"岸和田","realDepMin":0,"gameArrSec":0,"gameDepSec":0},
+              {"st":"蛸地蔵","gameArrSec":60},
+              {"st":"貝塚","gameArrSec":130},
+              {"st":"二色浜","gameArrSec":195},
+              {"st":"鶴原","gameArrSec":230},
+              {"st":"井原里","gameArrSec":270},
+              {"st":"泉佐野","realDepMin":9,"realArrMin":8,"gameArrSec":375}
+            ]
+          },
+          "times": [
+            {"st":"岸和田","dep":"21:22"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"21:30","dep":"21:31"}
+          ]
+        }
+      },
+      "trains": [
+        {
+          "train": "3807",
+          "type": "区急",
+          "service": null,
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"20:30"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"20:33"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"20:50"}
+          ],
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2211","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":0,"atCourseEnd":true},
+            {"at":"貝塚","between":["岸和田","泉佐野"],"by":"0605","byType":"サザン53号","kind":"不明（最も近い駅 貝塚。時刻が合わない）","extraMin":null}
+          ]
+        },
+        {
+          "train": "0605",
+          "type": "サザン53号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"20:35"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"20:43"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6905",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"20:36"},
+            {"st":"蛸地蔵","dep":"20:38"},
+            {"st":"貝塚","dep":"20:44"},
+            {"st":"二色浜","dep":"20:47"},
+            {"st":"鶴原","dep":"20:48"},
+            {"st":"井原里","dep":"20:50"},
+            {"st":"泉佐野","dep":"21:02"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"1725","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":10,"atCourseEnd":true},
+            {"at":"貝塚","between":["岸和田","貝塚"],"by":"2211","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4},
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0605","byType":"サザン53号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":3,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0229","byType":"ラピートβ69号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":10,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "2211",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"20:40"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"20:43"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"20:47","dep":"20:48"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "1725",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"20:47"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"20:50"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"20:55"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6519",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"20:48"},
+            {"st":"蛸地蔵","dep":"20:50"},
+            {"st":"貝塚","dep":"20:56"},
+            {"st":"二色浜","dep":"20:59"},
+            {"st":"鶴原","dep":"21:01"},
+            {"st":"井原里","dep":"21:03"},
+            {"st":"泉佐野","dep":"21:09"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["泉大津","岸和田"],"by":"1725","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":6,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2213","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseEnd":true},
+            {"at":"貝塚","between":["岸和田","泉佐野"],"by":"0229","byType":"ラピートβ69号","kind":"通過待ち","extraMin":4}
+          ]
+        },
+        {
+          "train": "0229",
+          "type": "ラピートβ69号",
+          "service": "limited",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"20:53"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"21:00","dep":"21:01"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6907",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"20:55"},
+            {"st":"蛸地蔵","dep":"20:57"},
+            {"st":"貝塚","dep":"21:03"},
+            {"st":"二色浜","dep":"21:06"},
+            {"st":"鶴原","dep":"21:07"},
+            {"st":"井原里","dep":"21:09"},
+            {"st":"泉佐野","dep":"21:19"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"貝塚","between":["岸和田","貝塚"],"by":"2213","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4},
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0229","byType":"ラピートβ69号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0549","byType":"サザン55号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "2213",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"20:59"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"21:02"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"21:07","dep":"21:08"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "0549",
+          "type": "サザン55号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"21:05"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"21:14"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6521",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"21:06"},
+            {"st":"蛸地蔵","dep":"21:08"},
+            {"st":"貝塚","dep":"21:14"},
+            {"st":"二色浜","dep":"21:17"},
+            {"st":"鶴原","dep":"21:18"},
+            {"st":"井原里","dep":"21:20"},
+            {"st":"泉佐野","dep":"21:26"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"1727","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseEnd":true},
+            {"at":"貝塚","between":["岸和田","貝塚"],"by":"2215","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4},
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0549","byType":"サザン55号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "2215",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"21:09"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"21:13"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"21:17","dep":"21:20"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6709",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "みさき公園",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"21:12"},
+            {"st":"蛸地蔵","dep":"21:14"},
+            {"st":"貝塚","dep":"21:20"},
+            {"st":"二色浜","dep":"21:23"},
+            {"st":"鶴原","dep":"21:24"},
+            {"st":"井原里","dep":"21:26"},
+            {"st":"泉佐野","dep":"21:33"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"貝塚","between":["岸和田","貝塚"],"by":"1727","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0231","byType":"ラピートβ71号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "1727",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"21:16"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"21:19"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"21:25"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "0231",
+          "type": "ラピートβ71号",
+          "service": "limited",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"21:22"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"21:30","dep":"21:31"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6909",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"21:23"},
+            {"st":"蛸地蔵","dep":"21:25"},
+            {"st":"貝塚","dep":"21:28"},
+            {"st":"二色浜","dep":"21:30"},
+            {"st":"鶴原","dep":"21:32"},
+            {"st":"井原里","dep":"21:33"},
+            {"st":"泉佐野","dep":"21:43"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2217","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseEnd":true},
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0231","byType":"ラピートβ71号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0551","byType":"サザン57号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "2217",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"21:28"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"21:32"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"21:37","dep":"21:38"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "0551",
+          "type": "サザン57号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"21:33"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"21:41"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6711",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "みさき公園",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"21:34"},
+            {"st":"蛸地蔵","dep":"21:36"},
+            {"st":"貝塚","dep":"21:38"},
+            {"st":"二色浜","dep":"21:41"},
+            {"st":"鶴原","dep":"21:42"},
+            {"st":"井原里","dep":"21:44"},
+            {"st":"泉佐野","dep":"21:50"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2219","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseEnd":true},
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0551","byType":"サザン57号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":3,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "2219",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"21:40"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"21:43"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"21:47","dep":"21:48"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6911",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"21:43"},
+            {"st":"蛸地蔵","dep":"21:44"},
+            {"st":"貝塚","dep":"21:47"},
+            {"st":"二色浜","dep":"21:49"},
+            {"st":"鶴原","dep":"21:51"},
+            {"st":"井原里","dep":"21:52"},
+            {"st":"泉佐野","dep":"22:03"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"1729","byType":"急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":9,"atCourseEnd":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0233","byType":"ラピートβ73号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":9,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "1729",
+          "type": "急行",
+          "service": "express",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"21:47"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"21:50"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"21:57"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "0233",
+          "type": "ラピートβ73号",
+          "service": "limited",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"21:53"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"22:00","dep":"22:01"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6913",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"21:54"},
+            {"st":"蛸地蔵","dep":"21:56"},
+            {"st":"貝塚","dep":"21:58"},
+            {"st":"二色浜","dep":"22:01"},
+            {"st":"鶴原","dep":"22:02"},
+            {"st":"井原里","dep":"22:04"},
+            {"st":"泉佐野","dep":"22:15"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"2221","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":9,"atCourseEnd":true},
+            {"at":"岸和田","between":["泉大津","岸和田"],"by":"0233","byType":"ラピートβ73号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0553","byType":"サザン59号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":9,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "2221",
+          "type": "空港急行",
+          "service": "airport",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"22:00"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"22:03"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"22:07","dep":"22:08"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "7009",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"22:01"},
+            {"st":"蛸地蔵","dep":"22:02"},
+            {"st":"貝塚","dep":"22:10"},
+            {"st":"二色浜","dep":"22:13"},
+            {"st":"鶴原","dep":"22:15"},
+            {"st":"井原里","dep":"22:16"},
+            {"st":"泉佐野","arr":"22:18","dep":"22:19"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["春木","岸和田"],"by":"2221","byType":"空港急行","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":4,"atCourseOrigin":true},
+            {"at":"貝塚","between":["岸和田","泉佐野"],"by":"0553","byType":"サザン59号","kind":"通過待ち","extraMin":6}
+          ]
+        },
+        {
+          "train": "0553",
+          "type": "サザン59号",
+          "service": "southern",
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"22:07"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"22:14"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6713",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "みさき公園",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"22:10"},
+            {"st":"蛸地蔵","dep":"22:12"},
+            {"st":"貝塚","dep":"22:14"},
+            {"st":"二色浜","dep":"22:17"},
+            {"st":"鶴原","dep":"22:18"},
+            {"st":"井原里","dep":"22:20"},
+            {"st":"泉佐野","dep":"22:30"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"泉佐野","between":["貝塚","泉佐野"],"by":"3503","byType":"区急","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseEnd":true},
+            {"at":"岸和田","between":["堺","岸和田"],"by":"0553","byType":"サザン59号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":6,"atCourseOrigin":true},
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0235","byType":"ラピートβ75号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":8,"atCourseEnd":true}
+          ]
+        },
+        {
+          "train": "3503",
+          "type": "区急",
+          "service": null,
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"22:16"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"22:19"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"22:25"}
+          ]
+        },
+        {
+          "train": "0235",
+          "type": "ラピートβ75号",
+          "service": "limited",
+          "from": "なんば",
+          "to": "関西空港",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"22:22"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","pass":null},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","arr":"22:28","dep":"22:29"}
+          ],
+          "stopsVsGame": "same"
+        },
+        {
+          "train": "6523",
+          "type": "普通",
+          "service": "local",
+          "from": "なんば",
+          "to": "羽倉崎",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"22:23"},
+            {"st":"蛸地蔵","dep":"22:25"},
+            {"st":"貝塚","dep":"22:27"},
+            {"st":"二色浜","dep":"22:30"},
+            {"st":"鶴原","dep":"22:31"},
+            {"st":"井原里","dep":"22:33"},
+            {"st":"泉佐野","dep":"22:36"}
+          ],
+          "stopsVsGame": "same",
+          "overtakenBy": [
+            {"at":"岸和田","between":["泉大津","岸和田"],"by":"0235","byType":"ラピートβ75号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":5,"atCourseOrigin":true}
+          ]
+        },
+        {
+          "train": "3809",
+          "type": "区急",
+          "service": null,
+          "from": "なんば",
+          "to": "和歌山市",
+          "courseFrom": "岸和田",
+          "courseTo": "泉佐野",
+          "coversCourse": true,
+          "startsAtOrigin": true,
+          "endsAtTerminal": true,
+          "times": [
+            {"st":"岸和田","dep":"22:28"},
+            {"st":"蛸地蔵","pass":null},
+            {"st":"貝塚","dep":"22:31"},
+            {"st":"二色浜","pass":null},
+            {"st":"鶴原","pass":null},
+            {"st":"井原里","pass":null},
+            {"st":"泉佐野","dep":"22:41"}
+          ],
+          "overtakenBy": [
+            {"at":"泉佐野","between":["岸和田","泉佐野"],"by":"0555","byType":"サザン61号","kind":"緩急接続（同じ駅で優等が先に発車）","extraMin":0,"atCourseEnd":true}
+          ]
+        }
+      ]
+    }
+  }
+}

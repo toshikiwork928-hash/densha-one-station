@@ -1,0 +1,189 @@
+{
+  "generated": "2026-11-04",
+  "courses": {
+    "shiokaze": {
+      "direction": "上り（和歌山市方面 → なんば）",
+      "from": "泉大津",
+      "to": "堺",
+      "file": "shiokaze.json",
+      "representatives": {
+        "morning": {"local":"6604 07:31発 なんば行","express":"1704 07:30発 なんば行","airport":"2108 07:25発 なんば行"},
+        "noon": {"local":"6820 09:55発 なんば行","express":"1716 09:29発 なんば行","airport":"2130 10:08発 なんば行"},
+        "evening": {"local":"6882 17:33発 なんば行","express":"1718 17:32発 なんば行","airport":"2188 17:21発 なんば行"},
+        "night": {"local":"7008 21:28発 なんば行","express":"1908 21:27発 なんば行","airport":"2216 21:43発 なんば行"}
+      }
+    },
+    "shiokaze-up": {
+      "direction": "下り（なんば → 和歌山市方面）",
+      "from": "堺",
+      "to": "泉大津",
+      "file": "shiokaze-up.json",
+      "representatives": {
+        "morning": {"local":"6819 07:33発 和歌山市行","express":"1707 07:32発 和歌山市行","airport":"2113 07:21発 関西空港行"},
+        "noon": {"local":"6837 09:56発 和歌山市行","express":"1711 08:34発 和歌山市行（時間帯の外）","airport":"2137 10:05発 関西空港行"},
+        "evening": {"local":"6513 17:31発 羽倉崎行","express":"1713 17:27発 和歌山市行","airport":"2195 17:17発 関西空港行"},
+        "night": {"local":"6713 21:34発 みさき公園行","express":"1729 21:33発 和歌山市行","airport":"2219 21:24発 関西空港行"}
+      }
+    },
+    "kishiwada": {
+      "direction": "下り（なんば → 和歌山市方面）",
+      "from": "泉大津",
+      "to": "岸和田",
+      "file": "kishiwada.json",
+      "representatives": {
+        "morning": {"local":"6815 07:25発 和歌山市行","express":"1705 07:24発 和歌山市行","airport":"2113 07:30発 関西空港行"},
+        "noon": {"local":"6835 10:04発 和歌山市行","express":"1711 08:45発 和歌山市行（時間帯の外）","airport":"2135 10:00発 関西空港行"},
+        "evening": {"local":"7001 17:31発 関西空港行","express":"1713 17:37発 和歌山市行","airport":"2195 17:26発 関西空港行"},
+        "night": {"local":"6911 21:35発 和歌山市行","express":"1729 21:42発 和歌山市行","airport":"2219 21:33発 関西空港行"}
+      }
+    },
+    "kishiwada-up": {
+      "direction": "上り（和歌山市方面 → なんば）",
+      "from": "岸和田",
+      "to": "泉大津",
+      "file": "kishiwada-up.json",
+      "representatives": {
+        "morning": {"local":"6804 07:32発 なんば行","express":"1704 07:24発 なんば行","airport":"2110 07:30発 なんば行"},
+        "noon": {"local":"6822 09:56発 なんば行","express":"1716 09:24発 なんば行","airport":"2130 10:02発 なんば行"},
+        "evening": {"local":"6884 17:31発 なんば行","express":"1718 17:27発 なんば行","airport":"2190 17:37発 なんば行"},
+        "night": {"local":"6908 21:28発 なんば行","express":"1908 21:22発 なんば行","airport":"2216 21:37発 なんば行"}
+      }
+    },
+    "izumisano": {
+      "direction": "下り（なんば → 和歌山市方面）",
+      "from": "岸和田",
+      "to": "泉佐野",
+      "file": "izumisano.json",
+      "representatives": {
+        "morning": {"local":"6815 07:33発 和歌山市行","express":"1705 07:29発 和歌山市行","airport":"2113 07:37発 関西空港行","southern":"0501 07:41発 和歌山市行","limited":"0201 10:58発 関西空港行（時間帯の外）"},
+        "noon": {"local":"6833 10:01発 和歌山市行","express":"1711 08:53発 和歌山市行（時間帯の外）","airport":"2133 09:56発 関西空港行","southern":"0509 10:08発 和歌山市行","limited":"0201 10:58発 関西空港行"},
+        "evening": {"local":"6891 17:26発 和歌山市行","express":"1713 17:43発 和歌山市行","airport":"2195 17:35発 関西空港行","southern":"0539 17:34発 和歌山市行","limited":"0215 17:21発 関西空港行"},
+        "night": {"local":"6711 21:34発 みさき公園行","express":"1727 21:16発 和歌山市行","airport":"2217 21:28発 関西空港行","southern":"0551 21:33発 和歌山市行","limited":"0231 21:22発 関西空港行"}
+      }
+    },
+    "izumisano-up": {
+      "direction": "上り（和歌山市方面 → なんば）",
+      "from": "泉佐野",
+      "to": "岸和田",
+      "file": "izumisano-up.json",
+      "representatives": {
+        "morning": {"local":"6606 07:30発 なんば行","express":"1706 07:29発 なんば行","airport":"2112 07:34発 なんば行","southern":"0506 07:26発 なんば行","limited":"0204 07:39発 なんば行"},
+        "noon": {"local":"6824 10:00発 なんば行","express":"1716 09:16発 なんば行","airport":"2132 10:06発 なんば行","southern":"0516 09:59発 なんば行","limited":"0214 10:14発 なんば行"},
+        "evening": {"local":"6608 17:30発 なんば行","express":"1718 17:18発 なんば行","airport":"2190 17:25発 なんば行","southern":"0544 17:29発 なんば行","limited":"0230 17:45発 なんば行"},
+        "night": {"local":"6910 21:30発 なんば行","express":"1908 21:11発 なんば行","airport":"2216 21:25発 なんば行","southern":"0558 21:29発 なんば行","limited":"0234 19:45発 なんば行（時間帯の外）"}
+      }
+    },
+    "nankai-through": {
+      "direction": "上り（和歌山市方面 → なんば）",
+      "from": "岸和田",
+      "to": "堺",
+      "file": "nankai-through.json",
+      "representatives": {
+        "morning": {"local":"6804 07:32発 なんば行","express":"1704 07:24発 なんば行","airport":"2110 07:30発 なんば行","southern":"0506 07:36発 なんば行","limited":"0204 07:48発 なんば行"},
+        "noon": {"local":"6822 09:56発 なんば行","express":"1716 09:24発 なんば行","airport":"2130 10:02発 なんば行","southern":"0516 10:06発 なんば行","limited":"0212 09:50発 なんば行"},
+        "evening": {"local":"6884 17:31発 なんば行","express":"1718 17:27発 なんば行","airport":"2190 17:37発 なんば行","southern":"0544 17:36発 なんば行","limited":"0230 17:52発 なんば行"},
+        "night": {"local":"6908 21:28発 なんば行","express":"1908 21:22発 なんば行","airport":"2216 21:37発 なんば行","southern":"0558 21:36発 なんば行","limited":"0234 19:51発 なんば行（時間帯の外）"}
+      }
+    },
+    "nankai-through-up": {
+      "direction": "下り（なんば → 和歌山市方面）",
+      "from": "堺",
+      "to": "岸和田",
+      "file": "nankai-through-up.json",
+      "representatives": {
+        "morning": {"local":"6819 07:33発 和歌山市行","express":"1707 07:32発 和歌山市行","airport":"2113 07:21発 関西空港行","southern":"0501 07:28発 和歌山市行","limited":"0201 10:46発 関西空港行（時間帯の外）"},
+        "noon": {"local":"6837 09:56発 和歌山市行","express":"1711 08:34発 和歌山市行（時間帯の外）","airport":"2137 10:05発 関西空港行","southern":"0509 09:55発 和歌山市行","limited":"0201 10:46発 関西空港行"},
+        "evening": {"local":"6513 17:31発 羽倉崎行","express":"1713 17:27発 和歌山市行","airport":"2195 17:17発 関西空港行","southern":"0539 17:21発 和歌山市行","limited":"0217 17:40発 関西空港行"},
+        "night": {"local":"6713 21:34発 みさき公園行","express":"1729 21:33発 和歌山市行","airport":"2219 21:24発 関西空港行","southern":"0551 21:20発 和歌山市行","limited":"0233 21:41発 関西空港行"}
+      }
+    },
+    "namba": {
+      "direction": "上り（和歌山市方面 → なんば）",
+      "from": "堺",
+      "to": "なんば",
+      "file": "namba.json",
+      "representatives": {
+        "morning": {"local":"6602 07:32発 なんば行","express":"1702 07:23発 なんば行","airport":"2108 07:36発 なんば行","southern":"0504 07:15発 なんば行","limited":"0202 07:28発 なんば行"},
+        "noon": {"local":"6520 10:06発 なんば行","express":"1716 09:40発 なんば行","airport":"2128 10:03発 なんば行","southern":"0514 09:49発 なんば行","limited":"0212 10:05発 なんば行"},
+        "evening": {"local":"6878 17:26発 なんば行","express":"1718 17:44発 なんば行","airport":"2188 17:32発 なんば行","southern":"0542 17:18発 なんば行","limited":"0228 17:04発 なんば行"},
+        "night": {"local":"6904 21:30発 なんば行","express":"1908 21:39発 なんば行","airport":"2214 21:16発 なんば行","southern":"0556 21:20発 なんば行","limited":"0234 20:04発 なんば行（時間帯の外）"}
+      }
+    },
+    "namba-up": {
+      "direction": "下り（なんば → 和歌山市方面）",
+      "from": "なんば",
+      "to": "堺",
+      "file": "namba-up.json",
+      "representatives": {
+        "morning": {"local":"6821 07:32発 和歌山市行","express":"1707 07:19発 和歌山市行","airport":"2115 07:27発 関西空港行","southern":"0503 07:43発 和歌山市行","limited":"0201 10:35発 関西空港行（時間帯の外）"},
+        "noon": {"local":"6841 10:01発 和歌山市行","express":"1711 08:22発 和歌山市行（時間帯の外）","airport":"2137 09:55発 関西空港行","southern":"0509 09:45発 和歌山市行","limited":"0201 10:35発 関西空港行"},
+        "evening": {"local":"6601 17:32発 樽井行","express":"1713 17:16発 和歌山市行","airport":"2197 17:34発 関西空港行","southern":"0603 17:40発 和歌山港行","limited":"0217 17:30発 関西空港行"},
+        "night": {"local":"6523 21:27発 羽倉崎行","express":"1729 21:22発 和歌山市行","airport":"2221 21:34発 関西空港行","southern":"0553 21:45発 和歌山市行","limited":"0233 21:30発 関西空港行"}
+      }
+    },
+    "izumisano-misaki": {
+      "direction": "下り（なんば → 和歌山市方面）",
+      "from": "泉佐野",
+      "to": "みさき公園",
+      "file": "izumisano-misaki.json",
+      "representatives": {
+        "morning": {"local":"6813 07:29発 和歌山市行","express":"1705 07:37発 和歌山市行","southern":"0501 07:50発 和歌山市行"},
+        "noon": {"local":"6829 09:55発 和歌山市行","express":"1711 09:04発 和歌山市行","southern":"0509 10:15発 和歌山市行"},
+        "evening": {"local":"6703 17:35発 みさき公園行","express":"1713 17:51発 和歌山市行","southern":"0539 17:41発 和歌山市行"},
+        "night": {"local":"6709 21:33発 みさき公園行","express":"1727 21:25発 和歌山市行","southern":"0551 21:41発 和歌山市行"}
+      }
+    },
+    "izumisano-misaki-up": {
+      "direction": "上り（和歌山市方面 → なんば）",
+      "from": "みさき公園",
+      "to": "泉佐野",
+      "file": "izumisano-misaki-up.json",
+      "representatives": {
+        "morning": {"local":"6810 07:27発 なんば行","express":"1708 07:31発 なんば行","southern":"0508 07:42発 なんば行"},
+        "noon": {"local":"6828 09:56発 なんば行","express":"1716 09:00発 なんば行","southern":"0518 10:13発 なんば行"},
+        "evening": {"local":"6890 17:32発 なんば行","express":"1720 17:47発 なんば行","southern":"0546 17:43発 なんば行"},
+        "night": {"local":"6914 21:27発 なんば行","express":"1908 20:55発 なんば行","southern":"0606 21:45発 なんば行"}
+      }
+    },
+    "misaki-wakayamako": {
+      "direction": "下り（なんば → 和歌山市方面）",
+      "from": "みさき公園",
+      "to": "和歌山港",
+      "file": "misaki-wakayamako.json",
+      "representatives": {
+        "morning": {"local":"6811 07:35発 和歌山市行","express":"1901 06:31発 和歌山港行","express@和歌山市まで":"1703 07:32発 和歌山市行","southern":"0601 09:56発 和歌山港行（時間帯の外）","southern@和歌山市まで":"0501 08:06発 和歌山市行"},
+        "noon": {"local":"6827 10:01発 和歌山市行","express":"1901 06:31発 和歌山港行（時間帯の外）","express@和歌山市まで":"1711 09:19発 和歌山市行","southern":"0601 09:56発 和歌山港行","southern@和歌山市まで":"0601 09:56発 和歌山港行"},
+        "evening": {"local":"6887 17:26発 和歌山市行","express":"1903 19:11発 和歌山港行（時間帯の外）","express@和歌山市まで":"1713 18:07発 和歌山市行","southern":"0603 18:26発 和歌山港行","southern@和歌山市まで":"0537 17:30発 和歌山市行"},
+        "night": {"local":"6905 21:33発 和歌山市行","express":"1905 20:10発 和歌山港行（時間帯の外）","express@和歌山市まで":"1727 21:41発 和歌山市行","southern":"0605 20:59発 和歌山港行","southern@和歌山市まで":"0549 21:29発 和歌山市行"}
+      }
+    },
+    "misaki-wakayamako-up": {
+      "direction": "上り（和歌山市方面 → なんば）",
+      "from": "和歌山港",
+      "to": "みさき公園",
+      "file": "misaki-wakayamako-up.json",
+      "representatives": {
+        "morning": {"local":"6812 07:22発 なんば行","express":"1904 07:03発 なんば行","express@和歌山市から":"1710 07:31発 なんば行","southern":"0602 10:23発 なんば行（時間帯の外）","southern@和歌山市から":"0508 07:29発 なんば行"},
+        "noon": {"local":"6832 10:08発 なんば行","express":"1904 07:03発 なんば行（時間帯の外）","express@和歌山市から":"1716 08:47発 なんば行（時間帯の外）","southern":"0602 10:23発 なんば行","southern@和歌山市から":"0518 10:00発 なんば行"},
+        "evening": {"local":"6892 17:38発 なんば行","express":"1906 19:35発 なんば行（時間帯の外）","express@和歌山市から":"1720 17:34発 なんば行","southern":"0604 18:53発 なんば行（時間帯の外）","southern@和歌山市から":"0546 17:30発 なんば行"},
+        "night": {"local":"6916 21:25発 なんば行","express":"1908 20:35発 なんば行","express@和歌山市から":"1908 20:42発 なんば行","southern":"0606 21:25発 なんば行","southern@和歌山市から":"0606 21:32発 なんば行"}
+      }
+    }
+  },
+  "meta": {
+    "source": "鉄道運用Hub 南海電鉄 時刻表データ（https://unyohub.2pd.jp/railroad_nankai/ 。API timetable.php、railroad_id=nankai、diagram_revision=2024-12-21、timetable_id=weekday）。scripts/oncoming-meets.ts が node_modules/.cache/unyohub に保存したものを読んだ",
+    "license": "運用表データは CC BY 4.0（https://creativecommons.org/licenses/by/4.0/deed.ja ）。出典: 鉄道運用Hub",
+    "revision": "2024-12-21",
+    "generatedBy": "2026-11-04 に調査用の一時スクリプトで抽出（リポジトリには入れていない）。ゲーム側の値は src/route の ROUTES に applyService を時間帯ごとに当てて読んだ",
+    "fieldNotes": {
+      "time": "HH:MM（分単位。秒は無い）。24時を過ぎた時刻は 24:xx のまま",
+      "dep": "その駅の発車時刻（Hub の値）",
+      "arr": "到着時刻。Hub は線の終点の値だけが到着。途中駅の到着時刻は Hub に無い（不明）",
+      "pass": "通過。値があれば通過時刻（Hub に |HH:MM の形で入っている場合だけ）。null は通過で時刻不明",
+      "arr と dep が両方": "空港線・和歌山港線との境（泉佐野・和歌山市）で、前の線の到着と次の線の発車が別に入っている",
+      "overtakenBy": "同じ向きの格上の列車と発車順が入れ替わる所から推定（通過待ち・緩急接続・走行中）。extraMin は前の駅からその駅の発車までが、普通の終日の最小値より何分長いか（待ちの長さの目安）",
+      "representatives": "自列車にする代表の1本の案（種別ごと）。inWindow=false は開始時刻の前後60分に該当列車が無いもの",
+      "vsGame": "realXxxMin は代表列車のコース始発駅の発車からの分。gameArrSec/gameDepSec はゲームの時刻表（自動生成、秒）。realCourseMin は始発駅の発車から終着駅の値（arr か dep）まで"
+    }
+  }
+}
