@@ -99,11 +99,12 @@ scripts/           検証・データ生成（Node で esbuild して実行）
 - TOPの種別ボタン、キーボード・ゲームパッド、保存済み選択の復元は `selectableServices` を共有。特急は実際の停車駅をコース両端とする場合だけ選べる。泉大津発着のサザン・ラピートβは選べない。待避・対向列車用の種別定義は残す。
 - **時間帯**: 基準の開始時刻は 朝 7:30・日中 10:00・夕 17:30・夜 21:30（`core/config.ts` の `START_CLOCK`）。南海本線の14コースは、実ダイヤの列車の発車時刻から始まる（下の「実ダイヤの自列車」）
 - **実ダイヤの自列車**（2026-11-05、`route/real-diagram.ts`。ユーザーが決めた3点は docs/real-timetable-plan.md 7.0）
-  - データ: `src/data/real-diagram.json`。`npm run real:diagram` が `docs/real-timetable/*.json` の代表列車（開始時刻の前後60分）から作る。鉄道運用Hub（CC BY 4.0）
-  - 選べる種別・区間: その時間帯に実際の列車がある種別だけ（`selectableServices`）、区間も実際に走る区間だけ（`stagesOf`）。例: 日中の急行、夜のラピートβ、普通の和歌山港行は選べない
-  - 開始時刻: `resetState` → `applyRealDiagram` が、選んだ区間を走る実際の列車の発車時刻を `route.startClock` にする。対向列車は `startClock + t` で動くので実ダイヤと合う
+  - 列車の選び方（ユーザー指定）: 時間帯・向き・種別ごとに実際の列車を1本だけ決め、どのコースもその列車の時刻で走る（コースの分割はゲームの容量のためで、なんばから通しで遊ぶ感覚）。和歌山方面はなんば発（普通・急行・サザンは和歌山市・和歌山港行、空港急行・ラピートβは関西空港行）、なんば方面は和歌山市・和歌山港発（空港系統は関西空港発）。始発駅の発車が開始時刻の前後60分で最も近いもの。ラピートは β だけ
+  - データ: `src/data/real-diagram.json`。`npm run real:diagram`（`scripts/real-diagram.ts`）が鉄道運用Hub の時刻表（`node_modules/.cache/unyohub`、CC BY 4.0）から作る。選んだ列車の一覧は JSON の `picks`
+  - 選べる種別・区間: その時間帯に実際の列車がある種別だけ（`selectableServices`）、区間もその列車が走る区間だけ（`stagesOf`）。例: 日中の急行、朝のなんば発・夜のなんば行のラピートβ、普通の和歌山港行は選べない
+  - 開始時刻: `resetState` → `applyRealDiagram` が、その列車がコース（区間）の始発駅を出る時刻を `route.startClock` にする。なんばから遠いコースほど遅い。対向列車は `startClock + t` で動くので実ダイヤと合う
   - 時刻表: 最高速度は変えず、駅の時刻（`scheduledArrival`・`dwell`）を実際の発車に合わせる。待避駅は早く着いて待つ、ほかの駅は到着を遅らせる、ゲームの方が遅い所はゲームの時刻のまま。終着の到着は Hub に無いので推定。種別の `timetable` は元の値（自動運転の最速 +5%）のまま残し、先行の仮想の普通（`game/preceding.ts`）はこちらを基準にする（自列車が早く走っても追いつかない）
-  - 普通の待避: 実際の代表の普通の待避（`realWaitsOf`。始発駅の待ち・待避線の無い駅・推定の通過待ちは除く）。`setLocalPatterns` の駅名の指定は、実ダイヤの無いコースと走行中の追い越しだけに使う。普通の時間帯の時刻表は `npm run timetable -- --local-only` で作り直す
+  - 普通の待避: 選んだ普通を抜く格上の列車を、発車順の入れ替わりから推定（`realWaitsOf`。始発駅の待ち・待避線の無い駅は除く）。`setLocalPatterns` の駅名の指定は、実ダイヤの無いコースと走行中の追い越しだけに使う。普通の時間帯の時刻表は `npm run timetable -- --local-only` で作り直す
   - 対向列車: `npm run oncoming:meets -- --timetable` の収録範囲は、実際の列車たちが走る時間（発車〜到着）の前後10分。実ダイヤを作り直したら、`real:diagram` → `timetable -- --local-only` → `oncoming:meets -- --timetable` → `verify:oncoming`・`verify:routes` の順に流す
 - **自列車側の待避・待ち合わせ・接続・走行中の追い越し**（`route/day-patterns.ts`）: 2026-11-05 にユーザーの指定で、南海本線の待避は実ダイヤ（上）に置き換えた。走行中の追い越し（passes）と実ダイヤの無いコースの指定は、ユーザーが指定したもの。変えるときはユーザーに確認する
 - 普通は待避線のある駅で、待避・待ち合わせがある時だけ待避線に入る。ただし待避線の外側にしかホームがない駅（浜寺公園の堺方面）は常に待避線
@@ -151,7 +152,7 @@ dev サーバー（`npm run dev`、または `.claude/launch.json` の `densha`�
 4. master のアプリと `pub` の中身が一致するか比べる（`legacy`・`.github`・公開側だけの画像を除いて `diff -r`）
 5. `pub` で `npm ci && npm run build` が通るか確かめる（`dist/` は commit しない）
 6. commit して `main` に push → Actions（Deploy to GitHub Pages）の成功を確認 → 公開ページの `assets/index-*.js` の名前が今回のビルドと同じか確認
-- 公開済みの最新（2026-11-04）: 本体 master `6084f53` = 公開用 main `f1baf36`（公開 JS `assets/index-DEV8oYV2.js`）。これより後の本体のコミットは文書だけ。公開用のコミットメッセージの末尾に、対応する本体のコミットを書く
+- 公開済みの最新（2026-11-05）: 本体 master `327c1be` = 公開用 main `86e414a`（公開 JS `assets/index-CNA8dOOG.js`）。これより後の本体のコミットは文書だけ。公開用のコミットメッセージの末尾に、対応する本体のコミットを書く
 - 公開用リポジトリに本体を経由しないコミットが入っていて差分が当たらないときは、その内容が本体に入っていることを確かめてから、本体のアプリの中身（`git archive <今回> apps/densha-one-station`）で公開用を丸ごと置き換える（`legacy/`・`.github/`・`docs/image-*.webp` は残す）。2026-11-04 はこの方法で同期した
 
 ## 9. 守ること・ユーザーの好み

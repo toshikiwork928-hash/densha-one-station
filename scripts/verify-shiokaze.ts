@@ -319,10 +319,11 @@ for (const route of [izumisano, izumisanoUp]) {
 const downTrack = buildTrack(shiokaze), upTrack = buildTrack(shiokazeUp);
 for (let s = 0; s <= downTrack.length; s += 50) assert.ok(Math.abs(downTrack.trackAt(s).y - upTrack.trackAt(upTrack.length - s).y) < 1e-6, '復路の標高一致');
 
-// 時間帯ごとの普通の待避（2026-11-05 から実ダイヤ。route/real-diagram.ts）。昼: 泉大津 → 堺は堺（終着、案内のみ）でラピートβ・空港急行、堺 → 泉大津は泉大津（終着、案内のみ）で空港急行
+// 時間帯ごとの普通の待避（2026-11-05 から実ダイヤ。route/real-diagram.ts）。昼: 和歌山市 → なんばの 6832 は高石でラピートβ、堺（終着、案内のみ）で空港急行・ラピートβ。
+// なんば → 和歌山市の 6841 は高石でラピートβ、泉大津（終着、案内のみ）で空港急行
 const expectedWaits = new Map([
-  ['shiokaze', [['堺', 'limited'], ['堺', 'airport']]],
-  ['shiokaze-up', [['泉大津', 'airport']]],
+  ['shiokaze', [['高石', 'limited'], ['堺', 'airport'], ['堺', 'limited']]],
+  ['shiokaze-up', [['高石', 'limited'], ['泉大津', 'airport']]],
 ]);
 for (const route of [shiokaze, shiokazeUp]) {
   const r = structuredClone(route); applyService(r, 'local');
@@ -340,20 +341,21 @@ for (const route of [shiokaze, shiokazeUp]) {
     }
   }
 }
-// 夜の堺 → 泉大津（実ダイヤ 6713）: 浜寺公園でラピートβ、高石で空港急行の通過待ち
+// 夜の堺 → 泉大津（実ダイヤ 6915）: 高石でラピートβの通過待ち、終着の泉大津で空港急行の待ち合わせ
 {
   const q = structuredClone(shiokazeUp); q.timeOfDay = 'night'; const sv = applyService(q, 'local')!;
   const park = q.stations.findIndex(s => s.name === '浜寺公園'), taka = q.stations.findIndex(s => s.name === '高石');
-  assert.ok(approachText(q, park, sv).includes('ハマデラコウエンで特急ラピートβの通過待ちをします。'), approachText(q, park, sv));
-  assert.ok(approachText(q, taka, sv).includes('タカイシで空港急行の通過待ちをします。'), approachText(q, taka, sv));
+  assert.ok(!approachText(q, park, sv).includes('待'), approachText(q, park, sv));
+  assert.ok(approachText(q, taka, sv).includes('タカイシで特急ラピートβの通過待ちをします。'), approachText(q, taka, sv));
+  assert.ok(approachText(q, 9, sv).includes('イズミオオツで空港急行の待ち合わせをします。'), approachText(q, 9, sv));
   // 羽衣の到着前は高師浜線の乗り換え案内
   assert.ok(approachText(q, q.stations.findIndex(s => s.name === '羽衣'), sv).includes('タカシノハマ線はお乗り換えください。'));
 }
-// 待避の相手は実際の列車の種別（夜の堺 → 岸和田 6713: 浜寺公園はラピートβ、高石は空港急行、終着の岸和田はサザン）
+// 待避の相手は実際の列車の種別（夜の堺 → 岸和田 6915: 高石はサザン、泉大津は空港急行）
 {
   const q = structuredClone(throughUp); q.timeOfDay = 'night'; const sv = applyService(q, 'local')!;
   const name = (st: string) => sv.waits!.filter(w => q.stations[w.station].name === st).map(w => w.passedBy);
-  assert.deepEqual(name('浜寺公園'), ['limited']); assert.deepEqual(name('高石'), ['airport']); assert.deepEqual(name('岸和田'), ['southern']);
+  assert.deepEqual(name('高石'), ['southern']); assert.deepEqual(name('泉大津'), ['airport']); assert.deepEqual(name('浜寺公園'), []);
 }
 // 乗り換え案内: 新今宮（JR線）、天下茶屋（なんば行きは高野線も）
 {
@@ -572,10 +574,10 @@ for (const [route, parts] of [[throughUp, [shiokazeUp, kishiwada]], [through, [k
   assert.deepEqual(su.unitKinds, ['commuter-old', 'southern-10000'], '上りのサザンは 7100系が先頭');
   assert.deepEqual(applyService(structuredClone(kishiwada), 'southern')!.unitKinds, ['southern-10000', 'commuter-old'], '下りのサザンは 10000系が先頭');
 }
-// 普通の待避駅では、到着前の放送でも待ち合わせ・通過待ちを案内する（夜の堺 → 泉大津: 高石で空港急行の通過待ち。実ダイヤ 6713）
+// 普通の待避駅では、到着前の放送でも待ち合わせ・通過待ちを案内する（夜の堺 → 泉大津: 高石でラピートβの通過待ち。実ダイヤ 6915）
 {
   const r = structuredClone(shiokazeUp); r.timeOfDay = 'night'; const sv = applyService(r, 'local')!;
-  assert.ok(approachText(r, 6, sv).endsWith('タカイシで空港急行の通過待ちをします。'), approachText(r, 6, sv));
+  assert.ok(approachText(r, 6, sv).endsWith('タカイシで特急ラピートβの通過待ちをします。'), approachText(r, 6, sv));
   const n = structuredClone(shiokazeUp), nv = applyService(n, 'local')!;
   assert.ok(!approachText(n, 4, nv).includes('待'), '昼の浜寺公園は待避なし');
   assert.ok(!approachText(n, 1, nv).includes('待'), '待避しない駅は案内なし');

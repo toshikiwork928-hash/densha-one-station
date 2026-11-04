@@ -1,25 +1,26 @@
-// 実ダイヤの自列車（2026-11-05 のユーザー指定）。時間帯ごとに、自列車を実際の列車の1本として走らせる。
-//   - 実際にその時間帯（開始時刻の前後60分）に無い種別・区間は選べない（selectableServices・stagesOf）
-//   - 開始時刻（route.startClock）は、その列車の区間の始発駅の実際の発車時刻。対向列車は startClock + t で動くので、実ダイヤとの位置関係が合う
+// 実ダイヤの自列車（2026-11-05 のユーザー指定）。時間帯ごと・向きごと・種別ごとに実際の列車を1本だけ決め、どのコース（区間）もその列車の時刻で走る。
+// コースの分け方はゲームの容量のためで、なんば（和歌山市・和歌山港、空港系統は関西空港）から通しで走る1本を区間ごとに遊ぶ形（選び方は scripts/real-diagram.ts）
+//   - その時間帯に実際の列車が無い種別・区間は選べない（selectableServices・stagesOf）。例: 日中の急行、朝のなんば発・夜のなんば行のラピートβ
+//   - 開始時刻（route.startClock）は、その列車がコース（区間）の始発駅を出る実際の時刻。なんばから遠い区間ほど遅くなる。対向列車は startClock + t で動く
 //   - 時刻表は、最高速度を変えずに実際の発車時刻に合わせる。ゲームの時刻表（自動運転の最速 +5%）より実際が遅い所は、
 //     停車駅の到着を「実際の発車 − ゲームの停車時間」まで遅らせ、待避のある駅は早く着いて実際の発車まで待つ。ゲームの方が遅い所はゲームの時刻のまま
-//   - 終着駅の到着は、1つ前の停車駅の実際の発車 + その区間の終日最短（Hub に途中駅の到着時刻が無いため。docs/real-timetable-plan.md 2章）
-// データは src/data/real-diagram.json（npm run real:diagram が docs/real-timetable から作る）。出典は鉄道運用Hub（CC BY 4.0、平日、2024-12-21 改正）
+//   - 終着の到着: 列車の終点は実際の到着時刻、途中駅は発車の30秒前（待避で長く停まる駅はゲームの最速で着く）。Hub に途中駅の到着時刻が無いため
+// データは src/data/real-diagram.json（npm run real:diagram が鉄道運用Hub の時刻表から作る。CC BY 4.0、平日、2024-12-21 改正）
 import data from '../data/real-diagram.json';
 import { START_CLOCK } from '../core/config';
 import type { Route, ServiceId, TimeOfDay } from './types';
 
 export interface RealTrain {
   svc: ServiceId;
-  /** 列車番号・行先（実際の列車の） */
-  no: string; to: string;
+  /** 列車番号・始発駅・行先（実際の列車の） */
+  no: string; origin: string; to: string;
   /** 区間の始発駅・終着駅の名前 */
   from: string; end: string;
   /** 区間の始発駅の発車時刻 [s since 0:00] */
   start: number;
   /** 途中の停車駅の発車（始発駅の発車からの秒） */
   dep: Record<string, number>;
-  /** 終着駅の到着（推定。始発駅の発車からの秒） */
+  /** 終着駅の到着（始発駅の発車からの秒）。-1 はゲームの最速で着く（待避で長く停まる駅） */
   arr: number;
 }
 type Day = { trains: RealTrain[]; waits: [string, ServiceId][] };
@@ -74,7 +75,7 @@ export function applyRealDiagram(route: Route, svc: ServiceId | undefined, from:
   for (let i = a + 1; i < n; i++) {
     if (st[i].pass) { arr[i] = gArr[i] + dep[prev] - gDep[prev]; dep[i] = arr[i]; continue; }
     const run = gArr[i] - gDep[prev], dwell = gDep[i] - gArr[i], arrMin = dep[prev] + run;
-    const target = i === z ? base + e.arr : i < z && e.dep[st[i].name] != null ? base + e.dep[st[i].name] : null;
+    const target = i === z ? (e.arr >= 0 ? base + e.arr : null) : i < z && e.dep[st[i].name] != null ? base + e.dep[st[i].name] : null;
     if (target == null) { arr[i] = arrMin; dep[i] = arrMin + dwell; }
     else if (i === z) { arr[i] = Math.max(arrMin, target); dep[i] = arr[i] + dwell; }
     else {

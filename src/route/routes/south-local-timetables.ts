@@ -4,14 +4,14 @@ import type { ServiceSpec, TimeOfDay } from '../types';
 export const SOUTH_LOCAL_TT: Record<string, Partial<Record<TimeOfDay, ServiceSpec['timetable']>>> = {
   'izumisano-misaki': {
     morning: { 0: { arr: 0, dep: 0 }, 1: { arr: 155, dep: 180 }, 2: { arr: 275, dep: 300 }, 3: { arr: 400, dep: 425 }, 4: { arr: 540, dep: 565 }, 5: { arr: 725, dep: 750 }, 6: { arr: 870, dep: 895 }, 7: { arr: 1020, dep: 1045 }, 8: { arr: 1245, dep: 1270 }, 9: { arr: 1400 } },
-    noon: { 0: { arr: 0, dep: 0 }, 1: { arr: 155, dep: 180 }, 2: { arr: 275, dep: 300 }, 3: { arr: 400, dep: 425 }, 4: { arr: 540, dep: 565 }, 5: { arr: 725, dep: 750 }, 6: { arr: 870, dep: 895 }, 7: { arr: 1020, dep: 1045 }, 8: { arr: 1245, dep: 1270 }, 9: { arr: 1400 } },
-    evening: { 0: { arr: 0, dep: 0 }, 1: { arr: 155, dep: 180 }, 2: { arr: 275, dep: 300 }, 3: { arr: 400, dep: 425 }, 4: { arr: 540, dep: 565 }, 5: { arr: 755, dep: 856 }, 6: { arr: 966, dep: 991 }, 7: { arr: 1130, dep: 1155 }, 8: { arr: 1370, dep: 1395 }, 9: { arr: 1525 } },
+    noon: { 0: { arr: 0, dep: 0 }, 1: { arr: 155, dep: 180 }, 2: { arr: 275, dep: 300 }, 3: { arr: 400, dep: 425 }, 4: { arr: 540, dep: 565 }, 5: { arr: 755, dep: 856 }, 6: { arr: 966, dep: 991 }, 7: { arr: 1130, dep: 1155 }, 8: { arr: 1370, dep: 1395 }, 9: { arr: 1525 } },
+    evening: { 0: { arr: 0, dep: 0 }, 1: { arr: 155, dep: 180 }, 2: { arr: 275, dep: 300 }, 3: { arr: 400, dep: 425 }, 4: { arr: 540, dep: 565 }, 5: { arr: 725, dep: 750 }, 6: { arr: 870, dep: 895 }, 7: { arr: 1020, dep: 1045 }, 8: { arr: 1245, dep: 1270 }, 9: { arr: 1400 } },
     night: { 0: { arr: 0, dep: 0 }, 1: { arr: 155, dep: 180 }, 2: { arr: 275, dep: 300 }, 3: { arr: 400, dep: 425 }, 4: { arr: 540, dep: 565 }, 5: { arr: 725, dep: 750 }, 6: { arr: 870, dep: 895 }, 7: { arr: 1020, dep: 1045 }, 8: { arr: 1245, dep: 1270 }, 9: { arr: 1400 } },
   },
   'izumisano-misaki-up': {
-    morning: { 0: { arr: 0, dep: 0 }, 1: { arr: 110, dep: 135 }, 2: { arr: 335, dep: 360 }, 3: { arr: 515, dep: 540 }, 4: { arr: 650, dep: 749 }, 5: { arr: 904, dep: 929 }, 6: { arr: 1044, dep: 1069 }, 7: { arr: 1190, dep: 1215 }, 8: { arr: 1310, dep: 1335 }, 9: { arr: 1495 } },
+    morning: { 0: { arr: 0, dep: 0 }, 1: { arr: 110, dep: 135 }, 2: { arr: 335, dep: 360 }, 3: { arr: 515, dep: 540 }, 4: { arr: 650, dep: 881 }, 5: { arr: 1036, dep: 1061 }, 6: { arr: 1176, dep: 1201 }, 7: { arr: 1301, dep: 1326 }, 8: { arr: 1421, dep: 1446 }, 9: { arr: 1576 } },
     noon: { 0: { arr: 0, dep: 0 }, 1: { arr: 110, dep: 135 }, 2: { arr: 335, dep: 360 }, 3: { arr: 500, dep: 525 }, 4: { arr: 635, dep: 660 }, 5: { arr: 815, dep: 840 }, 6: { arr: 970, dep: 995 }, 7: { arr: 1110, dep: 1135 }, 8: { arr: 1235, dep: 1260 }, 9: { arr: 1405 } },
     evening: { 0: { arr: 0, dep: 0 }, 1: { arr: 110, dep: 135 }, 2: { arr: 335, dep: 360 }, 3: { arr: 500, dep: 525 }, 4: { arr: 635, dep: 660 }, 5: { arr: 815, dep: 840 }, 6: { arr: 970, dep: 995 }, 7: { arr: 1110, dep: 1135 }, 8: { arr: 1235, dep: 1260 }, 9: { arr: 1405 } },
-    night: { 0: { arr: 0, dep: 0 }, 1: { arr: 110, dep: 135 }, 2: { arr: 335, dep: 360 }, 3: { arr: 500, dep: 525 }, 4: { arr: 635, dep: 660 }, 5: { arr: 815, dep: 840 }, 6: { arr: 970, dep: 995 }, 7: { arr: 1110, dep: 1135 }, 8: { arr: 1235, dep: 1260 }, 9: { arr: 1405 } },
+    night: { 0: { arr: 0, dep: 0 }, 1: { arr: 110, dep: 135 }, 2: { arr: 335, dep: 360 }, 3: { arr: 515, dep: 540 }, 4: { arr: 650, dep: 751 }, 5: { arr: 906, dep: 931 }, 6: { arr: 1046, dep: 1071 }, 7: { arr: 1190, dep: 1215 }, 8: { arr: 1310, dep: 1335 }, 9: { arr: 1495 } },
   },
 };
