@@ -152,7 +152,7 @@ dev サーバー（`npm run dev`、または `.claude/launch.json` の `densha`�
 4. master のアプリと `pub` の中身が一致するか比べる（`legacy`・`.github`・公開側だけの画像を除いて `diff -r`）
 5. `pub` で `npm ci && npm run build` が通るか確かめる（`dist/` は commit しない）
 6. commit して `main` に push → Actions（Deploy to GitHub Pages）の成功を確認 → 公開ページの `assets/index-*.js` の名前が今回のビルドと同じか確認
-- 公開済みの最新（2026-11-05）: 本体 master `327c1be` = 公開用 main `86e414a`（公開 JS `assets/index-CNA8dOOG.js`）。これより後の本体のコミットは文書だけ。公開用のコミットメッセージの末尾に、対応する本体のコミットを書く
+- 公開済みの最新（2026-11-05）: 本体 master `0ed7f20` = 公開用 main `e0d6c4d`（公開 JS `assets/index-vcx086t7.js`）。これより後の本体のコミットは文書だけ。公開用のコミットメッセージの末尾に、対応する本体のコミットを書く
 - 公開用リポジトリに本体を経由しないコミットが入っていて差分が当たらないときは、その内容が本体に入っていることを確かめてから、本体のアプリの中身（`git archive <今回> apps/densha-one-station`）で公開用を丸ごと置き換える（`legacy/`・`.github/`・`docs/image-*.webp` は残す）。2026-11-04 はこの方法で同期した
 
 ## 9. 守ること・ユーザーの好み
@@ -172,6 +172,15 @@ dev サーバー（`npm run dev`、または `.claude/launch.json` の `densha`�
 - 3D 素材: Kenney City Kit・Quaternius（CC0）
 
 ## 11. 残りの作業
+
+2026-11-08 の景観修正
+
+- 北助松〜高石の王子川で、鉄道の高架延長を川幅へ換算して幅70mの補完水面を作っていた。変換処理をOSMのwidth優先、未記載なら暫定8mへ変更。8mは実測値ではない。
+- 堺〜泉大津のキャッシュを再変換。王子川・芦田川・石津川・内川放水路の補完水面が対象。既存の水域輪郭16面を保持。ほかのコースは未再生成。
+- 地元資料 https://www.pref.osaka.lg.jp/documents/22182/oujigawaseibikeikaku.pdf で王子川の南海本線までの河道を確認。正確な川幅は不明。
+- 画面確認は泉大津→堺のs=2500付近の俯瞰のみ。ほかの河川と運転台からの確認は未実施。
+- 残る作業は全コースの川幅・橋・主要道路の照合、道路と住宅の重なり確認、地上線両側の柵と壁。今回の修正だけで全沿線点検済みとは扱わない。
+- 今回の公開には対向普通の順序修正56d3f3eも含む。公開位置は公開用リポジトリのコミットメッセージを参照。
 
 残りの作業は [ROADMAP.md](../ROADMAP.md) にまとめた（2026-11-04）。高野線の拡張の計画は [plan-claude-next.md](./plan-claude-next.md)。
 ROADMAP に入れていない、以前からの案（ユーザーが保留・判断待ち）:

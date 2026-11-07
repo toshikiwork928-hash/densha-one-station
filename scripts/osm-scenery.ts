@@ -1025,14 +1025,17 @@ async function main() {
   };
   /** 線路をまたぐ道路橋（bridge=yes、layer 1 以上、線路を横切る）。高架の道路として描く */
   const isRoadOverTrack = (el: OsmEl) => !!el.tags?.highway && el.tags.bridge === 'yes' && Number(el.tags.layer ?? 0) >= 1 && !!el.geometry && crossAt(el.geometry).length > 0;
-  /** 橋の下を通る川の水面（waterway の線を川幅で膨らませた多角形）。川幅は OSM に無いので、線路の橋の長さの半分（8〜70m）。ゲーム用の概形 */
+  /** 橋の下を通る川の補完水面。OSMの幅を使い、不明なら8mのゲーム用概形。 */
   const riverPolys: [string, number[]][] = [];
   for (const el of els) {
     if (el.type !== 'way' || !el.geometry || !/^(river|canal)$/.test(el.tags?.waterway ?? '') || /culvert|tunnel/.test(el.tags?.tunnel ?? '') || el.tags?.culvert) continue;
     const xs = crossAt(el.geometry);
     const sp = bridgeSpans.find(q => xs.some(x => x > q[0] - 25 && x < q[1] + 25));
     if (!sp) continue;
-    const w = Math.max(8, Math.min(70, (sp[1] - sp[0]) * .5));
+    // 長い高架区間を川幅に換算しない。幅の記載がない場合は8mの概形とし、
+    // 広い川の輪郭は別途取得する natural=water / riverbank の面で再現する。
+    const taggedWidth = Number(el.tags?.width);
+    const w = Number.isFinite(taggedWidth) && taggedWidth > 0 ? taggedWidth : 8;
     const pts = densify(el.geometry, 20).map(g => toSL(g.lat, g.lon, true)).filter((p): p is V => !!p);
     if (pts.length < 2) continue;
     const L: V[] = [], R: V[] = [];

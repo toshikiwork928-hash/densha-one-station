@@ -108,7 +108,9 @@ export function createCounterTraffic(route: Route, tod: TimeOfDay, consist: (cod
   const playerTowardNamba = serviceOf(route, 'local')?.destination === 'なんば';
   const main = route.oncoming.find(o => !o.stop && !o.follow && o.lat !== route.oncomingLocal?.lat)?.lat ?? 4;
   const nth: Record<string, number> = {};
-  const trains: CounterTrain[] = makeCounterPlans(route, tod).map(plan => {
+  const plans = makeCounterPlans(route, tod);
+  const isShiokaze = route.id === 'shiokaze';
+  const trains: CounterTrain[] = plans.map(plan => {
     const spec = consist(plan.code, nth[plan.code] = (nth[plan.code] ?? -1) + 1, playerTowardNamba);
     const local = plan.code === 'L', lat = local && route.oncomingLocal ? route.oncomingLocal.lat : main;
     const paths: Path[] = [];
@@ -126,7 +128,13 @@ export function createCounterTraffic(route: Route, tod: TimeOfDay, consist: (cod
       if (own) { paths.push({ profile: own.profile, station: p.station }); continue; }
       const profile = extra ? route.extraTracks?.find(x => x.id === extra)?.lat : undefined;
       if (profile) { paths.push({ profile, station: p.station }); continue; }
-      const usesLoop = sta.name !== '尾崎' || p.depart - p.arrive > DWELL + 1;
+      const usesLoop = isShiokaze
+        ? sta.layout === 'hamadera' || plans.some(other => {
+          if (other.code === 'L' || p.s >= other.points[0].s || p.s <= other.points.at(-1)!.s) return false;
+          const pass = other.points.find(point => point.station === p.station)?.depart ?? other.clockAt(p.s);
+          return pass > p.arrive && pass < p.depart;
+        })
+        : sta.name !== '尾崎' || p.depart - p.arrive > DWELL + 1;
       if (local && usesLoop && sta.loop && sta.layout !== 'custom' && !route.oncomingLocal?.stations.includes(p.station)) {
         const scene = route.oncoming.find(o => o.stop?.station === p.station && o.stop.loop);
         const zone = scene?.stop?.zone ?? loopZone(sta);
@@ -171,7 +179,9 @@ export function createCounterTraffic(route: Route, tod: TimeOfDay, consist: (cod
   const floorOf = (o: CounterTrain) => {
     let floor = -Infinity;
     for (const q of trains) if (q !== o && q.active) {
-      if (q.head <= o.head && conflict(o, q)) floor = Math.max(floor, q.head + q.length + COUNTER_BLOCK_GAP);
+      if (q.head <= o.head && (conflict(o, q) || (isShiokaze && o.code === 'L' && q.code === 'L'))) {
+        floor = Math.max(floor, q.head + q.length + COUNTER_BLOCK_GAP);
+      }
       for (const sta of route.stations) if (q.head <= sta.platform.to && q.head + q.length >= sta.platform.from && o.head >= q.head) {
         const center = (sta.platform.from + sta.platform.to) / 2;
         if (Math.abs(laneAt(o, center) - laneAt(q, center)) < 3.4) floor = Math.max(floor, sta.platform.to + 180);
@@ -217,7 +227,8 @@ export function createCounterTraffic(route: Route, tod: TimeOfDay, consist: (cod
     const initial = lastClock == null || clock < lastClock;
     const dt = initial ? 0 : Math.max(0, clock - lastClock!); lastClock = clock;
     // 先行から更新する。初期配置でも停車ホームに後続を重ねない。
-    const ordered = trains.filter(o => !o.finished).sort((a, b) => (a.plan.at(clock - a.delay)?.head ?? Infinity) - (b.plan.at(clock - b.delay)?.head ?? Infinity));
+    const position = (o: CounterTrain) => isShiokaze && o.active ? o.head : o.plan.at(clock - o.delay)?.head ?? Infinity;
+    const ordered = trains.filter(o => !o.finished).sort((a, b) => position(a) - position(b));
     for (const o of ordered) {
       let m = o.plan.at(clock - o.delay);
       if (!m) {

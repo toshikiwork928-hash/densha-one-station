@@ -125,10 +125,28 @@ function assertSafety(routeId: string, tod: Tod): void {
     }
   }
   let previous: ReturnType<typeof activeSnapshot> = [], lastClock = first - 1;
+  const localOrder = new Map<string, number>();
+  const observedStops = new Map<string, Set<number>>();
   // 遅延を戻しても全列車が系外へ抜けること。安全確認も同じ0.1秒刻みで続ける。
   for (let clock = first - 1; clock <= last + 3600; clock += .1) {
     lastClock = clock;
     traffic.update(clock);
+    if (routeId === 'shiokaze') {
+      const active = traffic.trains.filter(t => t.active).sort((a, b) => a.head - b.head);
+      let previousLocal = -1;
+      for (const train of active) {
+        if (train.code === 'L') {
+          if (!localOrder.has(train.id)) localOrder.set(train.id, localOrder.size);
+          const order = localOrder.get(train.id)!;
+          verifyLazy(order > previousLocal, () => `${routeId}/${tod}: 普通 ${train.id} の順序が逆転`);
+          previousLocal = order;
+        }
+        if (train.stopped && train.station != null) {
+          if (!observedStops.has(train.id)) observedStops.set(train.id, new Set());
+          observedStops.get(train.id)!.add(train.station);
+        }
+      }
+    }
     for (const rear of traffic.trains) for (const front of traffic.trains) {
       if (rear === front || !rear.active || !front.active || rear.head <= front.head || !sharesLane(traffic, rear, front)) continue;
       const floor = front.head + front.length + COUNTER_BLOCK_GAP;
@@ -144,6 +162,10 @@ function assertSafety(routeId: string, tod: Tod): void {
     if (clock >= last + 1 && traffic.trains.every(t => t.finished)) break;
   }
   verify(traffic.trains.every(t => t.finished), `${routeId}/${tod}: 遅延後も全列車が運行終了しない`);
+  if (routeId === 'shiokaze') for (const train of traffic.trains) for (const point of train.plan.points) {
+    if (point.stop && point.station != null) verify(observedStops.get(train.id)?.has(point.station),
+      `${routeId}/${tod}: ${train.id} が ${route.stations[point.station].name} の停止位置に到着しない`);
+  }
   if (routeId === 'nankai-through-up' && tod === 'noon') verify(minatoNoonExpressFollowFrames > 0,
     `昼 堺→岸和田: 湊停車普通の直後に急行が現れない。観測=${minatoNoonSamples.join(' | ') || 'なし'}`);
   const fixed = snapshot(traffic.trains);
