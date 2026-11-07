@@ -394,6 +394,19 @@ export function buildTown(ctx: GameContext): TownResult {
   const loopNear = (s: number, m: number) => route.stations.some(st => { const z = loopZone(st); return !!z && s > z.inFrom - m && s < z.outTo + m; });
   const thirds = route.stations.flatMap(st => coastalThirdTracks(route, st));
   const thirdNear = (sd: number, s: number, m: number) => thirds.some(t => Math.sign(t.outer - t.main) === sd && s > t.from - m && s < t.to + m);
+  // 柵の6mパネル全体が副線の外側になる位置を選ぶ。
+  const fenceLat = (sd: number, s: number, margin: number) => {
+    const [lo, hi] = trackSpan(route, s, 30);
+    let edge = sd < 0 ? lo : hi;
+    for (const t of thirds) {
+      if (s + 3 < t.from || s - 3 > t.to) continue;
+      for (const q of [s - 3, s, s + 3]) {
+        const lat = t.lat(Math.max(t.from, Math.min(t.to, q)));
+        edge = sd < 0 ? Math.min(edge, lat) : Math.max(edge, lat);
+      }
+    }
+    return edge + sd * margin;
+  };
   /** 待避線駅は駅舎が待避線の分だけ外へずれる */
   const stationDepth = (s: number) => route.stations.some(st => st.loop && s > st.platform.from - 25 && s < st.platform.to + 25) ? 54 : 32;
   const tunnelNear = (s: number, m: number) => T.structureAt(s, m)?.kind === 'tunnel';
@@ -483,8 +496,8 @@ export function buildTown(ctx: GameContext): TownResult {
   }
   // OSM のコース: 地上区間の線路の柵（すべての線路の外側 3.8m。駅・踏切・構造物・分岐する線路の付近は除く）
   if (osm) for (const sd of [-1, 1]) for (let s = S0; s < S1; s += 6) {
-    if (T.structureAt(s, 10) || T.nearStation(s, 15) || thirdNear(sd, s, 30) || T.nearCrossing(s, 3) || T.trackY(s) - T.groundY(s) > 1 || !flatOk(s)) continue;
-    const [lo, hi] = trackSpan(route, s, 30), lat = sd < 0 ? lo - 3.8 : hi + 3.8;
+    if (T.structureAt(s, 10) || T.nearStation(s, 15) || T.nearCrossing(s, 3) || T.trackY(s) - T.groundY(s) > 1 || !flatOk(s)) continue;
+    const lat = fenceLat(sd, s, 3.8);
     if (tramBlocks(route, s - 3, s + 3, lat - .3, lat + .3, true) || towerNear(sd, s - 3, s + 3)) continue;
     const t = track.trackAt(s), g = T.groundY(s), b = chunks.at(s); b.parent = null;
     b.add('body', P.box, M(t.x + t.rx * lat, g + .75, t.z + t.rz * lat, -t.phi, .08, 1.5, .08), 0x5f7a66);
@@ -532,8 +545,9 @@ export function buildTown(ctx: GameContext): TownResult {
     }
     // 線路の柵（駅・踏切・構造物以外）
     for (let s = S0; s < S1; s += 6) {
-      if (T.structureAt(s, 10) || T.nearStation(s, 15) || thirdNear(sd, s, 20) || T.nearCrossing(s, 3) || T.trackY(s) - T.groundY(s) > 1 || !flatOk(s) || !levelAt(s, latOf(sd, 7.8)) || tramBlocks(route, s - 3, s + 3, latOf(sd, 7.8) - .3, latOf(sd, 7.8) + .3, true)) continue;
-      const t = track.trackAt(s), lat = latOf(sd, 7.8), g = T.groundY(s), b = chunks.at(s); b.parent = null;
+      const lat = fenceLat(sd, s, 7.8);
+      if (T.structureAt(s, 10) || T.nearStation(s, 15) || T.nearCrossing(s, 3) || T.trackY(s) - T.groundY(s) > 1 || !flatOk(s) || !levelAt(s, lat) || tramBlocks(route, s - 3, s + 3, lat - .3, lat + .3, true)) continue;
+      const t = track.trackAt(s), g = T.groundY(s), b = chunks.at(s); b.parent = null;
       b.add('body', P.box, M(t.x + t.rx * lat, g + .75, t.z + t.rz * lat, -t.phi, .08, 1.5, .08), 0x5f7a66);
       b.add('fence', P.box, M(t.x + t.rx * lat, g + .95, t.z + t.rz * lat, -t.phi, .03, 1.0, 6), 0x7f9a86);
     }
