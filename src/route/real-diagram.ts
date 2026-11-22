@@ -20,6 +20,8 @@ export interface RealTrain {
   start: number;
   /** 途中の停車駅の発車（始発駅の発車からの秒） */
   dep: Record<string, number>;
+  /** 途中の停車駅の到着（始発駅の発車からの秒） */
+  arrAt?: Record<string, number>;
   /** 終着駅の到着（始発駅の発車からの秒）。-1 はゲームの最速で着く（待避で長く停まる駅） */
   arr: number;
 }
@@ -90,7 +92,8 @@ export function applyRealDiagram(route: Route, svc: ServiceId | undefined, from:
     } else if (realDeparture != null) {
       departure = gDep[a] + realDeparture;
       // 待避駅の余裕はホームで使い、通常駅の余裕は駅間の走行に回す。
-      arrival = waits.has(i) ? Math.min(arrival, departure - 25) : departure - dwell;
+      const realArrival = e.arrAt?.[st[i].name];
+      arrival = realArrival != null ? gDep[a] + realArrival : waits.has(i) ? Math.min(arrival, departure - 25) : departure - dwell;
     }
     // 公開時刻のない通過駅は、前駅の発車から次駅の到着までの走行時間に比例配分する。
     for (let j = prev + 1; j < i; j++) {

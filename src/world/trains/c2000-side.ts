@@ -31,11 +31,17 @@ export function paint2039Side(length: number, head: boolean, open: boolean) {
     s.rect(z(0), z(1), 3.047, 3.14, orange, .35, .1);
     s.rect(z(0), z(1), 3.18, 3.39, blue, .35, .1);
   }
-  // 閉じた後方の客用扉まで腰帯が通る。開口部の内側は塗らない。
-  for (const [start, end] of open ? [[.36, doors[1] - .041], [doors[1] + .041, 1]] : [[.36, 1]]) {
+  const waistBand = (start: number, end: number) => {
     s.rect(z(start), z(end), 1.58, 1.65, blue, .35, .1);
     s.rect(z(start), z(end), 1.50, 1.565, orange, .35, .1);
+  };
+  let start = head ? .36 : 0;
+  if (open) for (const door of doors) {
+    if (door < start) continue;
+    waistBand(start, door - .041);
+    start = door + .041;
   }
+  waistBand(start, 1);
   s.rect(z(0), z(1), Y0 + .11, Y0 + .126, '#c7cac6', .38, .63);
   return s.textures();
 }

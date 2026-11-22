@@ -49,14 +49,10 @@ export function paint7100Side(length: number, top: number, head: boolean, open: 
     s.rect(-end, end, ...highBlue, BLUE_7100);
     s.rect(-end, end, ...highOrange, ORANGE_7100);
   }
-  const lowStart = -.245 * length + .53;
   if (restored) {
     s.rect(-end, end, Y0, RESTORED_SPLIT, RESTORED_LOWER, .45, .12);
   } else {
-    if (!head) {
-      s.rect(-end, doors[0] + .65, 1.55, 1.615, BLUE_7100);
-      s.rect(-end, doors[0] + .65, 1.455, 1.525, ORANGE_7100);
-    }
+    const lowStart = head ? -.245 * length + .53 : -end;
     s.rect(lowStart, end, 1.55, 1.615, BLUE_7100);
     s.rect(lowStart, end, 1.455, 1.525, ORANGE_7100);
   }

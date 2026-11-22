@@ -137,7 +137,7 @@ export const misakiWakayamako: Route = {
   reliefNear: MOUNTAIN, noInfill: MOUNTAIN,
   // 切土の擁壁（実際の運転席からの画像: 和歌山大学前の手前の右側（上りの向き）の壁、みさき公園の手前の切土、トンネル坑口の前後の切通し）
   cuttings: [
-    { from: 6340, to: 6920, side: -1, height: 4.5 },
+    { from: 6360, to: 6920, side: -1, height: 4.5 }, // 東口の交番の敷地を過ぎてから斜面が立ち上がる
     { from: 240, to: 640, side: 1, height: 5 },
     ...[[4929, 5009], [5698, 5778], [7554, 7634], [7710, 7767], [7885, 7965]].flatMap(([a, b]) => [{ from: a, to: b, side: -1 as const, height: 4 }, { from: a, to: b, side: 1 as const, height: 4 }]),
   ],

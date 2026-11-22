@@ -79,11 +79,10 @@ export function paintCommuterSide(v: CommuterVariant, Lb: number, head: boolean,
     sweepBand(s, Lb, L.frontLine, L.topLine, zs + .12, k, orange, ss ? .38 : .35, ss ? .12 : .1);
     sweepBand(s, Lb, L.frontBand, L.topBand, zs, k, blue, ss ? .38 : .35, ss ? .12 : .1, -.12);
   } else { band(L.topBand, blue); band(L.topLine, orange); }
-  // 一つ目の戸間にある社名の後ろから、腰の二本線が始まる。
-  const nameZ = (ss ? -.245 : -.278) * Lb;
+  // 先頭車は社名の後ろから、中間車は車端から腰帯を引く。
+  const lowStart = head ? (ss ? -.245 : -.278) * Lb + .53 : -hz;
   for (const [stripe, color] of [[L.lowBand, blue], [L.lowLine, orange]] as const) {
-    if (!head) s.rect(-hz, doors[0], ...stripe, color, .35, .1);
-    band(stripe, color, nameZ + .53);
+    band(stripe, color, lowStart);
   }
   // 8310号の真横写真では、客用扉の細い窓と戸間の二枚窓は上下端がほぼ揃う。
   const [w0, w1] = L.win;

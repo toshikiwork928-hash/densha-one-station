@@ -35,11 +35,7 @@ export function paint9000Side(Lb: number, head: boolean, open = false): SheetMap
     s.rect(-hz - 1, hz + 1, 3.32, 3.47, BLUE, .35, .2);
     s.rect(-hz - 1, hz + 1, 3.21, 3.30, ORANGE, .35, .15);
   }
-  const lowStart = -.245 * Lb + .53;
-  if (!head) {
-    s.rect(-hz, doors[0], 1.60, 1.73, BLUE, .35, .2);
-    s.rect(-hz, doors[0], 1.49, 1.59, ORANGE, .35, .15);
-  }
+  const lowStart = head ? -.245 * Lb + .53 : -hz;
   s.rect(lowStart, hz + 1, 1.60, 1.73, BLUE, .35, .2);
   s.rect(lowStart, hz + 1, 1.49, 1.59, ORANGE, .35, .15);
   const win: [number, number] = [2.02, 2.96];

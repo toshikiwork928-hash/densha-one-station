@@ -25,6 +25,7 @@ import { misakiWakayamako } from '../route/routes/misaki-wakayamako';
 import { izumisanoMisaki } from '../route/routes/izumisano-misaki';
 import { seaMaskOf, type CoastData } from './coast-field';
 import { crossingSpans, type RoadApproaches } from './crossing-roads';
+import { CUTTING_BANK_WIDTH } from './cuttings';
 
 export interface OsmData {
   source: string;
@@ -534,6 +535,12 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
     // 線路（本線・ホーム・分かれていく線路・入出庫線）との離隔: 建物の外形の s 方向・横方向の張り出しで測る
     const hs = (len * Math.abs(Math.cos(a)) + wid * Math.abs(Math.sin(a))) / 2, hl = (len * Math.abs(Math.sin(a)) + wid * Math.abs(Math.cos(a))) / 2;
     if (g < hl + 4) return false; // 本線群の帯にかかる
+    if (route.cuttings?.some(c => {
+      if (s + hs < c.from || s - hs > c.to) return false;
+      const [lo, hi] = span(s), wall = (c.side < 0 ? lo : hi) + c.side * (c.offset ?? 6.5);
+      const distance = (lat - wall) * c.side;
+      return distance + hl >= 0 && distance - hl <= CUTTING_BANK_WIDTH;
+    })) return false; // 法面と敷地が重なる建物を避ける
     if (sea && (inSea(s, lat, 3) || inSea(s + hs, lat + hl, 3) || inSea(s - hs, lat - hl, 3) || inSea(s + hs, lat - hl, 3) || inSea(s - hs, lat + hl, 3))) return false; // 海の上
     if (nearLine(s - hs, s + hs, lat - hl, lat + hl)) return false;
     if (inReserved(s - half, s + half, lat - half, lat + half)) return false; // 専用モジュールの敷地（駅ビル・車庫・商業施設）

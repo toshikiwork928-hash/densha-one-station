@@ -23,7 +23,7 @@ const idx = (name: string) => LINE.indexOf(name === 'なんば' ? '難波' : nam
 const sec = (hm: string) => { const [h, m] = hm.replace('|', '').split(':').map(Number); return h * 3600 + m * 60; };
 
 type Dir = 'down' | 'up';
-interface At { t: number; stop: boolean }
+interface At { t: number; stop: boolean; arr?: number }
 interface Train { no: string; type: string; svc: ServiceId | null; rank: number; dir: Dir; origin: string; dest: string; at: Map<number, At> }
 
 const svcOf = (type: string): ServiceId | null => type === '普通' ? 'local' : type === '急行' ? 'express' : type === '空港急行' ? 'airport'
@@ -39,15 +39,38 @@ for (const [key, dir] of [['outbound_trains', 'down'], ['inbound_trains', 'up']]
     (tr.departure_times as (string | null)[]).forEach((v, i) => {
       if (!v) return;
       const j = dir === 'down' ? i : n - 1 - i;
-      at.set(j, { t: sec(v), stop: !v.startsWith('|') });
+      const t = sec(v);
+      at.set(j, { t, stop: !v.startsWith('|') });
     });
     let origin = tr.starting_station as string;
     const prev = tr.previous_trains?.[0], next = tr.next_trains?.[0];
     let dest = LINE[dir === 'down' ? Math.max(...at.keys()) : Math.min(...at.keys())];
     // 和歌山港線との直通（和歌山港の時刻を足す）、空港線との直通（始発・行先だけ）
     const wk = (line: 'wakayamakosen', d: 'outbound_trains' | 'inbound_trains', num: string) => tt[line]?.[d]?.[num]?.[0];
-    if (dir === 'down' && next?.line_id === 'wakayamakosen') { const w = wk('wakayamakosen', 'outbound_trains', next.train_number); if (w?.departure_times?.[1]) at.set(LINE.length - 1, { t: sec(w.departure_times[1]), stop: true }); dest = '和歌山港'; }
-    if (dir === 'up' && prev?.line_id === 'wakayamakosen') { const w = wk('wakayamakosen', 'inbound_trains', prev.train_number); if (w?.departure_times?.[0]) at.set(LINE.length - 1, { t: sec(w.departure_times[0]), stop: true }); origin = '和歌山港'; }
+    if (dir === 'down' && next?.line_id === 'wakayamakosen') {
+      const w = wk('wakayamakosen', 'outbound_trains', next.train_number);
+      if (w?.departure_times?.[0]) {
+        const junction = at.get(n - 1)!;
+        // 平日サザン43号は18:39着・18:41発。https://www.nankai.co.jp/lib/traffic/express/sazan/pdf/sazan_down.pdf
+        const dep = sec(w.departure_times[0]);
+        const departure = no === '0603' ? sec('18:41') : dep;
+        if (junction.t < departure) junction.arr = junction.t;
+        junction.t = departure;
+      }
+      if (w?.departure_times?.[1]) at.set(LINE.length - 1, { t: sec(w.departure_times[1]), stop: true });
+      dest = '和歌山港';
+    }
+    if (dir === 'up' && prev?.line_id === 'wakayamakosen') {
+      const w = wk('wakayamakosen', 'inbound_trains', prev.train_number);
+      if (w?.departure_times?.[1]) {
+        const junction = at.get(n - 1)!;
+        // 平日サザン64号は21:30着・21:32発。https://www.nankai.co.jp/lib/traffic/express/sazan/pdf/sazan_up.pdf
+        const arrival = no === '0606' ? sec('21:30') : sec(w.departure_times[1]);
+        if (arrival < junction.t) junction.arr = arrival;
+      }
+      if (w?.departure_times?.[0]) at.set(LINE.length - 1, { t: sec(w.departure_times[0]), stop: true });
+      origin = '和歌山港';
+    }
     if (dir === 'down' && next?.line_id === 'kukosen') dest = '関西空港';
     if (dir === 'up' && prev?.line_id === 'kukosen') origin = '関西空港';
     trains.push({ no, type: tr.train_type, svc: svcOf(tr.train_type), rank: rankOf(tr.train_type), dir, origin, dest, at });
@@ -64,7 +87,8 @@ function timeAt(tr: Train, i: number): number | null {
   const a = tr.at.get(lo)!.t, b = tr.at.get(hi)!.t;
   return a + (b - a) * (i - lo) / (hi - lo);
 }
-const originDep = (tr: Train) => tr.dir === 'down' ? tr.at.get(Math.min(...tr.at.keys()))!.t : tr.at.get(Math.max(...tr.at.keys()))!.t;
+const arrAt = (tr: Train, i: number) => tr.at.get(i)?.arr ?? tr.at.get(i)?.t ?? null;
+const originDep = (tr: Train) => tr.at.get(tr.dir === 'down' ? Math.min(...tr.at.keys()) : Math.max(...tr.at.keys()))!.t;
 
 /** 時間帯・向き・種別の1本 */
 function pick(tod: TimeOfDay, dir: Dir, svc: ServiceId): Train | null {
@@ -83,7 +107,7 @@ function pick(tod: TimeOfDay, dir: Dir, svc: ServiceId): Train | null {
   return best;
 }
 
-interface Entry { svc: ServiceId; no: string; to: string; origin: string; from: string; end: string; start: number; dep: Record<string, number>; arr: number }
+interface Entry { svc: ServiceId; no: string; to: string; origin: string; from: string; end: string; start: number; dep: Record<string, number>; arrAt?: Record<string, number>; arr: number }
 const out: { source: string; license: string; revision: string; picks: Record<string, Record<string, string>>; routes: Record<string, Partial<Record<TimeOfDay, { trains: Entry[]; waits: [string, ServiceId][] }>>> } = {
   source: '鉄道運用Hub 南海電鉄 時刻表データ（https://unyohub.2pd.jp/railroad_nankai/ 、平日、2024-12-21 改正）。scripts/real-diagram.ts で作成',
   license: 'CC BY 4.0（出典: 鉄道運用Hub）', revision: '2024-12-21', picks: {}, routes: {},
@@ -117,15 +141,20 @@ for (const id of SOUTH_COURSES) {
       if (stops.length < 2) continue;
       const a = stops[0], z = stops.at(-1)!, start = tr.at.get(li[a])!.t;
       const dep: Record<string, number> = {};
-      for (const k of stops.slice(1, -1)) dep[names[k]] = tr.at.get(li[k])!.t - start;
+      const arrival: Record<string, number> = {};
+      for (const k of stops.slice(1, -1)) {
+        dep[names[k]] = tr.at.get(li[k])!.t - start;
+        const known = tr.at.get(li[k])?.arr;
+        if (known != null) arrival[names[k]] = known - start;
+      }
       // 終着の到着: 列車の終点ならその時刻（Hub の値は到着）。途中駅なら発車の 30 秒前（待避で長く停まる駅は -1 = ゲームの最速で着く）
       const isEnd = (dir === 'down' ? Math.max(...tr.at.keys()) : Math.min(...tr.at.keys())) === li[z];
-      let arr = tr.at.get(li[z])!.t - start - (isEnd ? 0 : 30);
+      let arr = arrAt(tr, li[z])! - start - (isEnd || tr.at.get(li[z])?.arr != null ? 0 : 30);
       if (svc === 'local') {
         waits = overtakes(tr, route.stations.map(s => !!s.loop), li, stops, have);
         if (!isEnd && waits.some(([n]) => n === names[z])) arr = -1;
       }
-      list.push({ svc, no: tr.no, to: tr.dest === '難波' ? 'なんば' : tr.dest, origin: tr.origin === '難波' ? 'なんば' : tr.origin, from: names[a], end: names[z], start, dep, arr });
+      list.push({ svc, no: tr.no, to: tr.dest === '難波' ? 'なんば' : tr.dest, origin: tr.origin === '難波' ? 'なんば' : tr.origin, from: names[a], end: names[z], start, dep, ...(Object.keys(arrival).length ? { arrAt: arrival } : {}), arr });
     }
     out.routes[id][tod] = { trains: list, waits };
   }

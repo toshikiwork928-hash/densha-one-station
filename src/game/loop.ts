@@ -6,6 +6,7 @@ import {
 import type { GameActions, GameContext } from '../core/context';
 import type { CameraMode } from '../core/events';
 import { DEFAULT_PERF, TRAIN_PERF, stepTrain } from '../sim/train';
+import { tractionLimit } from './timetable-pace';
 import { serviceOf, selectableServices } from '../route/service';
 import { createOvertake, waitsAt } from './overtake';
 import { createMeet } from './meet';
@@ -211,7 +212,7 @@ export function createGame(ctx: GameContext): Game {
   function step(dt: number) {
     const tr = st.train, n = tr.notch;
     ctx.trainEnv.gradePermil = track.gradeAt(tr.s);
-    if (stepTrain(tr, ctx.trainEnv, dt)) {
+    if (stepTrain(tr, ctx.trainEnv, dt, tractionLimit(ctx) ?? Infinity)) {
       st.notchAtStop = n;
       events.emit('stop', { s: tr.s, notch: n });
     }

@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "benchmark:runtime": "esbuild scripts/benchmark-runtime.ts --bundle --platform=node --format=esm --external:three --outfile=node_modules/.cache/benchmark-runtime.mjs --log-level=warning && node node_modules/.cache/benchmark-runtime.mjs",
     "verify:clearance": "esbuild scripts/check-clearance.ts --bundle --platform=node --format=esm --external:three --outfile=node_modules/.cache/check-clearance.mjs --log-level=warning --loader:.css=empty && node node_modules/.cache/check-clearance.mjs",
     "verify:izumisano": "esbuild scripts/verify-izumisano.ts --bundle --platform=node --format=esm --external:three --outfile=node_modules/.cache/verify-izumisano.mjs --log-level=warning && node node_modules/.cache/verify-izumisano.mjs",
     "verify:scenery": "esbuild scripts/verify-scenery-lod.ts --bundle --platform=node --format=esm --external:three --outfile=node_modules/.cache/verify-scenery-lod.mjs --log-level=warning && node node_modules/.cache/verify-scenery-lod.mjs",
@@ -19,7 +20,8 @@
     "osm:scenery": "esbuild scripts/osm-scenery.ts --bundle --platform=node --format=esm --external:three --outfile=node_modules/.cache/osm-scenery.mjs --log-level=warning --loader:.css=empty && node node_modules/.cache/osm-scenery.mjs",
     "geometry:south": "esbuild scripts/route-geometry.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/route-geometry.mjs --log-level=warning && node node_modules/.cache/route-geometry.mjs --chain=south",
     "geometry:misaki-wakayamako": "esbuild scripts/slice-south-geometry.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/slice-south-geometry.mjs --log-level=warning && node node_modules/.cache/slice-south-geometry.mjs",
-    "real:diagram": "esbuild scripts/real-diagram.ts --bundle --platform=node --format=esm --external:three --outfile=node_modules/.cache/real-diagram.mjs --log-level=warning --loader:.css=empty && node node_modules/.cache/real-diagram.mjs"
+    "real:diagram": "esbuild scripts/real-diagram.ts --bundle --platform=node --format=esm --external:three --outfile=node_modules/.cache/real-diagram.mjs --log-level=warning --loader:.css=empty && node node_modules/.cache/real-diagram.mjs",
+    "verify:real-diagram": "esbuild scripts/verify-real-diagram-times.ts --bundle --platform=node --format=esm --external:three --outfile=node_modules/.cache/verify-real-diagram-times.mjs --log-level=warning && node node_modules/.cache/verify-real-diagram-times.mjs"
   },
   "dependencies": {
     "three": "^0.170.0"
