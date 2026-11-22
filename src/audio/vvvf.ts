@@ -161,7 +161,7 @@ export function createVvvf(core: AudioCore, dest: AudioNode = core.run,
     let fc: number;
     // 改良音は低い起動キャリアから立ち上げる独自近似。実車の制御値ではない。
     if (nankai && m.pulses === 0) {
-      fc = sound === 'nankai-1000' ? mix.startHz ?? nankai.carrierHz : nankai.carrierHz;
+      fc = mix.startHz ?? nankai.carrierHz;
       if (brake && fullElectric) {
         if (sound === 'nankai-8000' && kmh < 5) fc = 200;
         else if (sound !== 'nankai-8000') fc *= .35 + .65 * smooth(kmh / 6);
@@ -169,7 +169,8 @@ export function createVvvf(core: AudioCore, dest: AudioNode = core.run,
     } else if (gto && m.pulses === 0) {
       const start = mix.startHz ?? 180;
       fc = start * (1 + 1.5 * smooth((kmh / firstSwitch - .25) / .75));
-    } else if (m.pulses === 0) fc = legacy ? 1000 + 200 * Math.min(1, kmh / 25) : 220 + 330 * smooth(kmh / 25);
+    } else if (m.pulses === 0) fc = legacy ? (mix.startHz ?? 1000) + 200 * Math.min(1, kmh / 25)
+      : (mix.startHz ?? 220) + 330 * smooth(kmh / 25);
     else fc = m.pulses * f;
 
     const jumped = mi !== modeIdx;

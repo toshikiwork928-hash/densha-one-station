@@ -7,7 +7,7 @@ import type { EventBus } from '../core/events';
 import { createCore, type AudioCore } from './engine';
 import { createVvvf, type Vvvf } from './vvvf';
 import { createResistance } from './resistance';
-import { defaultTuning, isResistance, savedTuning, tuningStorageKey } from './vehicle-tuning';
+import { defaultStartHz, defaultTuning, isResistance, savedTuning, tuningStorageKey } from './vehicle-tuning';
 import { createRunning, type Running } from './running';
 import { createBrakes, type Brakes } from './brakes';
 import { createStation, type StationSfx } from './station';
@@ -40,10 +40,12 @@ export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
   let vehicle = ctx.service?.kind ?? 'commuter-new';
   let saved = savedTuning(vehicle);
   let tuning = saved ?? defaultTuning(vehicle);
+  let legacyTuning = { ...tuning.vvvf, startHz: defaultStartHz('legacy') };
   function applyVehicle() {
     vehicle = ctx.service?.kind ?? 'commuter-new';
     saved = savedTuning(vehicle);
     tuning = saved ?? defaultTuning(vehicle);
+    legacyTuning = { ...tuning.vvvf, startHz: defaultStartHz('legacy') };
     if (!p) return;
     for (const key of Object.keys(tuning.track) as Array<keyof typeof tuning.track>) {
       p.core.layers[key].gain.setTargetAtTime(tuning.track[key], p.core.now(), .02);
@@ -77,7 +79,8 @@ export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
       p = {
         core, brakes,
         vvvf: createVvvf(core, core.layers.traction,
-          () => saved?.sound ?? (settings.value.traction === 'legacy' ? 'legacy' : tuning.sound), () => tuning.vvvf),
+          () => saved?.sound ?? (settings.value.traction === 'legacy' ? 'legacy' : tuning.sound),
+          () => !saved && settings.value.traction === 'legacy' ? legacyTuning : tuning.vvvf),
         resistance: createResistance(core, core.layers.traction, () => tuning),
         running: createRunning(core, () => ctx.route),
         station: createStation(core, brakes),

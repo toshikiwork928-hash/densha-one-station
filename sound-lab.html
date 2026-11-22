@@ -22,9 +22,9 @@
         <label class="field">線路<select id="track"><option value="straight">直線</option><option value="curve">急曲線</option><option value="bridge">鉄橋</option><option value="tunnel">トンネル</option></select></label>
         <label class="field" id="model-field">VVVFの音色<select id="model"></select></label>
       </div>
-      <div class="fields" id="gto-fields" hidden>
+      <div class="fields" id="carrier-fields" hidden>
         <label class="field">起動時のキャリア周波数 <output id="frequency-value"></output><input type="range" id="frequency" min="80" max="1800" step="1"></label>
-        <label class="field">同期に切り替わる速度 <output id="transition-value"></output><input type="range" id="transition" min="8" max="28" step="1"></label>
+        <label class="field" id="transition-field">同期に切り替わる速度 <output id="transition-value"></output><input type="range" id="transition" min="8" max="28" step="1"></label>
       </div>
       <button id="vehicle-sound" hidden>この車両の標準音色を試す</button>
       <p id="reference" hidden><span id="reference-note"></span> <a href="https://vvvfdb.stars.ne.jp/vvvf_data/nankai.html" target="_blank" rel="noreferrer">VVVF名鑑で実車の録音・解析を確認</a></p>

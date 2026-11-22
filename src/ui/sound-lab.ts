@@ -78,10 +78,8 @@ let tuning: VehicleTuning = defaultTuning(selected());
 let effective: VehicleTuning = tuning;
 let solo: Layer | null = null;
 let mutes = new Set<Layer>();
-type GtoSound = 'gto' | 'nankai-1000';
 type CarrierSettings = Pick<VehicleTuning['vvvf'], 'startHz' | 'transitionKmh'>;
-let carrierSettings: Partial<Record<GtoSound, CarrierSettings>> = {};
-const hasCarrierControl = (sound: string): sound is GtoSound => sound === 'gto' || sound === 'nankai-1000';
+let carrierSettings: Partial<Record<VehicleTuning['sound'], CarrierSettings>> = {};
 const draftKey = (train: TrainKind) => 'densha-one-station.sound-lab.draft.v1.' + train;
 function targetLevel(t: VehicleTuning, key: Layer, next?: number): number {
   if (key === 'cam') {
@@ -119,7 +117,7 @@ function restore() {
       const parsed = parseTuning(draft.tuning);
       if (Array.isArray(draft.mutes)) mutes = new Set(keys.filter(k => draft.mutes.includes(k)));
       tuning = parsed;
-      for (const sound of ['gto', 'nankai-1000'] as const) {
+      for (const sound of Object.keys(soundLabels) as VehicleTuning['sound'][]) {
         const remembered = draft.carrierSettings?.[sound];
         if (Number.isFinite(remembered?.startHz) && remembered.startHz >= 80 && remembered.startHz <= 1800 &&
             Number.isFinite(remembered.transitionKmh) && remembered.transitionKmh >= 8 && remembered.transitionKmh <= 28) {
@@ -134,7 +132,8 @@ function showControls() {
   const resist = isResistance(selected());
   model.value = tuning.sound;
   field('model-field').hidden = resist;
-  field('gto-fields').hidden = resist || !hasCarrierControl(tuning.sound);
+  field('carrier-fields').hidden = resist;
+  field('transition-field').hidden = tuning.sound !== 'gto' && tuning.sound !== 'nankai-1000';
   button('vehicle-sound').hidden = resist || tuning.sound === defaultTuning(selected()).sound;
   field('reference').hidden = resist || !tuning.sound.startsWith('nankai-');
   field('reference-note').textContent = tuning.sound === 'nankai-1000'
@@ -170,14 +169,9 @@ function showControls() {
   if (activeName) [...layers.querySelectorAll('button')].find(b => b.getAttribute('aria-label') === activeName)?.focus();
 }
 function selectSound(sound: VehicleTuning['sound']) {
-  if (hasCarrierControl(tuning.sound)) {
-    const { startHz, transitionKmh } = tuning.vvvf;
-    carrierSettings[tuning.sound] = { startHz, transitionKmh };
-  }
-  if (hasCarrierControl(sound)) {
-    const carrier = carrierSettings[sound] ?? { startHz: defaultStartHz(sound), transitionKmh: 10 };
-    Object.assign(tuning.vvvf, carrier);
-  }
+  const { startHz, transitionKmh } = tuning.vvvf;
+  carrierSettings[tuning.sound] = { startHz, transitionKmh };
+  Object.assign(tuning.vvvf, carrierSettings[sound] ?? { startHz: defaultStartHz(sound), transitionKmh: 10 });
   tuning.sound = sound; changed(); showControls();
 }
 model.onchange = () => selectSound(model.value as VehicleTuning['sound']);
