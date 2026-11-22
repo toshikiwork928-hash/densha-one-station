@@ -45,9 +45,13 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e13; col
 }
 #overlay { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(5,8,12,.62); padding: 16px; }
 #overlay.hidden { display: none; }
-.card { width: min(520px, 100%); background: #121823; border: 1px solid var(--line); border-radius: 16px; padding: 24px; box-shadow: 0 20px 60px rgba(0,0,0,.5); max-height: 100%; overflow: auto; }
+body:has(#overlay.landing) :is(#hud, #touch) { visibility: hidden; }
+.card { width: min(620px, 100%); background: #121823; border: 1px solid var(--line); border-radius: 16px; padding: 24px; box-shadow: 0 20px 60px rgba(0,0,0,.5); max-height: 100%; overflow: auto; }
 .card h1 { margin: 0 0 4px; font-size: 26px; }
 .card h1 small { display: block; font-size: 13px; color: var(--muted); font-weight: 400; margin-top: 4px; }
+.titleHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.backToLines { flex: 0 0 auto; margin-top: 2px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: #1b2330; color: #c9d2de; font: inherit; font-size: 11px; cursor: pointer; }
+.backToLines:hover { border-color: #6c9bd5; color: #fff; }
 .card p, .card li { color: #c9d2de; font-size: 14px; line-height: 1.7; }
 .card ul { padding-left: 18px; margin: 8px 0; }
 kbd { background: #222b39; border: 1px solid #3a4558; border-bottom-width: 2px; border-radius: 4px; padding: 0 6px; font-family: ui-monospace, monospace; font-size: 12px; }
@@ -56,6 +60,15 @@ kbd { background: #222b39; border: 1px solid #3a4558; border-bottom-width: 2px; 
 .btn:disabled { background: #34404f; color: #9aa6b6; cursor: wait; }
 .route { display: flex; align-items: center; gap: 10px; margin: 14px 0; font-weight: 700; }
 .route .bar { flex: 1; height: 4px; background: linear-gradient(90deg, #4aa8ff, #ffa53a); border-radius: 2px; }
+.lineNav { margin: 18px 0 12px; }
+.lineCards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.lineCard { min-width: 0; min-height: 92px; display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 12px; border: 1px solid var(--line); border-radius: 11px; background: #1b2330; color: #c9d2de; text-align: left; cursor: pointer; transition: border-color .15s, background .15s, transform .15s; }
+.lineCard:hover { border-color: #6c9bd5; background: #222f42; transform: translateY(-1px); }
+.lineCard:focus-visible { outline: 2px solid #8fd3ff; outline-offset: 2px; }
+.lineCardTop { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 15px; }
+.lineCardArrow { color: #8fc8ff; font-size: 18px; line-height: 1; }
+.lineCard small { display: block; color: #aebdce; font-size: 11px; line-height: 1.45; }
+.lineCardMeta { margin-top: auto; color: #87a6c7; font-size: 10px; }
 .rank { font: 900 72px/1 system-ui, sans-serif; text-align: center; margin: 6px 0; }
 .rank.S { color: #ffd84a; } .rank.A { color: #6fe08a; } .rank.B { color: #6fc0ff; } .rank.C { color: #c9d2de; } .rank.D, .rank.F { color: #ff7a6a; }
 table.res { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -177,6 +190,8 @@ table.keys td:first-child { white-space: nowrap; width: 1%; padding-right: 12px;
 @media (max-width: 640px), (max-height: 640px) {
   .card { padding: 16px; }
   .card h1 { font-size: 21px; }
+  .lineCards { grid-template-columns: 1fr; }
+  .lineCard { min-height: 76px; }
   .route { margin: 8px 0; }
   .tabPane { min-height: 0; }
   .sel button { padding: 5px 8px; font-size: 12px; }

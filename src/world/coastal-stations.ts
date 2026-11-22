@@ -5,7 +5,7 @@ import { GeoBatch, M, P, onLight } from './batch';
 import { canvasTex } from './canvas-tex';
 import { cullByDistance } from './cull';
 import { getTerrain } from './terrain';
-import { loopShape, loopZone } from '../route/service';
+import { loopShape, loopZone, seaSideOf } from '../route/service';
 import { BUMPER_D, DIVERGE_D, hagoromoSpec } from './hagoromo-branch';
 import { addPlatformWall, architectureOf } from './station-architecture';
 
@@ -36,7 +36,7 @@ export function coastalThirdTracks(route: Route, sta: Station): CoastalThird[] {
     return [{ main: h.mainIsland, outer: h.t3, from, to, lat: s => s >= from && s <= to ? h.t3 : h.mainIsland, reach: 2.9, island: true, wire: { bumperAtFrom: a < b } }];
   }
   if (sta.layout !== 'hamadera') return [];
-  const reverse = route.id.endsWith('-up'), lo = Math.min(...route.tracks), hi = Math.max(...route.tracks);
+  const reverse = seaSideOf(route) === 1, lo = Math.min(...route.tracks), hi = Math.max(...route.tracks);
   const zone = (own: boolean) => own ? loopZone({ ...sta, loop: { lat: 0, turnoutLength: TURNOUT, turnoutLimitKmh: 45 } })! : {
     inFrom: sta.platform.from - 70 - TURNOUT, inTo: sta.platform.from - 70,
     outFrom: sta.platform.to + 10, outTo: sta.platform.to + 10 + TURNOUT, lat: 0, limit: 45,
@@ -100,7 +100,7 @@ export function buildElevatedConcourse(ctx: GameContext, sta: Station, centers: 
 /** 浜寺モチーフ: 地上の旧駅舎を保存した木造洋風の意匠。画像素材は使わない。 */
 export function buildHeritageFacade(ctx: GameContext, sta: Station): void {
   const sc = (sta.platform.from + sta.platform.to) / 2;
-  const reverse = ctx.route.id.endsWith('-up');
+  const reverse = seaSideOf(ctx.route) === 1;
   const group = new THREE.Group(); group.position.copy(ctx.track.at(sc, reverse ? 30 : -26, 0)); group.rotation.y = -ctx.track.trackAt(sc).phi + (reverse ? Math.PI : 0);
   const b = new GeoBatch();
   b.add('body', P.boxB, M(0, 0, 0, 0, 8, 4.5, 26), 0xefe5cc);

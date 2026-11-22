@@ -130,6 +130,7 @@ export const stopIndices = (route: Route): number[] => route.stations.map((s, i)
 
 export function stagesOf(route: Route): Stage[] {
   const idx = stopIndices(route), st = route.stations;
+  if (route.fullCourseOnly) return [{ id: 'all', from: idx[0], to: idx[idx.length - 1], label: '全線通し' }];
   const list: Stage[] = [];
   for (let k = 0; k < idx.length - 1; k++) {
     const a = idx[k], b = idx[k + 1];

@@ -7,3 +7,8 @@ export const resolveRoute = (id: string | undefined): Route => (id && ROUTES[id]
 
 /** route id の線区（見つからなければ先頭の路線） */
 export const lineOfRoute = (id: string): LineEntry => LINES.find(l => l.dirs.some(d => d.id === id)) ?? LINES[0];
+
+export function lineFromHash(): LineEntry | undefined {
+  const id = new URLSearchParams(location.hash.slice(1)).get('line');
+  return LINES.find(line => line.id === id);
+}

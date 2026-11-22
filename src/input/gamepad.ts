@@ -33,6 +33,15 @@ export function attachGamepad(ctx: GameContext): void {
     const now = gp.buttons.map(b => b.pressed);
     const hit = (i: number) => !!now[i] && !prev[i];
     prev = now;
+    const landing = document.querySelector('#overlay.landing');
+    if (landing) {
+      const choices = Array.from(landing.querySelectorAll<HTMLButtonElement>('[data-line]'));
+      const index = Math.max(0, choices.findIndex(b => b === document.activeElement));
+      if (hit(B.A) || hit(B.START)) choices[index]?.click();
+      else if (hit(B.LEFT) || hit(B.UP)) choices[(index + choices.length - 1) % choices.length]?.focus();
+      else if (hit(B.RIGHT) || hit(B.DOWN)) choices[(index + 1) % choices.length]?.focus();
+      return;
+    }
     const a = act(), running = a.canControl();
     // Start = 一時停止 / 再開（運転・停車中）。停止中は他のボタンを受け付けない
     if (a.canPause()) {

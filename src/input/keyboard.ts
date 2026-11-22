@@ -4,6 +4,7 @@ import type { GameActions } from '../core/context';
 export function attachKeyboard(actions: GameActions, target: Window = window): () => void {
   const onKey = (e: KeyboardEvent) => {
     const k = e.code;
+    if (document.querySelector('#overlay.landing')) return;
     // 入力欄（他モジュールの設定 UI など）では無視
     const el = e.target as HTMLElement | null;
     if (el && (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA')) return;

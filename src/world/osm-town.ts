@@ -16,6 +16,8 @@ import { towerZones } from './coastal-tower';
 import { coastalThirdTracks } from './coastal-stations';
 import { twinTowerZones } from './izumiotsu-towers';
 import { sectionFrame, sharedStations } from './section-frame';
+import { airportRailCorridors } from './airport-junction';
+import { airportArchitectureReservations } from './airport-architecture';
 import { landmarkReservations } from './station-landmark';
 import type { TreeSpot } from './town-jp';
 import type { Route } from '../route/types';
@@ -25,6 +27,7 @@ import { kishiwada } from '../route/routes/kishiwada';
 import { izumisano } from '../route/routes/izumisano';
 import { misakiWakayamako } from '../route/routes/misaki-wakayamako';
 import { izumisanoMisaki } from '../route/routes/izumisano-misaki';
+import { airport } from '../route/routes/airport';
 import { seaMaskOf, type CoastData } from './coast-field';
 import { crossingSpans, type RoadApproaches } from './crossing-roads';
 import { CUTTING_BANK_WIDTH } from './cuttings';
@@ -85,6 +88,7 @@ const DATASETS: { id: string; base: Route; load: () => Promise<OsmData>; /** 水
   { id: 'kishiwada-izumisano', base: izumisano, load: async () => (await import('../data/osm/kishiwada-izumisano.json')).default as unknown as OsmData },
   { id: 'misaki-wakayamako', base: misakiWakayamako, load: async () => (await import('../data/osm/misaki-wakayamako.json')).default as unknown as OsmData },
   { id: 'izumisano-misaki', base: izumisanoMisaki, load: async () => (await import('../data/osm/izumisano-misaki.json')).default as unknown as OsmData },
+  { id: 'airport', base: airport, load: async () => (await import('../data/osm/airport.json')).default as unknown as OsmData },
 ];
 
 /** このコースが使う区間データの id（上下は同じ区間を共有。堺〜岸和田の通しは堺〜泉大津と泉大津〜岸和田の2区間）。無ければ空 */
@@ -375,7 +379,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
   const toReal = (s: number, lat: number): [number, number] => [s, lat];
   const rnd = createRng(4242);
   const S0 = route.extent.from - 60, S1 = route.extent.to + 60;
-  const reserved = [...(route.reserved ?? []), ...landmarkReservations(route)];
+  const reserved = [...(route.reserved ?? []), ...landmarkReservations(route), ...airportArchitectureReservations(route), ...airportRailCorridors(ctx)];
   const inReserved = (s0: number, s1: number, l0: number, l1: number, road = false) => reserved.some(z => !(road && z.keepRoads) && s0 < z.to && s1 > z.from && l0 < z.lat1 && l1 > z.lat0);
   // 線路の端（本線と、並んで走る追加の線路）。この外へ 4m 以上離れた所だけ使う
   const spanCache = new Map<number, [number, number]>();
@@ -415,7 +419,9 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
   const underHill = (s: number, l: number) => tunnelsOf.some(t => s > t.from - 30 && s < t.to + 30 && Math.abs(l - 2) < 170);
   // 海（OSM の海岸線の多角形。coast.ts が水面を張る）: 建物・道路・木を海の中に置かない
   const sea = seaMaskOf(data.coast);
-  const inSea = (s: number, l: number, m = 0) => !!sea && sea.inSea(s, l, m);
+  const bridge = route.airportBridge;
+  const inSea = (s: number, l: number, m = 0) =>
+    !!bridge && s + m >= Math.min(bridge.from, bridge.to) && s - m <= Math.max(bridge.from, bridge.to) || !!sea && sea.inSea(s,l,m);
   const elevated = (s: number) => T.trackY(s) - T.dryY(s) > 3;
   const blocked = (s0: number, s1: number, l0: number, l1: number, g: number, road = false) => {
     const s = (s0 + s1) / 2, [a, b] = span(s), sd = (l0 + l1) / 2 < (a + b) / 2 ? -1 : 1;
@@ -539,7 +545,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
   {
     const frnd = createRng(777);
     for (const sd of [-1, 1]) for (let cs = S0 + 6; cs < S1; cs += 12) {
-      if (route.noInfill?.some(z => cs > z.from && cs < z.to)) continue; // 山あいの区間（route.noInfill）は、OSM の建物が無い所に家を補わない
+      if (route.noInfill?.some(z => cs > z.from && cs < z.to)) continue; // 山あい・海上橋は補完住宅を置かない
       const [lo, hi] = span(cs);
       for (let d = 13; d < 200; d += 12.5) {
         const cl = sd < 0 ? lo - d : hi + d;
@@ -852,6 +858,9 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
     for (let i = 0; i + 1 < Q.length; i++) {
       const a = Q[i], c = Q[i + 1];
       if (a.s < S0 || a.s > S1 || a.skip || c.skip || a.merged) continue;
+      // 関西国際空港連絡橋の道路桁は専用景観と重なるため、OSMの同区間だけ省く。
+      const mid = (a.s+c.s)/2;
+      if (bridge && mid >= bridge.from-660 && mid <= bridge.to+660 && Math.abs((a.l+c.l)/2) < 65) continue;
       const A = track.at(a.s, a.l, 0), B = track.at(c.s, c.l, 0);
       A.y = ground(a.s) + a.h; B.y = ground(c.s) + c.h;
       const dx = B.x - A.x, dz = B.z - A.z, dyv = B.y - A.y, L = Math.hypot(dx, dz);
@@ -971,7 +980,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
       if (!inPoly(pts, ss, ll) || gap(ss, ll) < 9 || roadNear(ss, ll) || reservedAt(ss, ll) || waterFootprint(ss, ll, 2, 2) || T.riverNear(clampS(ss), ll, 3) || underHill(ss, ll) || inSea(ss, ll, 4) || underNear(ss, ll, 3)) continue;
       if (type === 'park' && rnd() < (big ? .15 : .35)) continue; // 公園は広場を残す
       const [rs, rl] = toReal(ss, ll);
-      trees.push({ s: rs, lat: rl, y: ground(ss) + T.reliefY(ss, ll), k: type === 'wood' || type === 'shrine' || big ? 1.05 + rnd() * .5 : .8 + rnd() * .4 });
+      trees.push({ s: rs, lat: rl, y: ground(ss) + T.reliefY(ss, ll), small: !!bridge && (bridge.islandAtStart ? ss < bridge.from : ss > bridge.to), k: type === 'wood' || type === 'shrine' || big ? 1.05 + rnd() * .5 : .8 + rnd() * .4 });
       nT++;
     }
   }
@@ -1007,7 +1016,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
         const ss = s0 + (s1 - s0) * u / L, ll = l0 + (l1 - l0) * u / L, ns = -(l1 - l0) / L, nl = (s1 - s0) / L;
         for (const side of [-1, 1]) {
           const ts = ss + ns * side * (w / 2 + 1.2), tl = ll + nl * side * (w / 2 + 1.2);
-          if (gap(ts, tl) < 40 || underHill(ts, tl) || inSea(ts, tl, 4) || rnd() < .3 || waterFootprint(ts, tl, 2, 2) || T.riverNear(clampS(ts), tl, 4) || underNear(ts, tl, 3)) continue;
+          if (bridge && (bridge.islandAtStart ? ts <= bridge.to : ts >= bridge.from) || gap(ts, tl) < 40 || underHill(ts, tl) || inSea(ts, tl, 4) || rnd() < .3 || waterFootprint(ts, tl, 2, 2) || T.riverNear(clampS(ts), tl, 4) || underNear(ts, tl, 3)) continue;
           const [rs, rl] = toReal(ts, tl);
           trees.push({ s: rs, lat: rl, y: ground(ts) + T.reliefY(ts, tl), k: .7 + rnd() * .25 }); nT++;
         }

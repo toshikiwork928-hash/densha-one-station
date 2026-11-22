@@ -103,6 +103,8 @@ function makeTerrain(route: Route, track: Track): Terrain {
     return d;
   };
   const dryY = (s: number) => {
+    const bridge = route.airportBridge;
+    if (bridge && s >= Math.min(bridge.from, bridge.to) && s <= Math.max(bridge.from, bridge.to)) return -4;
     const y = trackY(s);
     if (follow) return y - viaductDrop(s) - bridgeDrop(s);
     return y >= 0 ? y * tunnelW(s) : y;
@@ -321,7 +323,7 @@ export function buildTerrain(ctx: GameContext): Terrain {
     });
   };
   // 大都市（route.urban）は舗装・空き地の灰色がちの地面
-  const gc = new THREE.Color(route.urban ? 0x9a9a8e : 0x7fa05a), dirt = new THREE.Color(0x9a9270), forestC = new THREE.Color(0x48663a);
+  const gc = new THREE.Color(route.airportBridge ? 0x99998b : route.urban ? 0x9a9a8e : 0x7fa05a), dirt = new THREE.Color(0x9a9270), forestC = new THREE.Color(0x48663a);
   // OSM の沿線データで街並みを作るコース（海沿いの市街地）は、線路から約 500m まで町の地面の色（舗装・空き地）
   const town = !route.urban && !!osmSceneryFor(route), townC = new THREE.Color(0x9a9886);
   // 川（橋の範囲と OSM の水面）がある s の範囲は、溝の形を出せるよう細かい格子で作る（lat 4m・s 5m）。ほかは従来の格子
@@ -401,7 +403,7 @@ export function buildTerrain(ctx: GameContext): Terrain {
   };
   for (let s = S0; s < S1; s += 1000) buildGround(s, Math.min(S1, s + 1000));
   // 遠方の地面
-  const base = new THREE.Mesh(new THREE.PlaneGeometry(40000, 40000), new THREE.MeshLambertMaterial({ color: route.urban ? 0x8f9286 : 0x7a9a58 }));
+  const base = new THREE.Mesh(new THREE.PlaneGeometry(40000, 40000), new THREE.MeshLambertMaterial({ color: route.airportBridge ? 0x799ba5 : route.urban ? 0x8f9286 : 0x7a9a58 }));
   const mid = track.at((S0 + S1) / 2, 0, 0);
   let farY = -9;
   if (follow) for (let s = S0; s <= S1; s += 50) farY = Math.min(farY, T.dryY(s) - 12); // 遠方の地面は一番低い地面より下

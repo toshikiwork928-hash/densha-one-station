@@ -6,6 +6,8 @@ import { shiokaze, shiokazeUp } from '../src/route/routes/shiokaze';
 import { kishiwada, kishiwadaUp } from '../src/route/routes/kishiwada';
 import { izumisano, izumisanoUp } from '../src/route/routes/izumisano';
 import { izumisanoMisaki, izumisanoMisakiUp } from '../src/route/routes/izumisano-misaki';
+import { airport, airportThrough } from '../src/route/routes/airport';
+import { airportInbound } from '../src/route/routes/airport-inbound';
 import { through, throughUp } from '../src/route/routes/through';
 import { namba, nambaUp } from '../src/route/routes/namba';
 import { misakiWakayamako, misakiWakayamakoUp } from '../src/route/routes/misaki-wakayamako';
@@ -166,6 +168,32 @@ function tableOf(route: Route, id: ServiceId, log = false): string {
 }
 
 const kishiwadaThroughExpressOnly = process.argv.includes('--kishiwada-through-express-only');
+/** 関西空港→なんば（空港急行・ラピートβ）のIT時刻表を、ルートの停車駅から生成する。 */
+function writeAirportInbound(): void {
+  const values = table(airportInbound);
+  writeFileSync('src/route/routes/airport-inbound-timetable.ts', `// 関西空港→なんばの時刻表（scripts/timetable.ts が生成。手で直さない）
+import type { ServiceSpec } from '../types';
+export const IT: Record<'airport' | 'limited', ServiceSpec['timetable']> = {
+  airport: ${values.airport},
+  limited: ${values.limited},
+};
+`);
+}
+if (process.argv.includes('--airport-only') || process.argv.length === 2) {
+  writeAirportInbound();
+  const a = table(airport), t = table(airportThrough);
+  writeFileSync('src/route/routes/airport-timetable.ts', `// 南海空港線 泉佐野〜関西空港の時刻表（scripts/timetable.ts が生成。手で直さない）
+import type { ServiceSpec } from '../types';
+type Id = 'local' | 'airport' | 'limited';
+export const AT: Record<Id, ServiceSpec['timetable']> = {
+  local: ${a.local}, airport: ${a.airport}, limited: ${a.limited},
+};
+export const KT_AIRPORT: Record<Id, ServiceSpec['timetable']> = {
+  local: ${t.local}, airport: ${t.airport}, limited: ${t.limited},
+};
+`);
+  if (process.argv.includes('--airport-only')) process.exit(0);
+}
 if (kishiwadaThroughExpressOnly) {
   const replaceExpressLines = (path: string, lines: [string, string]) => {
     const source = readFileSync(path, 'utf8');

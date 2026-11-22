@@ -37,6 +37,7 @@ import { buildIzumisanoAirport } from './izumisano-airport';
 import { buildHagurazakiDepot, buildHagurazakiDepotTrains } from './hagurazaki-depot';
 import { buildMizuma } from './mizuma';
 import { osmFor, waterMaskOf } from './osm-town';
+import { buildAirportTerminal } from './airport-terminal';
 
 export interface World {
   oncoming: OncomingSystem;
@@ -60,6 +61,8 @@ export function buildWorld(ctx: GameContext): World {
   buildCoast(ctx); // OSM の海岸線のあるコースだけ（rng 不使用）
   buildSigns(ctx);
   buildStations(ctx);
+  // 関西空港終端の人工島。OSM の市街地補完とは分離して描く。
+  buildAirportTerminal(ctx);
   buildEndBlock(ctx);
   const town = buildTown(ctx); // 独自乱数（ctx.rng 不使用）
   const water = waterMaskOf(osmFor(ctx.route));

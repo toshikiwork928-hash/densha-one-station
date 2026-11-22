@@ -1,23 +1,23 @@
 // 2つの区間の路線データを、境目の駅（a の終着 = b の始発。同じ形の駅）でつないで通しのデータを作る。
 // a の終着駅のホーム泉大津側の端と b の始発駅のホームの端をそろえ、b の位置を offset だけずらす。
 // 線形は a を境目の駅の手前（ホームの端、直線）で切り、そこから b の線形を続ける（どちらも境目の駅は直線なので方位はつながる）。
-import { sameClass, seaSideOf } from './service';
+import { profileLat, sameClass, seaSideOf } from './service';
 import type { LatProfile, Route, ServiceSpec, Sign, Station } from './types';
 
 const segLen = (r: Route) => r.segments.reduce((a, g) => a + (g.type === 'straight' ? g.length : g.radius * g.angle), 0);
 
-/** 線形を長さ len で切る（最後の要素が直線であること） */
-function cutSegments(r: Route, len: number): Route['segments'] {
-  const out: Route['segments'] = [];
-  let acc = 0;
-  for (const g of r.segments) {
-    const l = g.type === 'straight' ? g.length : g.radius * g.angle;
-    if (acc + l < len - 1e-9) { out.push({ ...g }); acc += l; continue; }
-    if (g.type !== 'straight') throw new Error(`concat: ${r.id} の切断位置 ${len} が曲線上`);
-    out.push({ type: 'straight', length: len - acc });
-    return out;
+/** 境目のホーム始端で線形を切り、使う区間だけを元の順序で返す。 */
+function sliceSegments(route: Route, from: number, to: number): Route['segments'] {
+  const result: Route['segments'] = [];
+  let start = 0;
+  for (const seg of route.segments) {
+    const end = start + (seg.type === 'straight' ? seg.length : seg.radius * seg.angle);
+    const length = Math.min(to, end) - Math.max(from, start);
+    if (length > 1e-7) result.push(seg.type === 'straight'
+      ? { ...seg, length } : { ...seg, angle: length / seg.radius });
+    start = end;
   }
-  throw new Error(`concat: ${r.id} の線形が ${len} m に届かない`);
+  return result;
 }
 
 /** 標高（勾配の積分） */
@@ -57,7 +57,7 @@ export function concatRoutes(a: Route, b: Route, opt: ConcatOptions): Route {
   // 横位置の折れ線: 境目より前は a、後は b（境目の駅はどちらも基準の横位置）
   const joinProfile = (pa: LatProfile | undefined, pb: LatProfile | undefined, base: number): LatProfile | undefined => {
     if (!pa && !pb) return undefined;
-    return [...(pa ?? [[-1e6, base]]).filter(([q]) => q < joinS - 1), [joinS, base], ...(pb ?? [[1e6, base]]).map(([q, l]) => [sh(q), l] as [number, number]).filter(([q]) => q > joinS + 1)];
+    return [...(pa ?? [[-1e6, base]]).filter(([q]) => q < joinS - 1), [joinS, pb ? profileLat(pb, joinB.platform.from) : base], ...(pb ?? [[1e6, base]]).map(([q, l]) => [sh(q), l] as [number, number]).filter(([q]) => q > joinS + 1)];
   };
   const profiles: Record<string, LatProfile> = {};
   for (const c of a.tracks) { const pr = joinProfile(a.trackProfiles?.[String(c)], b.trackProfiles?.[String(c)], c); if (pr) profiles[String(c)] = pr; }
@@ -74,28 +74,28 @@ export function concatRoutes(a: Route, b: Route, opt: ConcatOptions): Route {
     const trackNames = v.trackNames ?? remap(av?.trackNames, bv?.trackNames);
     return { ...v, ...(lane ? { lane } : {}), ...(laneLimits.length ? { laneLimits } : {}), ...(platformSides ? { platformSides } : {}), ...(trackNames ? { trackNames } : {}) };
   });
-  const total = joinS + segLen(b);
+  const total = sh(segLen(b));
   const clipZones = (z: { from: number; to: number }[], lo: number, hi: number) =>
     z.map(q => ({ from: Math.max(q.from, lo), to: Math.min(q.to, hi) })).filter(q => q.from < q.to);
   return {
     ...a,
     id: opt.id, name: opt.name,
     seaSide: seaSideOf(a),
-    segments: [...cutSegments(a, joinS), ...b.segments.map(g => ({ ...g }))],
+    segments: [...sliceSegments(a, 0, joinS), ...sliceSegments(b, joinB.platform.from, segLen(b))],
     gradients: [
-      ...(a.gradients ?? []).filter(g => g.to <= joinS),
-      ...(b.gradients ?? []).map(g => ({ ...g, from: sh(g.from), to: sh(g.to) })),
+      ...(a.gradients ?? []).filter(g => g.from < joinS).map(g => ({ ...g, to: Math.min(joinS, g.to) })),
+      ...(b.gradients ?? []).filter(g => g.to > joinB.platform.from).map(g => ({ ...g, from: Math.max(joinS, sh(g.from)), to: sh(g.to) })),
     ],
     limits: [
-      ...a.limits.filter(L => L.from < joinS).map(L => ({ ...L })),
-      ...b.limits.map(L => ({ ...L, from: sh(L.from), to: sh(L.to) })),
+      ...a.limits.filter(L => L.from < joinS).map(L => ({ ...L, to: Math.min(joinS, L.to) })),
+      ...b.limits.filter(L => L.to > joinB.platform.from).map(L => ({ ...L, from: Math.max(joinS, sh(L.from)), to: sh(L.to) })),
     ],
     stations,
     services,
     ...(Object.keys(profiles).length ? { trackProfiles: profiles } : {}),
     ...(a.extraTracks || b.extraTracks ? { extraTracks: [
-      ...(a.extraTracks ?? []).filter(x => x.from < joinS),
-      ...(b.extraTracks ?? []).map(x => ({ ...x, lat: x.lat.map(([q, l]) => [sh(q), l] as [number, number]), from: sh(x.from), to: sh(x.to), ...(x.bumpers ? { bumpers: x.bumpers.map(sh) } : {}) })),
+      ...(a.extraTracks ?? []).filter(x => x.from < joinS).map(x => ({ ...x, to: Math.min(x.to, joinS) })),
+      ...(b.extraTracks ?? []).filter(x => x.to > joinB.platform.from).map(x => ({ ...x, lat: x.lat.map(([q, l]) => [sh(q), l] as [number, number]), from: Math.max(joinS, sh(x.from)), to: sh(x.to), ...(x.bumpers ? { bumpers: x.bumpers.map(sh) } : {}) })),
     ] } : {}),
     ...(a.reserved || b.reserved ? { reserved: [...(a.reserved ?? []), ...(b.reserved ?? []).map(z => ({ ...z, from: sh(z.from), to: sh(z.to) }))] } : {}),
     ...(a.deckJoin || b.deckJoin ? { deckJoin: [...(a.deckJoin ?? []), ...(b.deckJoin ?? []).map(z => ({ from: sh(z.from), to: sh(z.to) }))] } : {}),
@@ -123,7 +123,7 @@ export function concatRoutes(a: Route, b: Route, opt: ConcatOptions): Route {
     ],
     structures: [
       ...(a.structures ?? []).map(st => ({ ...st, to: Math.min(st.to, joinS) })).filter(st => st.from < st.to),
-      ...(b.structures ?? []).map(st => ({ ...st, from: Math.max(sh(st.from), joinS), to: sh(st.to) })).filter(st => st.from < st.to),
+      ...(b.structures ?? []).map(st => ({ ...st, from: Math.max(sh(st.from), joinS), to: sh(st.to), ...(st.piers ? { piers: st.piers.map(sh) } : {}) })).filter(st => st.from < st.to),
     ],
     // 境目の駅のタワー（共通ランドマーク）は a の側のものだけ残す
     coastalLandmarks: [

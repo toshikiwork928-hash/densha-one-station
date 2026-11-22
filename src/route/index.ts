@@ -9,11 +9,14 @@ import { izumisanoMisaki, izumisanoMisakiUp } from './routes/izumisano-misaki';
 import { through, throughUp } from './routes/through';
 import { namba, nambaUp } from './routes/namba';
 import { misakiWakayamako, misakiWakayamakoUp } from './routes/misaki-wakayamako';
+import { airport, airportThrough } from './routes/airport';
+import { airportInbound } from './routes/airport-inbound';
 
 export const ROUTES: Record<string, Route> = { [sakuragaoka.id]: sakuragaoka, [shiokaze.id]: shiokaze, [shiokazeUp.id]: shiokazeUp, [mountain.id]: mountain, [mountainUp.id]: mountainUp,
   [kishiwada.id]: kishiwada, [kishiwadaUp.id]: kishiwadaUp, [izumisano.id]: izumisano, [izumisanoUp.id]: izumisanoUp, [through.id]: through, [throughUp.id]: throughUp, [namba.id]: namba, [nambaUp.id]: nambaUp,
   [izumisanoMisaki.id]: izumisanoMisaki, [izumisanoMisakiUp.id]: izumisanoMisakiUp,
-  [misakiWakayamako.id]: misakiWakayamako, [misakiWakayamakoUp.id]: misakiWakayamakoUp };
+  [misakiWakayamako.id]: misakiWakayamako, [misakiWakayamakoUp.id]: misakiWakayamakoUp,
+  [airport.id]: airport, [airportThrough.id]: airportThrough, [airportInbound.id]: airportInbound };
 /** 方向の切替（下り ↔ 上り）。タイトルの方向ボタン用 */
 export const ROUTE_DIRS: { id: string; label: string; desc: string }[] = [
   { id: shiokaze.id, label: '上り', desc: '泉大津 → 堺' },
@@ -62,11 +65,23 @@ const NANKAI_SECTIONS: SectionEntry[] = [
 ];
 /** dirs の並び（既定の方向を保つための従来の順。メニューの並びは NANKAI_SECTIONS） */
 const LEGACY_ORDER = ['izumiotsu-sakai', 'izumiotsu-kishiwada', 'sakai-kishiwada', 'kishiwada-izumisano', 'sakai-namba', 'izumisano-misaki', 'misaki-wakayamako'];
+const AIRPORT_SECTIONS: SectionEntry[] = [
+  { id: airportInbound.id, name: '関西空港 → なんば', desc: '上り・空港急行／特急ラピートβ・42.8 km',
+    dirs: [{ id: airportInbound.id, label: '上り', desc: '関西空港 → なんば' }] },
+  { id: airportThrough.id, name: '岸和田 → 関西空港', desc: '本線から空港線へ通し運転・16.8 km',
+    dirs: [{ id: airportThrough.id, label: '下り', desc: '岸和田 → 関西空港' }] },
+  { id: airport.id, name: '泉佐野 → 関西空港', desc: 'りんくうタウン経由・8.8 km',
+    dirs: [{ id: airport.id, label: '下り', desc: '泉佐野 → 関西空港' }] },
+];
 export const LINES: LineEntry[] = [
   {
-    id: 'shiokaze', name: '南海本線', desc: '南海本線（難波〜堺〜泉大津〜岸和田）。海沿いの複線。区間を選ぶ。普通・急行・空港急行・特急ラピートβ・特急サザン', theme: 'coast',
+    id: 'shiokaze', name: '南海本線', desc: 'なんばから堺・岸和田を経て和歌山方面へ。区間と方向を選んで運転できます。', theme: 'coast',
     // 既定の方向（dirs[0]）は従来どおり堺〜泉大津の下り。メニューの区間の並び（sections）とは別に、堺〜難波を末尾側に置く
     dirs: [...NANKAI_SECTIONS].sort((p, q) => LEGACY_ORDER.indexOf(p.id) - LEGACY_ORDER.indexOf(q.id)).flatMap(x => x.dirs), sections: NANKAI_SECTIONS,
+  },
+  {
+    id: 'airport', name: '南海空港線', desc: '関西空港からなんばへ向かう上りと、岸和田・泉佐野から関西空港へ向かう下り。', theme: 'coast',
+    dirs: AIRPORT_SECTIONS.flatMap(s => s.dirs), sections: AIRPORT_SECTIONS,
   },
   {
     id: 'mountain', name: '高野線', desc: '高野線（橋本〜極楽橋、一部の駅を省略）。谷を上る単線の山岳線。50‰ の急勾配と急曲線、交換駅で行き違い。各停（2300系 2両/4両）', theme: 'mountain',

@@ -11,7 +11,7 @@ import { front7169ForRoute } from '../route/vehicle-direction';
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import type { OncomingSpec, ServiceId, Station, TimeOfDay, TrainKind } from '../route/types';
-import { carLenOf, customPlatformSide, islandOffset, loopShape, loopZone, sameClass, serviceOf, WAKAYAMA_DEST, type LoopZone } from '../route/service';
+import { carLenOf, customPlatformSide, islandOffset, loopShape, loopZone, sameClass, seaSideOf, serviceOf, WAKAYAMA_DEST, type LoopZone } from '../route/service';
 import { classOfSpec, hourlyOf, planOncoming, runClasses, runConsist, rushStopScenes, tokkyuOrder, type TrainClass } from '../route/oncoming-stops';
 import MEETS from '../data/oncoming-meets.json';
 import { counterTimetable, createTimetableOncoming } from './oncoming-timetable';
@@ -340,7 +340,7 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
     : label.includes('空港急行') ? 'airport' : label.includes('急行') ? 'express' : 'local';
   /** 対向列車が横位置 lat の線に停まったとき、ホームがあるか（custom 駅はホームの形から。浜寺公園の堺方面は本線にホームが無い） */
   const platformFor = (sta: Station, lat: number): boolean =>
-    sta.layout === 'custom' ? !!customPlatformSide(sta, lat) : !(sta.layout === 'hamadera' && route.id.endsWith('-up'));
+    sta.layout === 'custom' ? !!customPlatformSide(sta, lat) : !(sta.layout === 'hamadera' && seaSideOf(route) === 1);
   /** すれ違う編成の途中の停車駅: 種別の停車駅（普通は全駅）のうち、出現位置より先にあり、走る線にホームがある駅 */
   function haltsOf(o: OncomingTrain, id: ServiceId): Halt[] {
     const svc = route.services?.find(v => v.id === id) ?? route.services?.find(v => sameClass(v.id, id));

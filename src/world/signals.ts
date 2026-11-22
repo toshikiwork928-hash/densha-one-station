@@ -7,6 +7,7 @@ import { islandOffset, loopZones, trackLines } from '../route/service';
 import { GeoBatch, M, P, basePart } from './batch';
 import { canvasTex } from './canvas-tex';
 import { cullByDistance } from './cull';
+import { coastalThirdTracks } from './coastal-stations';
 
 const LAT = -2.7; // 自線左側
 const LAT_BETWEEN = -2.5; // 本線と待避線の線間
@@ -32,6 +33,7 @@ export function buildSignals(ctx: GameContext): void {
   const zones = loopZones(ctx.route);
   // 自線の左 5.5m 以内に別の線（高野線など）があるときは、灯器が隣の線の建築限界に掛からないよう少し自線へ寄せる
   const extraLines = trackLines(ctx.route).filter(l => l.kind === 'extra');
+  const neighboringLines = [...extraLines, ...ctx.route.stations.flatMap(st => coastalThirdTracks(ctx.route, st))];
   const leftRoom = (s: number) => {
     const own = islandOffset(ctx.route, ctx.route.tracks[0], s);
     return extraLines.some(l => s >= l.from && s <= l.to && l.lat(s) < own - .5 && l.lat(s) > own - 5.5) ? .15 : 0;
@@ -46,7 +48,13 @@ export function buildSignals(ctx: GameContext): void {
       // 待避線が本線の隣（4m）で線間に建てられない駅（浜寺公園の堺方面）は、両方とも待避線の外側に並べる
       const near = Math.abs(z.lat) < 6;
       heads.push({ i, role: 'main', station: z.index, lat: near ? z.lat + Math.sign(z.lat) * 1.3 + LAT : LAT_BETWEEN }, { i, role: 'loop', station: z.index, lat: z.lat + LAT });
-    } else heads.push({ i, role: 'single', station: -1, lat: LAT + (ctx.route.singleTrack ? track.pathLat(sg.s) : ctx.route.trackProfiles ? islandOffset(ctx.route, ctx.route.tracks[0], sg.s) + leftRoom(sg.s) : 0) }); // 単線: 交換駅などで左へ開く自列車の線の左側
+    } else {
+      let lat = LAT + (ctx.route.singleTrack ? track.pathLat(sg.s) : ctx.route.trackProfiles ? islandOffset(ctx.route, ctx.route.tracks[0], sg.s) + leftRoom(sg.s) : 0);
+      // 出発信号機と隣の線が近接する位置では、隣線の外側に柱と灯器を置く。
+      const centers = neighboringLines.filter(l => sg.s >= l.from && sg.s <= l.to).map(l => l.lat(sg.s)).sort((a, b) => b - a);
+      for (const center of centers) if (Math.abs(lat - center) < 2.4) lat = center + LAT;
+      heads.push({ i, role: 'single', station: -1, lat });
+    }
   });
   for (const z of zones) {
     let h = -1;

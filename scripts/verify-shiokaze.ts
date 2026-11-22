@@ -26,6 +26,7 @@ import { createTrainEnv } from '../src/sim/train';
 import { createRng } from '../src/core/rng';
 import { attachAutodrive } from '../src/debug/autodrive';
 import { terminalSpeedLimit } from '../src/game/terminal-ats';
+import { ROUTES, lineOf } from '../src/route';
 import type { GameContext } from '../src/core/context';
 import { createSignalSystem } from '../src/game/signals';
 
@@ -67,6 +68,69 @@ function context(source: Route, service: ServiceId, vehicles: VehicleSel = {}, t
   return { route, track: buildTrack(route), events: new EventBus(), state: createState(route, { stageId: 'all', service, mode: 'normal', vehicles }),
     trainEnv: createTrainEnv(), scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(), renderer: null!, env: null!, rng: createRng(12345),
     assetsReady: true, envState: { timeOfDay: 'noon', weather: 'clear', intensity: 0 }, light: { night: 0, tunnel: 0 }, cameraMode: 'cab', actions: null! };
+}
+
+const airportCourses = Object.values(ROUTES).filter(route => route.stations.at(-1)?.name === '関西空港');
+assert.deepEqual(airportCourses.map(r => r.stations[0].name).sort(), ['岸和田', '泉佐野'].sort());
+for (const source of airportCourses) {
+  assert.equal(lineOf(source.id)?.id, 'airport');
+  for (const service of selectableServices(source)) {
+    const ctx = context(source, service.id);
+    const last = ctx.route.stations.length - 1;
+    assert.deepEqual(stagesOf(ctx.route).map(s => [s.from, s.to]), [[0, last]]);
+    assert.equal(ctx.route.stations[last - 1].name, 'りんくうタウン');
+    assert.equal(ctx.route.stations[last - 2].name, '泉佐野');
+    assert.deepEqual(service.stops.slice(-3), [last - 2, last - 1, last]);
+    assert.equal(service.destination, '関西空港');
+    const end = ctx.route.stations[last].stopS;
+    assert.equal(terminalSpeedLimit(ctx.route, last, end - 1001), Infinity);
+    assert.equal(terminalSpeedLimit(ctx.route, last, end - 1000), 65);
+    let brakes = 0;
+    const signals = createSignalSystem(ctx, () => brakes++);
+    ctx.state.nextSignal = -1;
+    ctx.state.train.v = 90 / 3.6;
+    for (let i = 1; i <= last; i++) {
+      ctx.state.target = i;
+      ctx.state.train.s = ctx.route.stations[i].stopS - 40;
+      signals.update(1 / 30, true);
+      assert.equal(brakes, Number(i === last), `${source.id}/${service.id}/${ctx.route.stations[i].name}の終着ATS`);
+    }
+    // 先行列車が占有する閉そくへ進入しても、空港線の途中では信号違反だけを記録する。
+    const middle = context(source, service.id);
+    const station = middle.route.stations[1];
+    middle.route.signals = [{ id: 'test', s: station.stopS }];
+    middle.state.nextSignal = 0;
+    middle.state.target = 1;
+    middle.state.train.s = station.stopS;
+    middle.state.precedingS = station.stopS + 10;
+    createSignalSystem(middle, () => assert.fail('途中駅でATS非常制動')).update(1 / 30, true);
+    assert.equal(middle.state.penalties.redPass, 1);
+  }
+}
+
+// 関西空港→なんば: 空港急行・ラピートβの行先、停車駅、時刻表、終端ATSを確認する。
+const airportInboundCourses = Object.values(ROUTES).filter(route => route.stations[0]?.name === '関西空港' && route.stations.at(-1)?.name === 'なんば');
+assert.equal(airportInboundCourses.length, 1, '関西空港発なんば行きの登録');
+for (const source of airportInboundCourses) {
+  const last = source.stations.length - 1;
+  for (const id of ['airport', 'limited'] as const) {
+    const service = source.services?.find(v => v.id === id);
+    assert.ok(service, `${source.id}/${id}のサービス定義`);
+    assert.equal(service.destination, 'なんば', `${source.id}/${id}の行先`);
+    assert.equal(service.destinationKana, 'なんば', `${source.id}/${id}の行先かな`);
+    assert.ok(service.stops.includes(0) && service.stops.includes(last), `${source.id}/${id}の両端停車`);
+    assert.ok(service.timetable?.[0]?.dep === 0, `${source.id}/${id}の空港発時刻`);
+    assert.ok(service.timetable?.[last]?.arr != null, `${source.id}/${id}のなんば着時刻`);
+    const ctx = context(source, id);
+    let brakes = 0;
+    const signals = createSignalSystem(ctx, () => brakes++);
+    ctx.state.nextSignal = -1;
+    ctx.state.target = last;
+    ctx.state.train.v = 90 / 3.6;
+    ctx.state.train.s = ctx.route.stations[last].stopS - 40;
+    signals.update(1 / 30, true);
+    assert.equal(brakes, 1, `${source.id}/${id}の終端ATS`);
+  }
 }
 
 // タイトルボタンと同じ候補、保存復元、実際のTab/ゲームパッド用選択処理を確認。
@@ -762,7 +826,7 @@ if (routeOnly) process.exit(0);
 // 全時間帯・全種別で完走し、待避・行き違いと速度制限を守れるかを調べる。
 {
   let n = 0;
-  for (const route of [shiokaze, shiokazeUp, kishiwada, kishiwadaUp, izumisano, izumisanoUp, throughUp, through, namba, nambaUp, izumisanoMisaki, izumisanoMisakiUp, misakiWakayamako, misakiWakayamakoUp, mountain, mountainUp]) {
+  for (const route of [...airportCourses, ...airportInboundCourses, shiokaze, shiokazeUp, kishiwada, kishiwadaUp, izumisano, izumisanoUp, throughUp, through, namba, nambaUp, izumisanoMisaki, izumisanoMisakiUp, misakiWakayamako, misakiWakayamakoUp, mountain, mountainUp]) {
     for (const tod of ['morning', 'noon', 'evening', 'night'] as const) {
       // その時間帯に実際に走る種別（実ダイヤ）
       for (const service of selectableServices(Object.assign(structuredClone(route), { timeOfDay: tod })).map(v => v.id)) {
@@ -770,6 +834,8 @@ if (routeOnly) process.exit(0);
         const game = createGame(ctx);
         assert.equal(ctx.route.timeOfDay, tod);
         const observed = new Set<number>();
+        const arrivals: string[] = [];
+        if (airportInboundCourses.includes(route)) ctx.events.on('arrive', ({ station }) => arrivals.push(station.name));
         if (route.id === 'izumisano-misaki' && service === 'express') {
           let arrival = NaN;
           ctx.events.on('arrive', ({ station }) => { if (station.name === '尾崎') arrival = ctx.state.t; });
@@ -791,6 +857,11 @@ if (routeOnly) process.exit(0);
         const tag = `${route.id}/${tod}/${service}`;
         if (ctx.state.penalties.atsBrake || ctx.state.state !== 'result') console.log(tag, (result.log ?? []).filter((l: string) => /ATS警報|非常|待|通過/.test(l)).slice(0, 14).join(' | '));
         assert.equal(ctx.state.state, 'result', `${tag}完走`);
+        if (airportInboundCourses.includes(route)) {
+          const expected = ctx.route.services!.find(v => v.id === service)!.stops.slice(1).map(i => ctx.route.stations[i].name);
+          assert.deepEqual(arrivals, expected, tag);
+          console.log(tag, Math.round(ctx.state.t), arrivals.join(' → '));
+        }
         assert.equal(ctx.state.penalties.atsBrake, 0, `${tag}ATS非常制動なし`);
         assert.equal(result.overspeed, 0, `${tag}速度超過なし`);
         const last = ctx.route.stations.length - 1;

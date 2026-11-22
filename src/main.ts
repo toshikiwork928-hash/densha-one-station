@@ -9,7 +9,7 @@ import { createRng } from './core/rng';
 import { buildTrack } from './route/track';
 import { createTrainEnv } from './sim/train';
 import { createState } from './game/state';
-import { loadSelection } from './game/ranking';
+import { loadSelection, selectionForLine } from './game/ranking';
 import { createGame } from './game/loop';
 import { createRenderCore } from './render/renderer';
 import { installRenderRecovery } from './render/recovery';
@@ -23,7 +23,7 @@ import { loadCourseData } from './ui/course-loading';
 import { attachSfx } from './audio/sfx';
 import { attachHud } from './ui/hud';
 import { attachOverlay } from './ui/overlay';
-import { lineOfRoute, resolveRoute } from './ui/lines';
+import { lineFromHash, resolveRoute } from './ui/lines';
 import { attachKeyboard } from './input/keyboard';
 import { attachTouch } from './input/touch';
 import { attachMouse } from './input/mouse';
@@ -31,11 +31,12 @@ import { attachGamepad } from './input/gamepad';
 
 const renderCanvas = $<HTMLCanvasElement>('c');
 const recovery = installRenderRecovery(renderCanvas);
-const saved = loadSelection();
+const line = lineFromHash();
+const saved = line ? selectionForLine(line.id) : loadSelection();
 const inspectionRoute = import.meta.env.DEV && new URLSearchParams(location.search).has('inspect')
   ? new URLSearchParams(location.search).get('route') : null;
-const route = resolveRoute(inspectionRoute ?? saved?.routeId);
-document.title = `${lineOfRoute(route.id).name} 運転シミュレーター`;
+const routeId = line && !line.dirs.some(d => d.id === saved?.routeId) ? line.dirs[0].id : saved?.routeId;
+const route = resolveRoute(inspectionRoute ?? routeId);
 preloadLook(); // 最初がイラストなら加工コードの取得だけ先に始める（待たない）
 await loadCourseData(route); // 選んだコースの沿線データ（区間ごとの別ファイル）。準備できてから世界を作る
 const { renderer, scene, camera } = createRenderCore(renderCanvas);

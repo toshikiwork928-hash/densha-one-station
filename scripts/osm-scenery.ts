@@ -13,6 +13,7 @@ import { namba } from '../src/route/routes/namba';
 import { shiokaze } from '../src/route/routes/shiokaze';
 import { kishiwada } from '../src/route/routes/kishiwada';
 import { izumisano } from '../src/route/routes/izumisano';
+import { airport } from '../src/route/routes/airport';
 import { IZUMISANO_MISAKI_PLATFORM_LEN, izumisanoMisaki } from '../src/route/routes/izumisano-misaki';
 import { MISAKI_WAKAYAMAKO_PLATFORM_LEN, misakiWakayamako } from '../src/route/routes/misaki-wakayamako';
 import { profileLat } from '../src/route/service';
@@ -68,6 +69,14 @@ const COURSES: Record<string, Course> = {
     railName: '南海本線',
     stations: ['岸和田', '蛸地蔵', '貝塚', '二色浜', '鶴原', '井原里', '泉佐野'],
     mainExtras: [],
+  },
+  // 空港線（泉佐野〜りんくうタウン〜関西空港）。JR単独の線路を除き、南海の線路と共用区間をたどる。
+  airport: {
+    route: airport,
+    bbox: [34.395, 135.200, 34.455, 135.340],
+    railName: '南海(電気鉄道)?空港線',
+    stations: ['泉佐野', 'りんくうタウン', '関西空港'],
+    mainExtras: [], twoPass: true,
   },
   // 泉佐野〜みさき公園（データの座標は 'izumisano-misaki' = 泉佐野 → みさき公園）
   'izumisano-misaki': {
@@ -489,7 +498,9 @@ function joinLines(parts: G[][], keyOf: (i: number) => string = () => '', firsts
 /** 道路の way を、同じ等級・名前・高架かどうかでつないだ長い折れ線にする（つぎはぎを減らす） */
 function mergeRoads(els: OsmEl[]): OsmEl[] {
   const roads = els.filter(e => e.type === 'way' && e.tags?.highway && e.geometry && e.geometry.length > 1);
-  const rest = els.filter(e => !roads.includes(e));
+  // includes は要素数×道路数の線形探索になり、空港島の大規模タイルで数分かかる。
+  const roadSet = new Set(roads);
+  const rest = els.filter(e => !roadSet.has(e));
   const keyOf = (e: OsmEl) => { const t = e.tags!; return `${roadClass(t)}|${t.name ?? ''}|${isElevated(t) ? 1 : 0}|${t.bridge === 'yes' ? 1 : 0}|${t.lanes ?? ''}`; };
   const keys = roads.map(keyOf);
   const firsts: number[] = [];

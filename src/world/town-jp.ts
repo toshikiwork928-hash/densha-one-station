@@ -362,7 +362,9 @@ export function buildTown(ctx: GameContext): TownResult {
     transparent: true, opacity: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
   shadowMat.userData.illustrationShadow = true;
   const trees: TreeSpot[] = [];
-  const S0 = route.extent.from, S1 = route.extent.to;
+  const bridge = route.airportBridge;
+  const S0 = bridge?.islandAtStart ? bridge.to : route.extent.from;
+  const S1 = bridge && !bridge.islandAtStart ? bridge.from : route.extent.to;
   const L0 = Math.min(...route.tracks), L1 = Math.max(...route.tracks);
   const latOf = (sd: number, d: number) => sd < 0 ? L0 - d : L1 + d;
   // 山岳線: 町並み・田畑・道路は平地（川沿いの町・平野）で、地面が線路と同じ高さの所だけ

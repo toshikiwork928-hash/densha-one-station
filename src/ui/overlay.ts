@@ -3,8 +3,8 @@ import { notchName } from '../core/config';
 import type { GameContext } from '../core/context';
 import { $, fmtClock } from '../core/dom';
 import { addHistory, getBest, getHistory, resetRecords, saveSelection, selectionForLine, submitScore } from '../game/ranking';
-import { LINES, ROUTES, sectionOf, type LineEntry } from '../route';
-import { lineOfRoute } from './lines';
+import { LINES, ROUTES, sectionOf } from '../route';
+import { lineFromHash, lineOfRoute } from './lines';
 import type { GameResult } from '../game/scoring';
 import { safetyDeductions } from '../game/scoring';
 import { MODE_LABEL, findStage, stagesOf, type GameMode } from '../game/state';
@@ -14,8 +14,14 @@ import type { ServiceSpec, TrainKind } from '../route/types';
 import { createVehiclePreview } from './vehicle-preview';
 
 /** 種別の説明（停車駅・編成） */
-const svcDesc = (route: GameContext['route'], v: ServiceSpec) =>
-  `${v.cars}両・${v.stops.length === route.stations.length ? '各駅に停車' : v.stops.length === 2 ? '途中駅すべて通過' : `${route.stations.filter((_, i) => !v.stops.includes(i)).map(x => x.name).join('・')} 通過`}`;
+const svcDesc = (route: GameContext['route'], v: ServiceSpec) => {
+  if (route.fullCourseOnly && v.stops.length < route.stations.length / 2) {
+    const stops = v.stops.slice(1, -1).map(i => route.stations[i].name);
+    return `${v.cars}両・途中停車駅　${stops.join('・')}`;
+  }
+  return `${v.cars}両・${v.stops.length === route.stations.length ? '各駅に停車' : v.stops.length === 2 ? '途中駅すべて通過' : `${route.stations.filter((_, i) => !v.stops.includes(i)).map(x => x.name).join('・')} 通過`}`;
+
+};
 
 /** 車種の説明（選択画面用） */
 const KIND_INFO: Record<TrainKind, { name: string; desc: string }> = {
@@ -71,18 +77,47 @@ export function attachOverlay(ctx: GameContext): void {
     }
   }
 
-  /** 路線の切替: 今の選択を路線ごとに保存し、切替先の前回の選択（無ければ既定）で再読込（線路・駅・景観を作り直す） */
-  function switchLine(to: LineEntry) {
-    saveSelection({ ...st.sel, routeId: route.id });
-    const prevSel = selectionForLine(to.id);
-    const routeId = prevSel?.routeId && to.dirs.some(d => d.id === prevSel.routeId) ? prevSel.routeId : to.dirs[0].id;
-    const r = ROUTES[routeId];
-    saveSelection(prevSel ? { ...prevSel, routeId } : {
-      stageId: '', mode: st.sel.mode, vehicles: {}, routeId,
-      service: r?.services?.find(v => v.id === 'express')?.id ?? r?.services?.[0]?.id ?? 'local',
+  function renderLineCards(): void {
+    card.querySelectorAll<HTMLButtonElement>('[data-line]').forEach(b => b.onclick = () => {
+      const to = LINES.find(l => l.id === b.dataset.line);
+      if (!to) return;
+      saveSelection({ ...st.sel, routeId: route.id });
+      const prevSel = selectionForLine(to.id);
+      const routeId = prevSel?.routeId && to.dirs.some(d => d.id === prevSel.routeId) ? prevSel.routeId : to.dirs[0].id;
+      const r = ROUTES[routeId];
+      saveSelection(prevSel ? { ...prevSel, routeId } : {
+        stageId: '', mode: st.sel.mode, vehicles: {}, routeId,
+        service: r?.services?.find(v => v.id === 'express')?.id ?? r?.services?.[0]?.id ?? 'local',
+      });
+      location.hash = `line=${encodeURIComponent(to.id)}`;
     });
-    card.innerHTML = `<p class="brief" style="text-align:center">${to.name}を読み込み中…</p>`;
-    location.reload();
+  }
+
+  function showLanding(): void {
+    overlay.classList.remove('hidden');
+    overlay.classList.add('landing');
+    card.innerHTML = `
+      <header class="titleHead">
+        <div><h1>南海電車 運転シミュレーター<small>運転する路線を選んでください</small></h1></div>
+      </header>
+      <nav class="lineNav landingNav" aria-label="路線を選ぶ">
+        <div class="lineCards">
+          ${LINES.map(l => `<button type="button" data-line="${l.id}" class="lineCard line-${l.theme}">
+            <span class="lineCardTop"><b>${l.name}</b><span class="lineCardArrow" aria-hidden="true">→</span></span>
+            <small>${l.desc}</small>
+            <span class="lineCardMeta">${l.sections?.length ? `${l.sections.length}区間から選択` : `${l.dirs.length}方向から選択`}</span>
+          </button>`).join('')}
+        </div>
+      </nav>`;
+    renderLineCards();
+  }
+
+  function renderTitle(): void {
+    const selected = lineFromHash();
+    document.title = `${selected?.name ?? '南海電車'} 運転シミュレーター`;
+    if (!selected) showLanding();
+    else if (selected.id === line.id) showTitle();
+    else location.reload();
   }
 
   function showTitle() {
@@ -104,15 +139,20 @@ export function attachOverlay(ctx: GameContext): void {
       .map(w => { const p = serviceOf(route, w.passedBy); return `<b>${route.stations[w.station].name}で${p?.name ?? ''}の${p?.stops.includes(w.station) ? '待ち合わせ' : '通過待ち'}</b>（出発信号が進行になってから発車）`; }).join('、') ?? '';
     const stages = stagesOf(route).map(s => `<button data-stage="${s.id}" class="${s.id === stage.id ? 'on' : ''}">${s.id === 'all' ? '全線通し' : s.label}${s.id === 'all' ? `<small>${route.stations[s.from].name} → ${route.stations[s.to].name}</small>` : ''}</button>`).join('');
     const modes = (Object.keys(MODE_LABEL) as GameMode[]).map(m => `<button data-mode="${m}" class="${m === st.sel.mode ? 'on' : ''}">${MODE_LABEL[m]}<small>${MODE_DESC[m]}</small></button>`).join('');
-    overlay.classList.remove('hidden');
+    overlay.classList.remove('hidden', 'landing');
     card.innerHTML = `
-    <h1>${line.name} 運転シミュレーター<small>運転台視点の電車運転ゲーム / Three.js</small></h1>
-    <div class="lines" role="radiogroup" aria-label="路線">${LINES.map(l => `<button type="button" role="radio" aria-checked="${l.id === line.id}" data-line="${l.id}" class="line-${l.theme} ${l.id === line.id ? 'on' : ''}"><b>${l.name}</b><small>${l.desc}</small></button>`).join('')}</div>
+    <header class="titleHead">
+      <div>
+
+        <h1>${line.name} 運転シミュレーター</h1>
+      </div>
+      <button type="button" class="backToLines" id="backToLines">路線一覧</button>
+    </header>
     <div class="route"><span>${first.name}</span><span class="bar"></span><span>${last.name}</span></div>
     <div class="tabs" role="tablist">${TABS.map(([k, n]) => `<button type="button" role="tab" data-tab="${k}">${n}</button>`).join('')}</div>
     <div class="tabPane" data-pane="stage">
       ${line.sections ? `<div class="selLbl">区間</div><div class="sel" id="selSection">${line.sections.map(x => `<button data-section="${x.id}" class="${x.id === section?.id ? 'on' : ''}">${x.name}<small>${x.desc}</small></button>`).join('')}</div>` : ''}
-      <div class="selLbl">方向</div><div class="sel" id="selDir">${(section?.dirs ?? line.dirs).map(d => `<button data-dir="${d.id}" class="${d.id === route.id ? 'on' : ''}">${d.label}<small>${d.desc}</small></button>`).join('')}</div>
+      ${section?.dirs.length === 1 ? '' : `<div class="selLbl">方向</div><div class="sel" id="selDir">${(section?.dirs ?? line.dirs).map(d => `<button data-dir="${d.id}" class="${d.id === route.id ? 'on' : ''}">${d.label}<small>${d.desc}</small></button>`).join('')}</div>`}
       ${svcs ? `<div class="selLbl">種別（Tab）</div><div class="sel" id="selService">${svcs}</div>` : ''}
       <div class="selLbl">ステージ（← →）</div><div class="sel" id="selStage">${stages}</div>
       <div class="selLbl">モード（↑ ↓）</div><div class="sel" id="selMode">${modes}</div>
@@ -142,6 +182,7 @@ export function attachOverlay(ctx: GameContext): void {
     <button class="btn" id="go" ${ready ? '' : 'disabled'}>${ready ? '出発（Enter）' : '3D素材を読み込み中…'}</button>
     <p class="sub credit">3D素材: Kenney / Quaternius（CC0）。店名・塗装は架空。実在の路線・駅を参考にした概形</p>`;
     bindGo();
+    $('backToLines').onclick = () => { location.hash = ''; };
     card.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach(b => b.onclick = () => { showTab(b.dataset.tab as Tab); b.blur(); });
     card.querySelectorAll<HTMLButtonElement>('[data-stage]').forEach(b => b.onclick = () => {
       const list = stagesOf(route), cur = list.findIndex(s => s.id === st.sel.stageId), to = list.findIndex(s => s.id === b.dataset.stage);
@@ -150,10 +191,6 @@ export function attachOverlay(ctx: GameContext): void {
     card.querySelectorAll<HTMLButtonElement>('[data-service]').forEach(b => b.onclick = () => {
       const list = selectableServices(route), cur = list.findIndex(v => v.id === st.sel.service), to = list.findIndex(v => v.id === b.dataset.service);
       ctx.actions.selectService(to - cur);
-    });
-    card.querySelectorAll<HTMLButtonElement>('[data-line]').forEach(b => b.onclick = () => {
-      const to = LINES.find(l => l.id === b.dataset.line);
-      if (to && to.id !== line.id) switchLine(to);
     });
     // 区間の切替: 同じ名前の方向（上り/下り）があればそれ、無ければ区間の既定の方向で再読込
     card.querySelectorAll<HTMLButtonElement>('[data-section]').forEach(b => b.onclick = () => {
@@ -292,13 +329,17 @@ export function attachOverlay(ctx: GameContext): void {
     $('titleBtn').onclick = () => ctx.actions.toTitle();
   }
 
-  showTitle();
+  renderTitle();
+  window.addEventListener('hashchange', () => {
+    if (st.state !== 'title') ctx.actions.toTitle();
+    renderTitle();
+  });
   events.on('assetsProgress', ({ done, total }) => {
     const b = document.getElementById('go');
     if (b && !ctx.assetsReady) b.textContent = `3D素材を読み込み中… ${done}/${total}`;
   });
-  events.on('assetsReady', () => { if (st.state === 'title') showTitle(); });
-  events.on('reset', () => { if (st.state === 'title') showTitle(); });
+  events.on('assetsReady', () => { if (st.state === 'title') renderTitle(); });
+  events.on('reset', () => { if (st.state === 'title') renderTitle(); });
   events.on('stateChange', ({ to }) => { if (to === 'run' || to === 'dwell') overlay.classList.add('hidden'); });
   events.on('result', r => {
     const rec = r.kind === 'stop' ? submitScore(route.id, r.stageId, r.mode, r.total, r.rank, r.service) : { isNew: false };

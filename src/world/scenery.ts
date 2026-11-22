@@ -33,8 +33,11 @@ export const KIT_SCALE: Record<keyof SceneryModels, number> = { city: 9, far: 9,
  *  線路の左右に帯状の山並みを置く。稜線は重ねた正弦波＋乱数の峰で起伏を付け、手前ほど濃い緑・奥ほど霞んだ青灰色。 */
 export function buildBackdrop(ctx: GameContext): void {
   const { scene, rng: rnd, track, route } = ctx;
-  if (route.theme === 'mountain') return; // 山岳線は地形の遠景格子（mountain-terrain.ts）と空の稜線
-  const S0 = route.extent.from - 1500, S1 = route.extent.to + 1500;
+  // 山岳線は専用地形を使い、空港線から望む大阪湾の水平線は空のシェーダーで描く。
+  const bridge = route.airportBridge;
+  if (route.theme === 'mountain' || (bridge && !bridge.islandAtStart)) return;
+  const S0 = bridge ? route.stations.find(s => s.name === '泉佐野')!.platform.to : route.extent.from - 1500;
+  const S1 = route.extent.to + 1500;
   // 曲線の内側で山並みが折り重ならないよう、線路を ±600m で平滑化した基準線から横へずらす
   const STEP = 60, W = 10, raw: { x: number; z: number; c: number; sn: number }[] = [];
   for (let s = S0 - W * STEP; s <= S1 + (W + 1) * STEP; s += STEP) { const t = track.trackAt(s); raw.push({ x: t.x, z: t.z, c: Math.cos(t.phi), sn: Math.sin(t.phi) }); }
@@ -53,7 +56,9 @@ export function buildBackdrop(ctx: GameContext): void {
   if (route.coastalLandmarks?.length && route.coastalScenery !== false) {
     // 従来の前後稜線で使っていた82回分も消費し、後続の駅・人などの乱数列を保つ。
     for (let i = 0; i < 82; i++) rnd();
-    buildCoastalBackdrop(ctx, S0, S1, at);
+    const cityStart = bridge?.islandAtStart ? route.stations.find(station => station.name === '堺')?.platform.from : undefined;
+    buildCoastalBackdrop(ctx, S0, cityStart ?? S1, at);
+    if (cityStart != null) buildUrbanBackdrop(ctx, cityStart, S1, at);
     return;
   }
   const ridge = (s: number, layer: number, side: number) => {
@@ -187,7 +192,7 @@ function buildUrbanBackdrop(ctx: GameContext, from: number, to: number, at: (s: 
   }
   // 町並みの奥（線路から 68〜250m）: 中低層の街区を箱で埋める（手前2列の住宅・商店は town-jp.ts）
   const blockCols = [0xc9c2b4, 0xb9b4aa, 0xd2cfc7, 0xa9aaa6, 0xc4b9a5, 0xb3b9bd];
-  for (let s = route.extent.from; s < (osm ? route.extent.from : route.extent.to); s += 16) for (const side of [-1, 1]) {
+  for (let s = Math.max(from, route.extent.from); !osm && s < Math.min(to, route.extent.to); s += 16) for (const side of [-1, 1]) {
     for (let d = 68; d < 250; d += 15 + rnd() * 6) {
       if (!T.isCity(s) || rnd() < .12) continue;
       const w = 10 + rnd() * 12, dep = 9 + rnd() * 6, lat = side < 0 ? Math.min(...route.tracks) - d : Math.max(...route.tracks) + d;
@@ -228,7 +233,9 @@ export function prepareSceneryModels(loaded: LoadedAssets): SceneryModels {
 // 沿線に配置。各カテゴリはモデル配列からランダムに選ぶ
 export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot[] = [], water: WaterMask | null = null): void {
   const { rng: rnd, route, track: { trackAt } } = ctx, T = getTerrain(ctx);
-  const TS0 = route.extent.from, TS1 = route.extent.to;
+  const bridge = route.airportBridge;
+  const TS0 = bridge?.islandAtStart ? bridge.to : route.extent.from;
+  const TS1 = bridge && !bridge.islandAtStart ? bridge.from : route.extent.to;
   const L0 = Math.min(...route.tracks), L1 = Math.max(...route.tracks);
   const latOf = (sd: number, d: number) => sd < 0 ? L0 - d : L1 + d;
   // 配置を集めて材質ごとの BatchedMesh へ（scenery-batch.ts）
@@ -295,6 +302,12 @@ export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot
   }
   // 街並み側が決めた木（庭木・屋敷林・山林）
   for (const t of spots) {
+    if (bridge && (bridge.islandAtStart ? t.s <= bridge.from : t.s >= bridge.to)) {
+      // 空港島の緑地は低い植え込みとし、進入路から施設を見通せる高さにそろえる。
+      const shrub = pick(M.bushes);
+      put(shrub, t.s, t.lat, rnd() * 6, (1.1 + .5 * t.k) / Math.max(.1,shrub.size.y), t.y);
+      continue;
+    }
     const model = t.small ? pick(rnd() < .5 ? M.bushes : M.trees) : pick(M.trees);
     put(model, t.s, t.lat, rnd() * 6, (t.small ? KIT_SCALE.bushes * 1.3 : KIT_SCALE.trees) * t.k, t.y);
   }

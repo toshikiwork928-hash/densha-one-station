@@ -14,6 +14,9 @@ import { izumisanoMisaki, izumisanoMisakiUp } from '../src/route/routes/izumisan
 import { through, throughUp } from '../src/route/routes/through';
 import { namba, nambaUp } from '../src/route/routes/namba';
 import { misakiWakayamako, misakiWakayamakoUp } from '../src/route/routes/misaki-wakayamako';
+import { airportInbound } from '../src/route/routes/airport-inbound';
+import { airport, airportThrough } from '../src/route/routes/airport';
+import { buildAirportTerminal } from '../src/world/airport-terminal';
 import { buildTrack } from '../src/route/track';
 import { applyService } from '../src/route/service';
 import type { Route, ServiceId } from '../src/route/types';
@@ -71,6 +74,7 @@ async function build(ctx: GameContext): Promise<void> {
   buildTerrain(ctx);
   buildTrackMesh(ctx);
   buildStructures(ctx);
+  buildAirportTerminal(ctx);
   buildCoastalLandmarks(ctx);
   buildStationLandmarks(ctx);
   buildCatenary(ctx);
@@ -109,6 +113,8 @@ const all = process.argv.includes('--all');
 const option = (name: string) => process.argv.find(a => a.startsWith(`--${name}=`))?.split('=')[1];
 const routeFilter = option('route'), serviceFilter = option('service');
 const cases: [Route, ServiceId[]][] = [[shiokaze, ['local', 'express', 'airport', 'limited']], [shiokazeUp, ['local', 'express', 'airport', 'limited']], [mountain, ['local']], [mountainUp, ['local']],
+  [airportInbound, airportInbound.services!.map(service => service.id)],
+  [airport, airport.services!.map(service => service.id)], [airportThrough, airportThrough.services!.map(service => service.id)],
   [kishiwada, ['local', 'express', 'airport', 'southern']], [kishiwadaUp, ['local', 'express', 'airport', 'southern']],
   [izumisano, ['local', 'express', 'airport', 'southern', 'limited']], [izumisanoUp, ['local', 'express', 'airport', 'southern', 'limited']],
   [throughUp, ['local', 'airport', 'southern']], [through, ['local', 'airport', 'southern']],

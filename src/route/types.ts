@@ -232,6 +232,12 @@ export interface OncomingStop {
 }
 
 export interface Route {
+  /** 空港連絡橋で海を渡る範囲（ゲーム上の距離）。 */
+  airportBridge?: { from: number; to: number; islandAtStart?: boolean };
+  /** 中間駅止まりのステージを作らず、全線通しだけを表示する。 */
+  fullCourseOnly?: boolean;
+  /** 信号違反は採点し、ATS非常制動は終着進入の速度照査だけで扱う。 */
+  terminalAtsOnly?: boolean;
   /** コース終着駅への接近を連続速度照査（実路線ATSの仕様そのものではない）。南海本線は無効（false）。 */
   terminalApproach?: boolean;
   /** 描画専用の沿岸線ランドマーク。進行反転時は位置・左右・分岐向きを反転する。 */

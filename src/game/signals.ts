@@ -110,11 +110,11 @@ export function createSignalSystem(ctx: GameContext, forceEB: () => void, meet?:
     const asp = precOnly(i), lim = ASPECT_LIMIT[asp], vk = st.train.v * 3.6;
     if (asp === 'R') {
       st.penalties.redPass++;
-      brake('停止信号冒進');
+      if (!route.terminalAtsOnly) brake('停止信号冒進');
       return;
     }
     passedAsp = asp;
-    if (vk > lim + OVER_MARGIN) warn(`${ASPECT_LABEL[asp]}現示 ${lim}km/h 超過`);
+    if (!route.terminalAtsOnly && vk > lim + OVER_MARGIN) warn(`${ASPECT_LABEL[asp]}現示 ${lim}km/h 超過`);
   }
 
   return {
@@ -145,6 +145,7 @@ export function createSignalSystem(ctx: GameContext, forceEB: () => void, meet?:
         banner(tsta.enterLoop ? `${tsta.name} ${tsta.loopTrack}へ入線。分岐器制限 ${tsta.loop?.turnoutLimitKmh ?? 45}km/h` : `${tsta.name} ${tsta.mainTrack}へ入線${lim < route.lineLimit ? `。制限 ${lim}km/h` : ''}`, 6);
       }
       if (st.train.v * 3.6 > terminalLimit + 3) brake(`終着進入 ${Math.floor(terminalLimit)}km/h 照査超過`);
+      if (route.terminalAtsOnly) return;
       // 停止現示への接近
       const n = st.nextSignal;
       // 単線: 停車駅の出発信号（停止位置の先）は、手前で止まるので警報しない

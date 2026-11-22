@@ -182,7 +182,10 @@ export function buildStructures(ctx: GameContext): void {
       }
       // 橋の川面は地形側（terrain.ts）。橋の下の溝と OSM の水面の形に沿って作る
       if (!bridge) {
-        for (let s = st.from + 12; s < st.to - 4; s += 20) if (!route.reserved?.some(z => z.noPiers && s > z.from && s < z.to)) pier(batch, ctx, s, 1.1, false, bounds(s));
+        for (let s = st.from + 12; s < st.to - 4; s += 20) {
+          if (route.reserved?.some(z => z.noPiers && s > z.from && s < z.to)) continue;
+          for (const deck of decks) pier(batch, ctx, s, 1.1, false, deck(s));
+        }
       }
     }
   }
