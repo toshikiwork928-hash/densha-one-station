@@ -18,6 +18,7 @@ import { createCab } from './cab';
 import { createPlayerTrain, type PlayerTrain } from './player-train';
 import { createOvertaking } from './overtaking';
 import { buildCoastalLandmarks } from './coastal-landmarks';
+import { buildStationLandmarks } from './station-landmark';
 import { buildHagoromoTrain } from './hagoromo-train';
 import { buildNambaTerminal } from './namba-terminal';
 import { buildMisakiParkTrain, buildMisakiYard } from './misaki-park-train';
@@ -50,6 +51,7 @@ export function buildWorld(ctx: GameContext): World {
   buildTrackMesh(ctx);
   buildStructures(ctx);
   buildCoastalLandmarks(ctx);
+  buildStationLandmarks(ctx);
   buildHagoromoTrain(ctx); // 羽衣3番線に停車中の 2000系（描画のみ）
   buildMisakiParkTrain(ctx); // みさき公園5番線（多奈川線）に停車中の 7100系 2両（描画のみ）
   buildMisakiYard(ctx); // みさき公園の保守用の留置線（黄色い保守用車両・資材）

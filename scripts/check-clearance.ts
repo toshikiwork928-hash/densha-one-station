@@ -4,6 +4,7 @@
 //   npm run verify:clearance            違反があれば終了コード 1
 //   npm run verify:clearance -- --all   全違反群を表示
 //   npm run verify:clearance -- --route=shiokaze --service=local   1ケースだけ点検
+//   npm run verify:clearance -- --station-landmarks   駅前施設のメッシュだけを点検
 import * as THREE from 'three';
 import { shiokaze, shiokazeUp } from '../src/route/routes/shiokaze';
 import { mountain, mountainUp } from '../src/route/routes/mountain';
@@ -25,6 +26,7 @@ import { buildTerrain } from '../src/world/terrain';
 import { buildTrackMesh } from '../src/world/track-mesh';
 import { buildStructures } from '../src/world/structures';
 import { buildCoastalLandmarks } from '../src/world/coastal-landmarks';
+import { buildStationLandmarks } from '../src/world/station-landmark';
 import { buildCatenary } from '../src/world/catenary';
 import { buildCoast } from '../src/world/coast';
 import { buildBackdrop, buildEndBlock, placeScenery, prepareSceneryModels } from '../src/world/scenery';
@@ -61,10 +63,16 @@ function context(source: Route): GameContext {
 const fakeOncoming = { activeSpans: () => [] } as unknown as OncomingSystem;
 async function build(ctx: GameContext): Promise<void> {
   await loadOsmFor(ctx.route); // 沿線データは区間ごとの非同期読込
+  if (process.argv.includes('--station-landmarks')) {
+    buildStationLandmarks(ctx);
+    releaseOsmData();
+    return;
+  }
   buildTerrain(ctx);
   buildTrackMesh(ctx);
   buildStructures(ctx);
   buildCoastalLandmarks(ctx);
+  buildStationLandmarks(ctx);
   buildCatenary(ctx);
   buildBackdrop(ctx);
   buildCoast(ctx);

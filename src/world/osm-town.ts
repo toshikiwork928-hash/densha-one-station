@@ -15,6 +15,8 @@ import { tramBlocks } from './hankai-tram';
 import { towerZones } from './coastal-tower';
 import { coastalThirdTracks } from './coastal-stations';
 import { twinTowerZones } from './izumiotsu-towers';
+import { sectionFrame, sharedStations } from './section-frame';
+import { landmarkReservations } from './station-landmark';
 import type { TreeSpot } from './town-jp';
 import type { Route } from '../route/types';
 import { namba } from '../route/routes/namba';
@@ -85,15 +87,9 @@ const DATASETS: { id: string; base: Route; load: () => Promise<OsmData>; /** 水
   { id: 'izumisano-misaki', base: izumisanoMisaki, load: async () => (await import('../data/osm/izumisano-misaki.json')).default as unknown as OsmData },
 ];
 
-/** 走るコースとデータの共通の駅（駅名が一致するもの）。2つ未満ならそのデータは使わない。駅名だけで決まる（applyService の前後で変わらない） */
-function sharedStations(ds: { base: Route }, route: Route) {
-  const pairs = ds.base.stations.map((st, i) => ({ st, j: route.stations.findIndex(x => x.name === st.name), i })).filter(p => p.j >= 0);
-  return pairs.length >= 2 ? pairs : null;
-}
-
 /** このコースが使う区間データの id（上下は同じ区間を共有。堺〜岸和田の通しは堺〜泉大津と泉大津〜岸和田の2区間）。無ければ空 */
 export function osmSectionsFor(route: Route): string[] {
-  return DATASETS.filter(ds => sharedStations(ds, route)).map(ds => ds.id);
+  return DATASETS.filter(ds => sharedStations(ds.base, route)).map(ds => ds.id);
 }
 
 /** 読込済みの区間データ。選んだコースの分だけを持つ（別のコースを読むと入れ替える） */
@@ -192,31 +188,12 @@ export function osmFor(route: Route): OsmData | null {
   if (mapped?.route === route) return mapped.data;
   const out: OsmData = { source: '', buildings: [], roads: [], areas: [], landmarks: [], highways: [] };
   let any = false, scenery = false;
-  const center = (st: Route['stations'][number]) => (st.platform.from + st.platform.to) / 2;
   for (const ds of DATASETS) {
-    const shared = sharedStations(ds, route);
-    if (!shared) continue;
+    const frame = sectionFrame(ds.base, route);
+    if (!frame) continue;
     const data = loaded.get(ds.id);
     if (!data) throw new Error(`沿線データ ${ds.id} が未読込（loadOsmFor を待つ）`);
-    const pairs = shared.map(p => ({ b: center(p.st), j: p.j, i: p.i }));
-    const rev = pairs[1].j < pairs[0].j;
-    const B = pairs.map(p => p.b), Tt = pairs.map(p => {
-      const station = route.stations[p.j];
-      // 元データの自線側ホームは、逆向きのコースでは対向ホームに当たる。
-      return center(station) + (rev ? station.platformOpp ?? 0 : 0);
-    });
-    const last = route.stations.length - 1;
-    const atEnd = (j: number) => j === 0 || j === last;
-    // データの範囲（データの座標）: 共通の駅の外側は、走るコースの端の駅なら全部、つなぎ目なら駅の中心まで
-    const lo = atEnd(pairs[0].j) ? -Infinity : B[0], hi = atEnd(pairs[pairs.length - 1].j) ? Infinity : B[B.length - 1];
-    const mapS = (sb: number) => {
-      if (sb <= B[0]) return Tt[0] + (sb - B[0]) * (rev ? -1 : 1);
-      for (let k = 0; k + 1 < B.length; k++) if (sb <= B[k + 1]) return Tt[k] + (Tt[k + 1] - Tt[k]) * (sb - B[k]) / (B[k + 1] - B[k]);
-      return Tt[Tt.length - 1] + (sb - B[B.length - 1]) * (rev ? -1 : 1);
-    };
-    const C = Math.min(...ds.base.tracks) + Math.max(...ds.base.tracks);
-    const mapL = (l: number) => rev ? C - l : l;
-    const inR = (sb: number) => sb >= lo && sb <= hi;
+    const { rev, lo, hi, mapS, mapL, inR } = frame;
     for (const b of data.buildings) if (inR(b[0])) out.buildings.push([mapS(b[0]), mapL(b[1]), ...b.slice(2)]);
     for (const r of data.roads) {
       const pts = r[3] as number[], keep: number[] = [];
@@ -398,7 +375,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
   const toReal = (s: number, lat: number): [number, number] => [s, lat];
   const rnd = createRng(4242);
   const S0 = route.extent.from - 60, S1 = route.extent.to + 60;
-  const reserved = route.reserved ?? [];
+  const reserved = [...(route.reserved ?? []), ...landmarkReservations(route)];
   const inReserved = (s0: number, s1: number, l0: number, l1: number, road = false) => reserved.some(z => !(road && z.keepRoads) && s0 < z.to && s1 > z.from && l0 < z.lat1 && l1 > z.lat0);
   // 線路の端（本線と、並んで走る追加の線路）。この外へ 4m 以上離れた所だけ使う
   const spanCache = new Map<number, [number, number]>();
