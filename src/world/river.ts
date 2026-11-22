@@ -1,5 +1,4 @@
-// 川: OSM の水面（route.structures の橋と s が重なる water 面）の形に沿った溝。
-// 線路の下は terrain.ts の橋の溝（まっすぐ）を残し、線路から離れた所は水面の多角形の岸からの距離で深さを決める。
+// 川の形と深さは、橋・高架を横切る OSM の水面と、その岸からの距離で決める。
 // 多角形の内側だけを掘る（岸から内側へ BANK_W [m] かけて RIVER_DEPTH まで）。岸の外は地面のまま。
 // データの範囲（線路の両側 320m）で切れた辺は川の続きとして外側へ延ばす。
 import type { OsmData } from './osm-town';
@@ -16,6 +15,10 @@ const EXTEND = 300;
 const smooth = (x: number) => { const t = Math.min(1, Math.max(0, x)); return t * t * (3 - 2 * t); };
 
 export interface RiverField {
+  /** 水面を横切る橋・高架の始点。橋の下に仮の直線河床を重ねないために使う。 */
+  crossedSpans: Set<number>;
+  /** 線路方向の水面幅が狭く、河床を細かく描く区間。 */
+  narrowCrossings: [number, number][];
   /** 川として扱う water 面の目印（osm-town の池の貼り付けから除く）。`面の頂点数:最初の s:最初の lat` */
   keys: Set<string>;
   /** OSM の水面だけによる溝の深さ [m]（岸の外は 0） */
@@ -144,21 +147,35 @@ function extendClipped(pts: number[], lmin: number, lmax: number): number[] {
   return out;
 }
 
-/**
- * 橋（bridges）と s が重なる OSM の水面から川の溝を作る。該当する水面が無ければ null。
- * data は走るコースの座標へ写したもの（osmFor）
- */
-export function makeRiverField(data: OsmData | null, bridges: { from: number; to: number }[]): RiverField | null {
-  if (!data || !bridges.length) return null;
+/** 橋または高架の線路が、水域の内側を通る区間を調べる。 */
+function crossingsAt(pts: number[], lat: number): number[] {
+  const edges: number[] = [];
+  for (let i = 0, j = pts.length - 2; i < pts.length; j = i, i += 2) {
+    const a = pts[j + 1], b = pts[i + 1];
+    if ((a > lat) !== (b > lat)) edges.push(pts[j] + (pts[i] - pts[j]) * (lat - a) / (b - a));
+  }
+  edges.sort((a, b) => a - b);
+  return edges;
+}
+
+/** コースに写した水面のうち、橋や高架の下を通るものを河床として掘る。 */
+export function makeRiverField(data: OsmData | null, structures: { from: number; to: number }[], tracks: number[]): RiverField | null {
+  if (!data || !structures.length) return null;
   let lmin = Infinity, lmax = -Infinity;
   for (const a of data.areas) { const p = a[1] as number[]; for (let i = 1; i < p.length; i += 2) { lmin = Math.min(lmin, p[i]); lmax = Math.max(lmax, p[i]); } }
-  const rings: Ring[] = [], keys = new Set<string>();
+  const rings: Ring[] = [], keys = new Set<string>(), crossedSpans = new Set<number>();
+  const narrowCrossings: [number, number][] = [];
   for (const a of data.areas) {
     if (a[0] !== 'water') continue;
     const p = a[1] as number[];
-    let s0 = Infinity, s1 = -Infinity;
-    for (let i = 0; i < p.length; i += 2) { s0 = Math.min(s0, p[i]); s1 = Math.max(s1, p[i]); }
-    if (!bridges.some(b => s1 > b.from - 60 && s0 < b.to + 60)) continue;
+    const cuts = tracks.map(lat => crossingsAt(p, lat));
+    const crossed = structures.filter(span => cuts.some(edges =>
+      edges.some((s, i) => i % 2 === 0 && s < span.to && edges[i + 1] > span.from)));
+    if (!crossed.length) continue;
+    for (const span of crossed) crossedSpans.add(span.from);
+    for (const edges of cuts) for (let i = 0; i + 1 < edges.length; i += 2) {
+      if (edges[i + 1] - edges[i] < 45) narrowCrossings.push([edges[i] - 10, edges[i + 1] + 10]);
+    }
     const q = extendClipped(p, lmin, lmax);
     const r: Ring = { pts: q, s0: Infinity, s1: -Infinity, l0: Infinity, l1: -Infinity };
     for (let i = 0; i < q.length; i += 2) { r.s0 = Math.min(r.s0, q[i]); r.s1 = Math.max(r.s1, q[i]); r.l0 = Math.min(r.l0, q[i + 1]); r.l1 = Math.max(r.l1, q[i + 1]); }
@@ -188,7 +205,7 @@ export function makeRiverField(data: OsmData | null, bridges: { from: number; to
     return 0;
   };
   return {
-    keys, dist, spans,
+    keys, dist, spans, crossedSpans, narrowCrossings,
     lat: [Math.min(...rings.map(r => r.l0)), Math.max(...rings.map(r => r.l1))],
     depth,
   };

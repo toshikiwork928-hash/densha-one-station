@@ -35,6 +35,12 @@ function build(courseId: string, route: Route, prefix: string): { list: Out[]; l
     if (s < route.extent.from + 30 || s > route.extent.to - 30) { why('コースの端'); continue; }
     // 歩行者だけの踏切は、道路の踏切のすぐ横（20m以内）にあれば省く
     if (foot && road.some(q => Math.abs(q.s - s) < 20)) { why('道路の踏切の横の歩行者踏切'); continue; }
+    // 川沿いの道路が橋の端にかかるときは、踏切を最寄りの岸へ数m寄せる。
+    const bank = structures.find(x => x.kind === 'bridge' && s > x.from - 6 && s < x.to + 6);
+    if (bank) {
+      const shore = Math.abs(s - bank.from) < Math.abs(s - bank.to) ? bank.from - 7 : bank.to + 7;
+      if (Math.abs(s - shore) <= 9) s = shore;
+    }
     const st = structures.find(x => s > x.from - 6 && s < x.to + 6);
     if (st) { why(`${st.kind}の区間`); continue; }
     const ex = extras.find(x => s > x.from - 12 && s < x.to + 12 && (s < x.from + 12 || s > x.to - 12 || turning(x, s)));

@@ -21,6 +21,7 @@ const svcDesc = (route: GameContext['route'], v: ServiceSpec) =>
 const KIND_INFO: Record<TrainKind, { name: string; desc: string }> = {
   'commuter-new': { name: '8300系（新型通勤車）', desc: 'ステンレス・すそ絞り車体・VVVF。加速 3.0km/h/s' },
   'commuter-old': { name: '7100系（旧型通勤車）', desc: '鋼製・直線車体・抵抗制御。加速 2.5km/h/s、高速域は弱め' },
+  'commuter-7100-restored': { name: '7100系7169編成（復元塗装）', desc: '上淡緑・下濃緑の4両固定。通常7100系と同じ抵抗制御' },
   'commuter-2300': { name: '2300系（山岳線用）', desc: '18m 車体・2両ユニット・VVVF。急勾配・急曲線向け' },
   'southern-10000': { name: '10000系（サザン座席指定車）', desc: '鋼製・1扉・リクライニング席。7100系と併結の抵抗制御' },
   'southern-12000': { name: '12000系（サザンプレミアム座席指定車）', desc: '指定席4両＋自由席4両。VVVF・営業最高110km/h' },

@@ -4,5 +4,9 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   base: './',
   server: { port: 8765 },
-  build: { target: 'es2022', chunkSizeWarningLimit: 1500 },
+  build: {
+    target: 'es2022',
+    chunkSizeWarningLimit: 1500,
+    rollupOptions: { input: ['index.html', 'sound-lab.html'] },
+  },
 });

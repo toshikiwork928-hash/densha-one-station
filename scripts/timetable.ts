@@ -278,6 +278,7 @@ ${lines.join('\n')}
 }
 
 // --namba-only は堺〜難波だけ更新
+if (process.argv.includes('--mountain-only')) { writeMountain(); process.exit(0); }
 const nambaOnly = process.argv.includes('--namba-only');
 {
   const nb = table(namba), nbUp = table(nambaUp);
@@ -375,7 +376,8 @@ export const NT_UP: Record<Id, ServiceSpec['timetable']> = ${kBody(nUp)};
 `);
 
 // --shiokaze-only は南海本線だけ更新。別作業中の山岳線の生成物を触らない。
-if (!process.argv.includes('--shiokaze-only')) {
+if (!process.argv.includes('--shiokaze-only')) writeMountain();
+function writeMountain() {
 const mDn = table(mountain), mUp = table(mountainUp);
 writeFileSync('src/route/routes/mountain-timetable.ts', `// 高野線の時刻表（scripts/timetable.ts が生成。手で直さない）
 import type { ServiceSpec } from '../types';

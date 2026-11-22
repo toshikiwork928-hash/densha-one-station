@@ -70,7 +70,7 @@ OpenStreetMap（Overpass API で南海本線の線路形状を取得、2026-10-0
 |---|---|
 | `world/namba-terminal.ts` | なんばの9面のホーム・大屋根・コンコース・駅ビル（百貨店風）・なんばパークス風の段々の建物 |
 | `world/suminoe-depot.ts` | 住ノ江検車区の留置線・検修庫・高架の床版（`buildSuminoeDepotTrains` は留置中の電車） |
-| `world/namba-landmarks.ts` | 七道駅直結の大型商業施設（架空名）・新今宮の JR 高架と JR のホーム・大和川の堤防と道路橋 |
+| `world/namba-landmarks.ts` | 七道駅直結の大型商業施設（架空名）・新今宮の JR 高架と JR のホーム |
 | `world/koya-traffic.ts` | 萩ノ茶屋・今宮戎の島式ホーム（`buildKoyaPlatforms`）、汐見橋線の 2300系、高野線を走る 8300系・2300系（描画のみ） |
 
 ## 7. 未対応・制限

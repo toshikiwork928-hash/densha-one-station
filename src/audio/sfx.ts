@@ -7,6 +7,7 @@ import type { EventBus } from '../core/events';
 import { createCore, type AudioCore } from './engine';
 import { createVvvf, type Vvvf } from './vvvf';
 import { createResistance } from './resistance';
+import { defaultTuning, isResistance, savedTuning, tuningStorageKey } from './vehicle-tuning';
 import { createRunning, type Running } from './running';
 import { createBrakes, type Brakes } from './brakes';
 import { createStation, type StationSfx } from './station';
@@ -36,6 +37,21 @@ export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
   let ac: AudioContext | null = null, p: Parts | null = null;
   let doorsOpen = false, fromDwell = false, dwellMelody = false, hornStop: (() => void) | null = null;
   let lastIdle: Vvvf | null = null;
+  let vehicle = ctx.service?.kind ?? 'commuter-new';
+  let saved = savedTuning(vehicle);
+  let tuning = saved ?? defaultTuning(vehicle);
+  function applyVehicle() {
+    vehicle = ctx.service?.kind ?? 'commuter-new';
+    saved = savedTuning(vehicle);
+    tuning = saved ?? defaultTuning(vehicle);
+    if (!p) return;
+    for (const key of Object.keys(tuning.track) as Array<keyof typeof tuning.track>) {
+      p.core.layers[key].gain.setTargetAtTime(tuning.track[key], p.core.now(), .02);
+    }
+  }
+  window.addEventListener('storage', e => {
+    if (e.key === null || e.key === tuningStorageKey(vehicle)) applyVehicle();
+  });
 
   function applySettings() {
     const s = settings.value;
@@ -60,8 +76,9 @@ export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
       const brakes = createBrakes(core);
       p = {
         core, brakes,
-        vvvf: createVvvf(core, core.run, () => settings.value.traction),
-        resistance: createResistance(core),
+        vvvf: createVvvf(core, core.layers.traction,
+          () => saved?.sound ?? (settings.value.traction === 'legacy' ? 'legacy' : tuning.sound), () => tuning.vvvf),
+        resistance: createResistance(core, core.layers.traction, () => tuning),
         running: createRunning(core, () => ctx.route),
         station: createStation(core, brakes),
         alarms: createAlarms(core),
@@ -69,6 +86,7 @@ export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
       };
       p.ambience.setEnv(ctx.envState);
       p.running.setTunnel(false);
+      applyVehicle();
       applySettings();
       if (ac.state === 'suspended') void ac.resume();
     } catch (e) { console.warn('[audio] 初期化失敗', e); p = null; }
@@ -161,9 +179,8 @@ export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
     if (st === 'title') return;
     const live = st === 'run' || st === 'dwell';
     // 主回路音: 旧型通勤車・10000系は抵抗制御。更新9000系・12000系は明示的にVVVF。
-    const k = ctx.service?.kind, resist = k === 'commuter-old' || k === 'southern-10000';
-    const vvvf = k === 'commuter-9000' || k === 'southern-12000';
-    const [drive, idle] = resist && !vvvf ? [p.resistance, p.vvvf] : [p.vvvf, p.resistance];
+    if (vehicle !== (ctx.service?.kind ?? 'commuter-new')) applyVehicle();
+    const [drive, idle] = isResistance(vehicle) ? [p.resistance, p.vvvf] : [p.vvvf, p.resistance];
     if (idle !== lastIdle) { idle.silence(); lastIdle = idle; }
     drive.update(live ? tr.v : 0, live ? tr.notch : 0);
     p.running.update(tr.v, tr.s);

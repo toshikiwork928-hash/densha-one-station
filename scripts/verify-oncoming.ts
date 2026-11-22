@@ -126,11 +126,30 @@ function assertSafety(routeId: string, tod: Tod): void {
   }
   let previous: ReturnType<typeof activeSnapshot> = [], lastClock = first - 1;
   const localOrder = new Map<string, number>();
+  const stationarySince = new Map<string, number>();
+  const admitted = new Set<string>();
   const observedStops = new Map<string, Set<number>>();
   // 遅延を戻しても全列車が系外へ抜けること。安全確認も同じ0.1秒刻みで続ける。
   for (let clock = first - 1; clock <= last + 3600; clock += .1) {
     lastClock = clock;
     traffic.update(clock);
+    for (const t of traffic.trains) {
+      if (t.active && !admitted.has(t.id)) {
+        const planned = t.plan.at(clock - t.delay);
+        verify(planned != null && Math.abs(t.head - planned.head) < .1, `${routeId}/${tod}: ${t.id} が所定の入場位置から外れて出現`);
+        admitted.add(t.id);
+      }
+      const inSection = t.head > route.extent.from && t.head + t.length < route.extent.to;
+      const atPlatform = route.stations.some(s => t.head + t.length >= s.platform.from && t.head <= s.platform.to);
+      if (!t.active || t.v >= .05 || !inSection || atPlatform) { stationarySince.delete(t.id); continue; }
+      const since = stationarySince.get(t.id) ?? clock;
+      stationarySince.set(t.id, since);
+      // 同じ進路の先行・合流列車が閉そくを占める間は信号待ちがあり得る。
+      // 進路が空いた後の静止と、泉大津の待避線にいる普通を本線の障害とする不具合を検出する。
+      const izumiotsuRegression = routeId === 'nankai-through-up' && tod === 'noon' && t.id === '1716'
+        && traffic.trains.some(q => q.stopped && q.id === '6818' && q.station != null && route.stations[q.station].name === '泉大津');
+      if (clock - since >= 15) verifyLazy(!izumiotsuRegression && traffic.floorOf(t) >= t.head - 3, () => `${routeId}/${tod}: ${t.id} が駅間で15秒以上静止 clock=${clock.toFixed(1)} head=${t.head.toFixed(1)}`);
+    }
     if (routeId === 'shiokaze') {
       const active = traffic.trains.filter(t => t.active).sort((a, b) => a.head - b.head);
       let previousLocal = -1;
@@ -177,6 +196,7 @@ function assertSafety(routeId: string, tod: Tod): void {
   const fresh = createCounterTraffic(route, tod, consist); fresh.update(middle);
   traffic.update(middle);
   verify(JSON.stringify(snapshot(fresh.trains)) === JSON.stringify(snapshot(traffic.trains)), `${routeId}/${tod}: 途中時計開始または再作成で状態不一致`);
+
 }
 
 for (const routeId of routeIds) for (const tod of TODS) {

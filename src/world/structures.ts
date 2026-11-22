@@ -250,21 +250,27 @@ function slimPier(b: GeoBatch, ctx: GameContext, s: number, edges: [number, numb
 
 /** 橋脚（高架はラーメン、橋梁は小判形） */
 function pier(b: GeoBatch, ctx: GameContext, s: number, beamDepth: number, river: boolean, edges: [number, number]): void {
-  const T = getTerrain(ctx), t = ctx.track.trackAt(s), g = T.groundY(s) - .5, top = T.trackY(s) - beamDepth;
-  const h = top - g;
-  if (h <= .2) return;
   const [left, right] = edges, c = (left + right) / 2;
   if (river) {
+    const T = getTerrain(ctx), t = ctx.track.trackAt(s);
+    const g = T.terrainY(s, c) - .5, top = T.trackY(s) - beamDepth, h = top - g;
+    if (h <= .2) return;
     const p = ctx.track.at(s, c, 0);
     b.add('concrete', P.cyl, M(p.x, g + h / 2, p.z, -t.phi, Math.min(9, right - left + 1), h, 2.4), 0xffffff);
     return;
   }
+  const T = getTerrain(ctx), t = ctx.track.trackAt(s), top = T.trackY(s) - beamDepth;
   const columns = [left + 1.7, right - 1.7];
   if (right - left > 18) columns.push(c - 3.6, c + 3.6);
   for (const l of columns) {
+    // 高架下の地形が河岸へ下がる区間では、各柱をその地点の地表まで下ろす。
+    const g = Math.min(T.groundY(s), T.terrainY(s, l)) - .5, h = top - g;
+    if (h <= .2) continue;
     const p = ctx.track.at(s, l, 0);
     b.add('concrete', P.boxB, M(p.x, g, p.z, -t.phi, 1.0, h, 1.0), 0xffffff);
   }
+  const g = T.groundY(s) - .5;
+  if (top - g <= .2) return;
   const p = ctx.track.at(s, c, 0);
   b.add('concrete', P.boxB, M(p.x, top - 1.0, p.z, -t.phi, right - left, 1.0, 1.2), 0xffffff);
 }

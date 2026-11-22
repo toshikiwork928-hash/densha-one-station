@@ -155,7 +155,7 @@ function haltStation(ctx: GameContext, T: MountainTerrain, sta: Station, y: Stat
     const s = sc + z, p = P3.pos(s, side * 3.9), t = ctx.track.trackAt(s);
     for (const dz of [-1.5, 1.5]) P3.box(s + dz, side * 3.9, T.trackY(s) + 1.9, .08, 1.6, .08, 0x777d84);
     const m = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 1.0), mat);
-    m.position.set(p.x, T.trackY(s) + 3.0, p.z); m.rotation.y = -t.phi - side * (Math.PI / 2 - .55); ctx.scene.add(m);
+    m.position.set(p.x, T.trackY(s) + 3.0, p.z); m.rotation.y = -t.phi - side * Math.PI / 2; ctx.scene.add(m);
   }
   onLight(ctx, f => { mat.emissiveIntensity = .05 + f * .75; });
   for (let s = s0 + 8; s < s1; s += 22) P3.box(s, side * 4.5, T.trackY(s) + 2.6, .12, 3.0, .12, 0x8a9096);

@@ -188,7 +188,7 @@ export function buildStation(ctx: GameContext, sta: Station, prevName: string, n
   const signMat = new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: .05 });
   for (const z of signs) {
     const bb = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 1.0), signMat);
-    bb.position.set(X(-4.0), 3.0, z); bb.rotation.y = sx * (Math.PI / 2 - 0.55); grp.add(bb);
+    bb.position.set(X(-4.0), 3.0, z); bb.rotation.y = sx * Math.PI / 2; grp.add(bb);
   }
   const bTex = canvasTex(1024, 192, (g, w, h) => {
     g.fillStyle = '#1d2a5a'; g.fillRect(0, 0, w, h);
@@ -268,7 +268,7 @@ export function buildIsland(ctx: GameContext, sta: Station, prevName: string, ne
   const tex = nameTex(sta, nextName, prevName), tex2 = nameTex(sta, prevName, nextName);
   const signMats = [tex, tex2].map(tx => new THREE.MeshLambertMaterial({ map: tx, emissive: 0xffffff, emissiveMap: tx, emissiveIntensity: .05 }));
   for (const z of signs) for (const [k, sx] of [[0, -1], [1, 1]] as const) {
-    // 進行方向から読めるよう両面を少し線路側へ向ける（左側の線路 = 下り側の駅名標）
+    // 島式ホームでは、それぞれの線路に表示面を向ける。
     const bb = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 1.0), signMats[k]);
     bb.position.set(sx * .05, 3.0, z); bb.rotation.y = sx < 0 ? -Math.PI / 2 : Math.PI / 2; grp.add(bb);
   }

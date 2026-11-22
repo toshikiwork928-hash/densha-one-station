@@ -60,7 +60,7 @@ export function renderSettingsUi(container: HTMLElement, store: SettingsStore): 
   const traction = document.createElement('label'); traction.className = 'env-row';
   const tl = document.createElement('span'); tl.className = 'env-lbl'; tl.textContent = '走行音';
   const select = document.createElement('select'); select.setAttribute('aria-label', 'VVVF走行音');
-  for (const [value, label] of [['soft', '改良（柔らかい音）'], ['legacy', '従来（比較用）']]) {
+  for (const [value, label] of [['soft', '車両の標準音'], ['legacy', '従来（比較用）']]) {
     const option = document.createElement('option'); option.value = value; option.textContent = label; select.append(option);
   }
   select.value = store.value.traction;
@@ -68,8 +68,10 @@ export function renderSettingsUi(container: HTMLElement, store: SettingsStore): 
   select.addEventListener('keydown', e => e.stopPropagation());
   traction.append(tl, select);
   const hint = document.createElement('div'); hint.className = 'env-hint';
-  hint.textContent = '走行音は独自合成。実車録音ではありません。改良／従来を切り替えて比較できます（VVVF車のみ）。放送は端末・ブラウザの日本語音声です。';
+  hint.textContent = '調整画面で反映した車両には、その車両の音色を使います。走行音は独自合成です。放送は端末の日本語音声を使います。';
   box.append(row('全体', 'master'), row('効果音', 'sfx'), row('放送', 'voice'), mute, traction);
+  const lab = document.createElement('a'); lab.href = './sound-lab.html'; lab.target = '_blank'; lab.rel = 'noopener'; lab.textContent = '音声調整ラボを開く';
+  lab.className = 'env-hint'; box.append(lab);
   box.append(hint);
   container.append(box);
 }

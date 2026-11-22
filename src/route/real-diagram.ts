@@ -2,13 +2,13 @@
 // コースの分け方はゲームの容量のためで、なんば（和歌山市・和歌山港、空港系統は関西空港）から通しで走る1本を区間ごとに遊ぶ形（選び方は scripts/real-diagram.ts）
 //   - その時間帯に実際の列車が無い種別・区間は選べない（selectableServices・stagesOf）。例: 日中の急行、朝のなんば発・夜のなんば行のラピートβ
 //   - 開始時刻（route.startClock）は、その列車がコース（区間）の始発駅を出る実際の時刻。なんばから遠い区間ほど遅くなる。対向列車は startClock + t で動く
-//   - 時刻表は、最高速度を変えずに実際の発車時刻に合わせる。ゲームの時刻表（自動運転の最速 +5%）より実際が遅い所は、
-//     停車駅の到着を「実際の発車 − ゲームの停車時間」まで遅らせ、待避のある駅は早く着いて実際の発車まで待つ。ゲームの方が遅い所はゲームの時刻のまま
+//   - 途中駅の発車を実列車の時計に合わせ、通常駅の到着は標準停車時間から、待避駅の到着は駅間の走行時間から推定する。
 //   - 終着の到着: 列車の終点は実際の到着時刻、途中駅は発車の30秒前（待避で長く停まる駅はゲームの最速で着く）。Hub に途中駅の到着時刻が無いため
 // データは src/data/real-diagram.json（npm run real:diagram が鉄道運用Hub の時刻表から作る。CC BY 4.0、平日、2024-12-21 改正）
 import data from '../data/real-diagram.json';
 import { START_CLOCK } from '../core/config';
 import type { Route, ServiceId, TimeOfDay } from './types';
+import { applyMountainRealDiagram } from './mountain-real-diagram';
 
 export interface RealTrain {
   svc: ServiceId;
@@ -65,30 +65,41 @@ export function realServiceAvailable(route: Route, svc: ServiceId, tod: TimeOfDa
 export function applyRealDiagram(route: Route, svc: ServiceId | undefined, from: number, to: number): RealTrain | null {
   const e = realTrainFor(route, svc, from, to);
   route.startClock = START_CLOCK[todOf(route)] ?? START_CLOCK.noon;
-  if (!e) return null;
+  if (!e) {
+    applyMountainRealDiagram(route, from);
+    return null;
+  }
   const st = route.stations, n = st.length;
   const a = st.findIndex(s => s.name === e.from), z = st.findIndex(s => s.name === e.end);
   const waits = new Set((route.services?.find(v => v.id === svc)?.waits ?? []).map(w => w.station));
   const gArr = st.map(s => s.scheduledArrival), gDep = st.map((s, i) => i === 0 ? s.scheduledArrival : s.scheduledArrival + (s.dwell ?? 20));
-  const arr = gArr.slice(), dep = gDep.slice(), base = gDep[a];
+  // e.start はコース内で e.from を出る時計。途中駅から始める場合も同じ列車の時計を保つ。
+  route.startClock = e.start - gDep[a];
   let prev = a;
-  for (let i = a + 1; i < n; i++) {
-    if (st[i].pass) { arr[i] = gArr[i] + dep[prev] - gDep[prev]; dep[i] = arr[i]; continue; }
-    const run = gArr[i] - gDep[prev], dwell = gDep[i] - gArr[i], arrMin = dep[prev] + run;
-    const target = i === z ? (e.arr >= 0 ? base + e.arr : null) : i < z && e.dep[st[i].name] != null ? base + e.dep[st[i].name] : null;
-    if (target == null) { arr[i] = arrMin; dep[i] = arrMin + dwell; }
-    else if (i === z) { arr[i] = Math.max(arrMin, target); dep[i] = arr[i] + dwell; }
-    else {
-      // 待避のある駅は早く着いて待つ（優等列車の通過・発車を待つ時間が要る）。ほかの駅はゲームの停車時間を保ったまま到着を遅らせる
-      arr[i] = waits.has(i) ? arrMin : Math.max(arrMin, target - dwell);
-      dep[i] = Math.max(arr[i] + dwell, target);
+  for (let i = a + 1; i <= z; i++) {
+    if (st[i].pass) continue;
+    const previousDeparture = prev === a ? gDep[a] : st[prev].scheduledArrival + (st[prev].dwell ?? 0);
+    const run = gArr[i] - gDep[prev];
+    const dwell = gDep[i] - gArr[i];
+    const realDeparture = e.dep[st[i].name];
+    let arrival = previousDeparture + run;
+    let departure = arrival + dwell;
+    if (i === z) {
+      if (e.arr >= 0) arrival = gDep[a] + e.arr;
+      departure = arrival + dwell;
+    } else if (realDeparture != null) {
+      departure = gDep[a] + realDeparture;
+      // 待避駅の余裕はホームで使い、通常駅の余裕は駅間の走行に回す。
+      arrival = waits.has(i) ? Math.min(arrival, departure - 25) : departure - dwell;
     }
+    // 公開時刻のない通過駅は、前駅の発車から次駅の到着までの走行時間に比例配分する。
+    for (let j = prev + 1; j < i; j++) {
+      const progress = (gArr[j] - gDep[prev]) / run;
+      st[j].scheduledArrival = Math.round(previousDeparture + progress * (arrival - previousDeparture));
+    }
+    st[i].scheduledArrival = Math.round(arrival);
+    if (i < n - 1 || st[i].dwell != null) st[i].dwell = Math.round(departure) - st[i].scheduledArrival;
     prev = i;
   }
-  for (let i = a + 1; i < n; i++) {
-    st[i].scheduledArrival = Math.round(arr[i]);
-    if (!st[i].pass && (i < n - 1 || st[i].dwell != null)) st[i].dwell = Math.round(dep[i]) - Math.round(arr[i]);
-  }
-  route.startClock = e.start - base;
   return e;
 }

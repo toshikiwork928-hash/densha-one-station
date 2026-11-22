@@ -2,7 +2,7 @@
 // 実在の山岳線（大河の谷の町から 50‰ 級の急勾配・R100 級の急曲線・トンネルと橋梁の連続で山奥の谷間の終点へ上る単線）の特徴を参考にした路線（高野線の区間を参考にした概形で、地形・勾配は創作）。
 //   橋本: 平地の地上駅。島式1面2線＋副線（右側の行き止まり線と片面ホーム）の2面3線。発車後すぐ単線になる
 //   橋本 → 九度山: 川沿いの平地（最高 70km/h）、大河を長い橋梁で渡る。勾配は緩い
-//   九度山から先は山岳区間（50km/h、曲線 35〜45km/h、最急 50‰）。トンネル・橋梁が連続
+//   九度山から先は山岳区間。高野下から極楽橋までは33km/h、半径100m以下の曲線は20km/hとする。
 //   高野下: 交換駅（単線が両開き分岐器で左右へ分かれ、間に島式ホーム。分岐器 35km/h）。自列車（左）は対向列車（右）の到着を待って発車
 //   九度山・紀伊神谷: 棒線駅（単線に片面ホーム）
 //   極楽橋: 谷間の頭端式。島式1面2線、ホームの先で車止め（分岐器 30km/h）
@@ -43,7 +43,7 @@ const PIECES: Piece[] = [
 const segments: Segment[] = PIECES.map(p => typeof p === 'number' ? { type: 'straight', length: p } : { type: 'arc', radius: p[0], angle: p[1], turn: p[2] });
 
 /** 半径 → 曲線制限 [km/h]（カント・緩和曲線の短い山岳線の値） */
-const curveKmh = (R: number): number => R <= 115 ? 35 : R <= 145 ? 40 : R <= 185 ? 45 : R <= 220 ? 50 : R <= 270 ? 55 : R <= 330 ? 60 : 65;
+const curveKmh = (R: number): number => R <= 100 ? 20 : R <= 115 ? 35 : R <= 145 ? 40 : R <= 185 ? 45 : R <= 220 ? 50 : R <= 270 ? 55 : R <= 330 ? 60 : 65;
 
 const TRAIN_LEN = BASE_CARS * CAR;
 const LINE_LIMIT = 70;
@@ -52,7 +52,10 @@ const MOUNTAIN_FROM = 2600, MOUNTAIN_KMH = 50;
 const EXTENT_TO = 8582;
 
 const limits: SpeedLimit[] = (() => {
-  const out: SpeedLimit[] = [{ from: MOUNTAIN_FROM, to: EXTENT_TO + 1000, kmh: MOUNTAIN_KMH, label: '山岳区間' }];
+  const out: SpeedLimit[] = [
+    { from: MOUNTAIN_FROM, to: EXTENT_TO + 1000, kmh: MOUNTAIN_KMH, label: '山岳区間' },
+    { from: 4805, to: EXTENT_TO + 1000, kmh: 33, label: '高野下〜極楽橋' },
+  ];
   let s = 0;
   for (const g of segments) {
     const len = g.type === 'straight' ? g.length : g.radius * g.angle;

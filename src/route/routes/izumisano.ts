@@ -123,13 +123,13 @@ export const izumisano: Route = {
   // 水間鉄道の貝塚駅（world/mizuma.ts）の敷地には OSM の建物・木を置かない
   reserved: MIZUMA_RESERVED,
   // 貝塚〜二色浜は OSM の高架区間・近木川交差と前面展望を基にした概形。
-  // 高架高6m・取り付き勾配25‰・橋長45mはゲーム用の近似。
+  // 高架高6m・取り付き勾配25‰はゲーム用の近似。近木川の両岸を覆う区間を橋桁にする。
   structures: [
     { kind: 'viaduct', from: -400, to: 860 },
     { kind: 'bridge', from: 1675, to: 1740 },
-    { kind: 'viaduct', from: 2990, to: 4080 },
-    { kind: 'bridge', from: 4080, to: 4125 },
-    { kind: 'viaduct', from: 4125, to: 4400 },
+    { kind: 'viaduct', from: 2990, to: 3988 },
+    { kind: 'bridge', from: 3988, to: 4078 },
+    { kind: 'viaduct', from: 4078, to: 4400 },
     { kind: 'bridge', from: 5040, to: 5100 },
     { kind: 'viaduct', from: 7160, to: 8600 },
   ],

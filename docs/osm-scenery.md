@@ -38,11 +38,17 @@ npm run osm:scenery -- --course=namba --endpoint=https://overpass.kumi.systems/a
 | `areas` | `[種類, s,lat の並び]`。park / grass / pitch / school / grave / shrine / wood / water / lot（駐車場）。線路から ±320m の帯で切ってある（範囲の外の頂点は延長線へ写し、辺を 20m ごとに分けてから切る） |
 | `landmarks` | 名前のある大きな建物・社寺・公園・池の `[名前, s, lat]`（位置の確認用） |
 
+## 川と橋の描画
+
+- 橋や高架の下を通る水域は、地図の輪郭に沿って河床を掘る。水位はその地点の基準地盤より3.6m低く、線路が勾配を通る場合も水面は橋桁の下に収まる。川幅が狭い橋では、線路方向の地形を2m間隔で描く。
+- 建物や駐車車両は、敷地の角や辺が水域にかかるときも配置対象から外す。大和川では、地図に沿った河岸と道路橋を使う。
+- 南海本線の6区間は、上下線が水域に入る位置と出る位置をもとに、橋と高架の範囲を決めた。小河川の桁の長さや水深はゲーム用の概形である。
+
 ## 読み込み（区間ごとの別ファイル）
 
 - `src/data/osm/*.json` は静的importせず、`osm-town.ts` の `loadOsmFor(route)` が選んだコースに必要な区間だけ dynamic import で読む（Vite が区間ごとの別チャンクにする）。必要な区間は `osmSectionsFor(route)`（駅名が2つ以上一致する区間）で決まる。上下は同じ区間を共有。堺〜岸和田の通しは `sakai-izumiotsu` と `izumiotsu-kishiwada` の2区間。
 - `src/main.ts` は `buildWorld` の前に `loadCourseData(route)`（`ui/course-loading.ts`）で読み込みを待つ。失敗すると内容と再試行ボタンを出す（再試行はページの再読み込み。ブラウザーは失敗した dynamic import の結果を保持し、同じページのまま取り直せないため）。`osmFor` は読込済みのデータだけで動き、未読込なら例外にする。
-- 街並みのデータが無いコース（みさき公園〜和歌山港）: `osmSectionsFor` は区間 `misaki-wakayamako` だけを返す。これは水面1枚の手作りデータで、`DATASETS` の `waterOnly: true`。`osmFor` は川の溝（`terrain.ts`）のために返すが、街並みには使わない（`osmSceneryFor` は null、`hasOsmScenery` は false）。街並みは手続き生成のまま。共通の駅が無いコース（区間データが1つも無い）でも `loadOsmFor` は何も読まずに終わり、`osmFor` は null を返す。
+- みさき公園〜和歌山港も、区間データの建物・道路・水面を使う。共通の駅がないコースでは、ゲームが街並みを生成する。
 - `loadOsmFor` を呼ぶたびに別コースの区間データを捨て、読込中に別の読み込みが始まった古い呼び出しは `OsmLoadSuperseded` で終わる（何も配置しない）。`buildWorld` の後に `releaseOsmData()` で元データを手放す。
 - スクリプトでコースの景観を作るとき（`scripts/check-clearance.ts` など）は、`buildTown` の前に `await loadOsmFor(route)` を呼ぶ。
 

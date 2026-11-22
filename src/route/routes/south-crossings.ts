@@ -49,9 +49,9 @@ export const IZUMISANO_MISAKI_CROSSINGS: SouthCrossing[] = [
   { id: 'iz16917', s: 16917, roadWidth: 5 },
 ];
 export const MISAKI_WAKAYAMAKO_CROSSINGS: SouthCrossing[] = [
-  { id: 'mw1761', s: 1761, roadWidth: 5 },
+  { id: 'mw1753', s: 1753, roadWidth: 5 },
   { id: 'mw2785', s: 2785, roadWidth: 5 },
-  { id: 'mw3397', s: 3397, roadWidth: 5 },
+  { id: 'mw3394', s: 3394, roadWidth: 5 },
   { id: 'mw3567', s: 3567, roadWidth: 5 },
   { id: 'mw4422', s: 4422, roadWidth: 5 },
   { id: 'mwuchi4439', s: 4439, roadWidth: 3, foot: true },
@@ -69,6 +69,7 @@ export const MISAKI_WAKAYAMAKO_CROSSINGS: SouthCrossing[] = [
   { id: 'mw13472', s: 13472, roadWidth: 5 },
   { id: 'mw13542', s: 13542, roadWidth: 5 },
   { id: 'mw13667', s: 13667, roadWidth: 5 },
+  { id: 'mw13835', s: 13835, roadWidth: 5 },
   { id: 'mw13958', s: 13958, roadWidth: 5 },
   { id: 'mw14091', s: 14091, roadWidth: 5 },
   { id: 'mw14228', s: 14228, roadWidth: 5 },

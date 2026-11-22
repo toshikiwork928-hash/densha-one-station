@@ -17,8 +17,8 @@ import { buildTrack } from '../src/route/track';
 import { loopZone, loopShape, maxStopLength, profileLat, trackLines } from '../src/route/service';
 import { coastalThirdTracks } from '../src/world/coastal-stations';
 import type { Route, ServiceId, TimeOfDay } from '../src/route/types';
-import { realWaitsOf } from '../src/route/real-diagram';
-import { createState, stagesOf, type VehicleSel } from '../src/game/state';
+import { realTrainFor, realWaitsOf } from '../src/route/real-diagram';
+import { createState, departureTime, stagesOf, type VehicleSel } from '../src/game/state';
 import { createGame } from '../src/game/loop';
 import { EventBus } from '../src/core/events';
 import { createTrainEnv } from '../src/sim/train';
@@ -29,6 +29,36 @@ import type { GameContext } from '../src/core/context';
 import { createSignalSystem } from '../src/game/signals';
 
 (globalThis as any).window = {};
+
+// Play と同じ初期化で、途中駅開始を含む全ステージの発車時計・通過順序を調べる。
+{
+  let stages = 0;
+  for (const source of [shiokaze, shiokazeUp, kishiwada, kishiwadaUp, izumisano, izumisanoUp, through, throughUp, namba, nambaUp, izumisanoMisaki, izumisanoMisakiUp, misakiWakayamako, misakiWakayamakoUp]) {
+    for (const timeOfDay of ['morning', 'noon', 'evening', 'night'] as const) {
+      const route = Object.assign(structuredClone(source), { timeOfDay });
+      for (const { id: service } of selectableServices(route)) {
+        applyService(route, service);
+        for (const stage of stagesOf(route)) {
+          const st = createState(route, { service, stageId: stage.id, vehicles: {}, mode: 'normal' });
+          const train = realTrainFor(route, service, st.fromIndex, st.endIndex)!;
+          let previous = -Infinity;
+          for (let i = stage.from; i <= stage.to; i++) {
+            const station = route.stations[i], tag = [route.id, timeOfDay, service, stage.id, station.name].join('/');
+            const departure = departureTime(route, i);
+            assert.ok(station.scheduledArrival > previous, tag + ' 時刻の順序');
+            if (station.name === train.from || train.dep[station.name] != null) {
+              assert.equal(route.startClock + departure, train.start + (train.dep[station.name] ?? 0), tag + ' 実発車時刻');
+            }
+            if (station.name === train.end && train.arr >= 0) assert.equal(route.startClock + station.scheduledArrival, train.start + train.arr, tag);
+            previous = station.pass ? station.scheduledArrival : departure;
+          }
+          stages++;
+        }
+      }
+    }
+  }
+  console.log(`実ダイヤの開始・発着・通過順序を全${stages}ステージで確認`);
+}
 
 function context(source: Route, service: ServiceId, vehicles: VehicleSel = {}, tod?: TimeOfDay): GameContext {
   const route = structuredClone(source);
@@ -122,8 +152,10 @@ if (process.argv.includes('--selection-only')) process.exit(0);
       if (x.kind === 'viaduct' && st.name === '和歌山港') continue;
       assert.ok(st.platform.to <= x.from || st.platform.from >= x.to, `${tag}/${st.name}ホームと${x.kind}が重ならない`);
     }
-    assert.deepEqual((route.structures ?? []).map(x => x.kind).sort(), ['bridge', 'bridge', 'tunnel', 'tunnel', 'tunnel', 'viaduct'], `${tag}の構造物`);
+    assert.equal(route.structures?.filter(x => x.kind === 'tunnel').length, 3);
+    assert.equal(route.structures?.filter(x => x.kind === 'viaduct').length, 1);
     const bridges = (route.structures ?? []).filter(x => x.kind === 'bridge').sort((a, b) => a.from - b.from);
+    assert.equal(bridges.length, 8, `${tag}の河川橋`);
     assert.ok(bridges.some(b => Math.abs((b.to - b.from) - 650) < .5), `${tag}の紀ノ川橋梁 650m`);
     // 終点は和歌山港（頭端・島式・築堤上）。下りは終着 ATS（低速進入）有効、上りは無効（みさき公園は途中駅）
     const term = down ? route.stations[last] : route.stations[0];
@@ -391,6 +423,12 @@ for (const route of [shiokaze, shiokazeUp]) {
   assert.ok(opp.from > suwa.platform.to + 20 && gap.length === 1, `${route.id}: 諏訪ノ森の上下ホームは踏切を挟んで離れる`);
 }
 // 石津川〜湊は直線、湊は島式。
+for (const route of [shiokaze, shiokazeUp, through, throughUp]) {
+  const center = route.coastalLandmarks!.find(l => l.label === '石津川橋梁')!.s;
+  const span = route.structures!.find(st => st.kind === 'bridge' && st.from < center && st.to > center)!;
+  const track = buildTrack(route);
+  for (let s = span.from; s <= span.to; s++) assert.equal(track.gradeAt(s), 0, `${route.id}の石津川橋梁は水平`);
+}
 {
   const t = buildTrack(shiokaze), ishi = shiokaze.stations[7], minato = shiokaze.stations[8];
   for (let s = ishi.platform.from; s <= minato.platform.to; s += 10) assert.ok(Math.abs(t.trackAt(s).phi - t.trackAt(ishi.platform.from).phi) < 1e-9, '石津川〜湊は直線');
@@ -699,17 +737,27 @@ if (routeOnly) process.exit(0);
   console.log('なんば〜堺（下り・5種別）チェック成功');
 }
 
-// 時間帯ごとのダイヤ（朝・夕・夜）: 全コース・全種別で完走、ATS非常制動なし、速度超過なし、普通は時間帯の待避駅で待つ
+// 全時間帯・全種別で完走し、待避・行き違いと速度制限を守れるかを調べる。
 {
   let n = 0;
-  for (const route of [shiokaze, shiokazeUp, kishiwada, kishiwadaUp, izumisano, izumisanoUp, throughUp, through, namba, nambaUp, izumisanoMisaki, izumisanoMisakiUp, misakiWakayamako, misakiWakayamakoUp]) {
-    for (const tod of ['morning', 'evening', 'night'] as const) {
+  for (const route of [shiokaze, shiokazeUp, kishiwada, kishiwadaUp, izumisano, izumisanoUp, throughUp, through, namba, nambaUp, izumisanoMisaki, izumisanoMisakiUp, misakiWakayamako, misakiWakayamakoUp, mountain, mountainUp]) {
+    for (const tod of ['morning', 'noon', 'evening', 'night'] as const) {
       // その時間帯に実際に走る種別（実ダイヤ）
       for (const service of selectableServices(Object.assign(structuredClone(route), { timeOfDay: tod })).map(v => v.id)) {
         const ctx = context(route, service, {}, tod); ctx.envState.timeOfDay = tod;
         const game = createGame(ctx);
         assert.equal(ctx.route.timeOfDay, tod);
         const observed = new Set<number>();
+        if (route.id === 'izumisano-misaki' && service === 'express') {
+          let arrival = NaN;
+          ctx.events.on('arrive', ({ station }) => { if (station.name === '尾崎') arrival = ctx.state.t; });
+          ctx.events.on('depart', ({ station }) => {
+            if (station.name !== '尾崎') return;
+            const dwell = ctx.state.t - arrival;
+            assert.ok(dwell > 0 && dwell < 60, `尾崎の急行が${dwell.toFixed(1)}秒停車`);
+            console.log(`尾崎の急行 ${tod}: ${dwell.toFixed(1)}秒停車`);
+          });
+        }
         attachAutodrive(ctx, (sec, dt = 1 / 30, hook) => {
           for (let q = 0; q < sec; q += dt) {
             if (hook?.()) break; game.update(dt);
@@ -730,5 +778,5 @@ if (routeOnly) process.exit(0);
       }
     }
   }
-  console.log(`時間帯ごとのダイヤ（朝・夕・夜）${n}運行チェック成功`);
+  console.log(`全区間・4時間帯の${n}運行チェック成功`);
 }

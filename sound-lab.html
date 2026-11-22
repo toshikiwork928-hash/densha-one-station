@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>走行音の調整 · 南海電車</title>
+  <link rel="stylesheet" href="./src/ui/sound-lab.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>走行音の調整</h1>
+      <label class="field">車両<select id="vehicle"></select></label>
+    </header>
+    <section aria-labelledby="listen-title">
+      <div class="section-title"><h2 id="listen-title">試聴</h2><span id="state" role="status">停止中</span></div>
+      <div class="transport"><button id="play" class="primary">再生</button><button id="sweep">発車から停車まで</button></div>
+      <label class="speed" for="speed">速度 <output id="speed-value">6 km/h</output></label>
+      <input id="speed" type="range" min="0" max="120" value="6" step="0.5" aria-label="速度">
+      <div class="fields">
+        <label class="field">運転状態<select id="drive"><option value="5">力行 P5</option><option value="0">惰行 N</option><option value="-5">制動 B5</option></select></label>
+        <label class="field">線路<select id="track"><option value="straight">直線</option><option value="curve">急曲線</option><option value="bridge">鉄橋</option><option value="tunnel">トンネル</option></select></label>
+        <label class="field" id="model-field">VVVFの音色<select id="model"></select></label>
+      </div>
+      <div class="fields" id="gto-fields" hidden>
+        <label class="field">起動時のキャリア周波数 <output id="frequency-value"></output><input type="range" id="frequency" min="80" max="1800" step="1"></label>
+        <label class="field">同期に切り替わる速度 <output id="transition-value"></output><input type="range" id="transition" min="8" max="28" step="1"></label>
+      </div>
+      <button id="vehicle-sound" hidden>この車両の標準音色を試す</button>
+      <p id="reference" hidden><span id="reference-note"></span> <a href="https://vvvfdb.stars.ne.jp/vvvf_data/nankai.html" target="_blank" rel="noreferrer">VVVF名鑑で実車の録音・解析を確認</a></p>
+    </section>
+    <section aria-labelledby="mix-title">
+      <div class="section-title"><h2 id="mix-title">音の内訳</h2><button id="clear-solo" hidden>単独試聴を解除</button></div>
+      <div id="layers"></div>
+      <p id="solo-hint" role="status" hidden></p>
+    </section>
+    <section aria-labelledby="save-title">
+      <h2 id="save-title">この車両の設定</h2>
+      <p>調整内容は下書きとして保存します。消音はゲームにも反映し、単独試聴はこの画面だけに適用します。</p>
+      <div class="actions">
+        <button class="primary" id="apply">ゲームに反映</button>
+        <button id="wav">走行例をWAV保存</button>
+        <button id="export">設定を書き出す</button>
+        <button id="import">設定を読み込む</button>
+        <input type="file" id="file" accept=".json,application/json" hidden>
+      </div>
+      <p id="message" role="status"></p>
+    </section>
+  </main>
+  <script type="module" src="./src/ui/sound-lab.ts"></script>
+</body>
+</html>

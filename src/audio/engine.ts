@@ -2,6 +2,7 @@
 // BaseAudioContext を受け取るので OfflineAudioContext でも同じ音を生成できる
 
 export type NoiseKind = 'white' | 'pink' | 'brown';
+export type AudioLayer = 'traction' | 'roll' | 'rail' | 'wind' | 'bridge' | 'flange' | 'joint';
 
 export interface AudioCore {
   ac: BaseAudioContext;
@@ -17,6 +18,8 @@ export interface AudioCore {
   runLowShelf: BiquadFilterNode;
   /** 走行系の高域カット（車内 / 車外視点の切替） */
   runTone: BiquadFilterNode;
+  /** 車両別にライブ調整できる主回路・走行音レイヤー。各バスは run へ接続済み。 */
+  layers: Record<AudioLayer, GainNode>;
   /** トンネル残響へのセンド量 */
   reverbSend: GainNode;
   noise: Record<NoiseKind, AudioBuffer>;
@@ -80,6 +83,9 @@ export function createCore(ac: BaseAudioContext, destination: AudioNode = ac.des
   const run = ac.createGain();
   const runLowShelf = ac.createBiquadFilter(); runLowShelf.type = 'lowshelf'; runLowShelf.frequency.value = 180; runLowShelf.gain.value = 0;
   const runTone = ac.createBiquadFilter(); runTone.type = 'lowpass'; runTone.frequency.value = 9000; runTone.Q.value = .5;
+  const layers = Object.fromEntries((['traction', 'roll', 'rail', 'wind', 'bridge', 'flange', 'joint'] as AudioLayer[]).map(layer => [layer, ac.createGain()])) as Record<AudioLayer, GainNode>;
+  // 車内視点のトーン、トンネル残響、車外視点の切替を主回路・線路系へ一括適用する。
+  for (const layer of ['traction', 'roll', 'rail', 'wind', 'bridge', 'flange', 'joint'] as AudioLayer[]) layers[layer].connect(run);
   run.connect(runLowShelf).connect(runTone).connect(sfx);
   const reverbSend = ac.createGain(); reverbSend.gain.value = 0;
   const conv = ac.createConvolver(); conv.buffer = makeImpulse(ac);
@@ -115,7 +121,7 @@ export function createCore(ac: BaseAudioContext, destination: AudioNode = ac.des
     src.connect(f).connect(g).connect(dest);
   };
 
-  return { ac, master, sfx, voice, run, runLowShelf, runTone, reverbSend, noise, now, noiseSrc, tone, burst };
+  return { ac, master, sfx, voice, run, runLowShelf, runTone, layers, reverbSend, noise, now, noiseSrc, tone, burst };
 }
 
 /** 加算合成の PeriodicWave（harm[k] = k 倍音の振幅、k=1 始まり） */

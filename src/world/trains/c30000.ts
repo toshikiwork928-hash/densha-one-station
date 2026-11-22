@@ -1,3 +1,4 @@
+import { add7100Skirt } from './c7100-skirt';
 // 30000系（特急こうや。モブ）: 17m 級・4両・片側1か所の扉。白（アイボリー）と赤の塗り分け
 //  側面: 窓の高さまでは白（屋根の下に赤の細線）、窓の下から裾までは赤で、中に白の細線が2本
 //  前面: 非貫通。大きな曲面ガラスが上半分を占めて後ろへ傾き、角は丸く回り込む。ガラスの下は 赤帯・白線・赤帯（中央に愛称表示、
@@ -5,21 +6,40 @@
 import * as THREE from 'three';
 import { GeoBatch, M, P } from '../batch';
 import {
-  Y0, adder, addEndWall, addLozenge, addUnderfloor, capGeo, faceSheet, shellGeo, sideSheet,
+  Y0, adder, addCrossArm, addEndWall, addUnderfloor, curvedCab, faceSheet, shellGeo, sideSheet,
   type CarKind, type CarParts, type Ring, type SheetMaps, type V2,
 } from './common';
-import { applySlant, paintDoor, slantLed, slantRings, slantZ, type Slant } from './c1000';
+import { paintDoor, slantRings, type Slant } from './c1000';
 
 export const HW_30 = 1.4;
 const YTOP = 3.8, ROOF_Y = 3.5;
 const HALF: V2[] = [[1.32, Y0], [1.4, 1.45], [1.4, 3.38], [1.35, 3.54], [1.1, 3.67], [.65, 3.76], [0, YTOP]];
-const SL: Slant = { depth: .75, bow: .5, hw: HW_30, ytop: YTOP };
-const R = .3;
+const SL: Slant = { depth: 1.03, bow: .59, hw: HW_30, ytop: YTOP };
+const R = .16;
 const IVORY = ['#f6f2e8', '#e4dfd2'] as const, RED = '#c4141e', RED_D = '#7a1414';
 /** 側面: 赤の上端・白の細線（2本）・屋根の下の赤の細線・窓の上下 */
 const RED_TOP = 2.0, STRIPE: V2 = [1.72, 1.8], STRIPE2: V2 = [1.18, 1.24], TOP_LINE: V2 = [3.24, 3.31], WIN: V2 = [2.1, 2.96];
 /** 前面: ガラスの下端、上の赤帯の下端（= 白線の上端） */
-const SHIELD: V2 = [2.16, 3.42];
+const SHIELD: V2 = [2.06, 3.52];
+/** 前面下部の実車輪郭。腰と裾を窓面より前へ出し、側面で段差を作らない。 */
+const noseProjection = (x: number, y: number) => {
+  const side = 1 - .18 * Math.min(1, Math.abs(x) / HW_30);
+  const waist = Math.max(0, 1 - Math.abs(y - 1.62) / .58) * .18;
+  const skirt = Math.max(0, 1 - Math.abs(y - .78) / .62) * .15;
+  return (waist + skirt) * side;
+};
+const frontZ = (x: number, y: number) => {
+  const glassHeight = Math.max(0, (y - SHIELD[0]) / (YTOP - SHIELD[0]));
+  return SL.depth * glassHeight + SL.bow * (x / HW_30) ** 2 - noseProjection(x, y);
+};
+function apply30000Slant(g: THREE.BufferGeometry, zf: number) {
+  const p = g.getAttribute('position');
+  for (let i = 0; i < p.count; i++) {
+    const z = p.getZ(i), weight = Math.max(0, 1 - (z - zf) / (SL.depth + SL.bow + .12));
+    p.setZ(i, z + weight * frontZ(p.getX(i), p.getY(i)));
+  }
+  p.needsUpdate = true; g.computeVertexNormals();
+}
 /** 扉（先頭車は運転台の後ろ、中間車は後ろの車端）の中心と幅 */
 const DOOR_W = .9;
 const doorZ = (hz: number, head: boolean) => head ? -hz + 2.9 : hz - 1.2;
@@ -42,7 +62,10 @@ export function paint30000Side(Lb: number, head: boolean, open = false): SheetMa
     for (let i = 0; i < n; i++) { const z0 = a + .2 + i * (w + .2); win(z0, z0 + w); }
   };
   if (head) {
-    s.glass(-hz + 1.35, -hz + 1.85, WIN[0] + .1, WIN[1], '#5a5f66', .05); // 運転台の側窓
+    // 展望窓は側面の肩まで回り込み、その後ろに乗務員室の側窓が続く。
+    s.poly([[-hz, 2.08], [-hz + .40, 2.13], [-hz + .73, 3.35], [-hz, 3.47]], '#25343c', .16, .18);
+    s.poly([[-hz + .48, 2.13], [-hz + 1.17, 2.19], [-hz + 1.29, 3.27], [-hz + .80, 3.36]], '#35444b', .16, .18);
+    s.glass(-hz + 1.38, -hz + 1.85, WIN[0] + .1, 3.22, '#69716d', .04); // 運転台の側窓
     row(dz + DOOR_W / 2 + .1, hz - .25);
   } else row(-hz + .25, dz - DOOR_W / 2 - .1);
   paintDoor(s, dz, DOOR_W, 3.0, WIN, '#efeae0', open, true);
@@ -60,11 +83,16 @@ export function paint30000Face(): SheetMaps {
   const s = faceSheet(HW_30, YTOP);
   const grd = s.c.createLinearGradient(0, 0, 0, s.H); grd.addColorStop(0, IVORY[0]); grd.addColorStop(1, IVORY[1]);
   s.base(grd, .28, .1);
-  // 大きな曲面ガラス（黒い縁。中央の細い窓柱なし）
+  // 「く」の字の大型曲面窓。中央桟を置かない一枚窓で、
+  // 30000系固有の非貫通・展望重視の前面を表現する。
   s.rect(-HW_30 + .02, HW_30 - .02, SHIELD[0] - .05, SHIELD[1] + .05, '#16191d', .15, .25, .12);
   s.glass(-HW_30 + .1, HW_30 - .1, SHIELD[0], SHIELD[1], '', .12, ['#33404c', '#11161c']);
+  // 展望窓の内側に見える運転台の上面、窓上の遮光部とワイパーの受け。
+  s.poly([[-1.20, 2.10], [1.20, 2.10], [1.16, 2.24], [.56, 2.32], [-.65, 2.29], [-1.16, 2.22]], '#333e41', .38, .12);
+  s.rect(-1.20, 1.20, 3.36, 3.46, '#293638', .22, .16, .04);
+  s.rect(-HW_30, HW_30, 1.98, 2.06, '#e8e3d9', .38, .12);
   // ガラスの下: 白 → 赤帯 → 白線 → 赤帯（灯具・愛称表示）→ 白線 → 赤
-  s.rect(-HW_30, HW_30, RED_TOP - .3, 2.06, RED, .3, .12);
+  s.rect(-HW_30, HW_30, RED_TOP - .3, 1.98, RED, .3, .12);
   s.rect(-HW_30, HW_30, STRIPE[0] - .1, STRIPE[1] - .1, IVORY[0], .3, .1);
   s.rect(-HW_30, HW_30, 1.28, STRIPE[0] - .1, RED, .3, .12);
   s.rect(-HW_30, HW_30, 1.2, 1.28, IVORY[0], .3, .1);
@@ -75,43 +103,47 @@ export function paint30000Face(): SheetMaps {
     s.rect(sx * .92 - .15, sx * .92 + .15, 1.34, 1.63, '#1a1c20', .2, .3, .03);
   }
   s.rect(-.5, .5, 1.32, 1.64, '#d8d6d0', .3, .4, .03);
+  // 前面中央の愛称表示は実車の赤帯に埋め込まれた独立表示器。
+  s.rect(-.46, .46, 1.35, 1.61, '#f4ead1', .4, .08, .02);
+  s.text('こうや', 0, 1.485, .18, '#6a2a21', 800);
   s.emit(-HW_30, HW_30, Y0, YTOP + .1, '#000'); // 夜は運転台の窓を光らせない
   return s.textures();
 }
 
 /** 1両分のジオメトリ */
-export function build30000Car(kind: CarKind, Lb: number): CarParts {
+export function build30000Car(kind: CarKind, Lb: number, panZ: readonly number[] = []): CarParts {
   const hz = Lb / 2, head = kind === 'head', zf = -hz, roofTop = YTOP;
   const rings: Ring[] = [...(head ? slantRings(zf, R, SL) : [{ z: -hz, inset: 0 }]), { z: hz, inset: 0 }];
   const shell = shellGeo(HALF, rings, YTOP, Lb);
-  if (head) applySlant(shell, zf, SL, false);
+  if (head) apply30000Slant(shell, zf);
   const b = new GeoBatch(), add = adder(b), lit = new GeoBatch(), tl = new GeoBatch();
   const glows: THREE.Vector3[] = [];
   addEndWall(b, hz, YTOP, HW_30, 0xe4dfd2);
-  let face: THREE.BufferGeometry | undefined, led: THREE.BufferGeometry | undefined;
+  let face: THREE.BufferGeometry | undefined;
   if (head) {
-    face = applySlant(capGeo(HALF, { z: zf, inset: R }, YTOP, HW_30, -1), zf, SL, true);
-    const zAt = (x: number, y: number) => zf + slantZ(SL, x, y) - .006;
+    face = curvedCab(HALF, R, YTOP, HW_30, (x, y) => zf + frontZ(x, y));
+    const zAt = (x: number, y: number) => zf + frontZ(x, y) - .006;
     for (const sx of [-1, 1]) {
       const x = sx * .92;
-      lit.add('l', P.box, M(x, 1.555, zAt(x, 1.555) - .02, 0, .26, .12, .02), 0xffffff); // 前照灯（灯具の上半分）
-      glows.push(new THREE.Vector3(x, 1.555, zAt(x, 1.555) - .2));
-      tl.add('l', P.box, M(x, 1.41, zAt(x, 1.41) - .02, 0, .26, .1, .02), 0xffffff); // 尾灯（下半分）
+      // 実車の縦長ケース。上灯を前照灯、下灯を尾灯として上下に分ける。
+      const yaw = -Math.atan(2 * SL.bow * x / (SL.hw * SL.hw));
+      add(x, 1.53, zAt(x, 1.53) - .025, .27, .39, .05, 0x8f9091, 0, yaw);
+      add(x, 1.53, zAt(x, 1.53) - .060, .22, .34, .025, 0x34363a, 0, yaw);
+      b.add('paint', P.cyl, M(x, 1.42, zAt(x, 1.42) - .09, yaw, .13, .02, .13, Math.PI / 2), 0x563531);
+      lit.add('l', P.cyl, M(x, 1.62, zAt(x, 1.62) - .09, yaw, .15, .02, .15, Math.PI / 2), 0xffffff);
+      glows.push(new THREE.Vector3(x, 1.62, zAt(x, 1.62) - .2));
+      tl.add('l', P.cyl, M(x, 1.42, zAt(x, 1.42) - .107, yaw, .13, .02, .13, Math.PI / 2), 0xff2020);
     }
-    // 愛称・種別の表示（下の赤帯の中央）
-    led = slantLed(SL, zf, [[0, 1.48, .92]], .27);
-    // スカート（アイボリー）・連結器
-    add(0, .78, zf + .3, 2.5, .5, .1, 0x5a1414, -.1);
-    add(0, .88, zf + .05, .3, .22, .4, 0x22252a);
+    add7100Skirt(b, zf + .07, 0x712a24);
     for (const sx of [-1, 1]) add(sx * .45, 2.4, zAt(sx * .45, 2.4) - .03, .6, .025, .025, 0x111111, 0, 0, -sx * .9); // ワイパー（中央寄りに立つ）
   } else addEndWall(b, -hz, YTOP, HW_30, 0xe4dfd2);
-  addUnderfloor(b, Lb, 'pan', { frame: 0x3a3d42, equip: 0x2b2e33, bogie: 0x24272b });
+  addUnderfloor(b, Lb, 'pan', { frame: 0x3a3d42, equip: 0x2b2e33, bogie: 0x24272b, frontCut: head ? .62 : 0 });
   // 屋根上: 低い冷房装置2基（アイボリー系）
   for (const z of [-3.4, 3.0]) {
     add(0, roofTop + .08, z, 1.6, .18, 2.6, 0xe6e2d8);
     for (const dz of [-.7, 0, .7]) add(0, roofTop + .18, z + dz, 1.0, .02, .36, 0x6a7076);
   }
-  // 全電動車: 各車にパンタ（中間車は後ろ寄り、先頭車は後ろの車端）
-  addLozenge(b, hz - 2.6, roofTop - .02);
-  return { shell, face, paint: b.geometry('paint')!, led, head: lit.geometry('l') ?? undefined, tail: tl.geometry('l') ?? undefined, glows };
+  // パンタ位置は編成側で指定し、冷房装置と干渉しない位置だけを受け取る。
+  for (const p of panZ) addCrossArm(b, p, roofTop - .02);
+  return { shell, face, paint: b.geometry('paint')!, head: lit.geometry('l') ?? undefined, tail: tl.geometry('l') ?? undefined, glows };
 }

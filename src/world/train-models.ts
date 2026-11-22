@@ -1,6 +1,8 @@
+import { addSideLettering } from './trains/side-lettering';
 // 車両モデルの窓口。種別ごとの外観を手続き生成する（通勤形 新・旧、特急形、山岳線用 2300系。モブの 1000系・2000系・6300系・30000系）
 // 1両 = 材質別に結合したメッシュ数個。ジオメトリ・材質・テクスチャは種別ごとに共有し、行先 LED のみ編成ごと
 import * as THREE from 'three';
+import { pantographPositions } from './trains/pantograph-layout';
 import type { TrainKind } from '../route/types';
 import { envMap, glowTexture, ledDestTexture, ledTexture, ledTypeTexture, type CarKind, type CarParts, type SheetMaps } from './trains/common';
 import { buildCommuterCar, paintCommuterFace, paintCommuterSide, HW, YTOP } from './trains/commuter';
@@ -11,7 +13,10 @@ import { buildNewLiveryCar, paintNewLiveryFace, paintNewLiverySide } from './tra
 import { build30000Car, paint30000Face, paint30000Side } from './trains/c30000';
 import { build9000Car, paint9000Face, paint9000Side } from './trains/c9000';
 import { build12000Car, paint12000Face, paint12000Side } from './trains/c12000';
+import { paint7100Side } from './trains/c7100-side';
+import { paint7100Cab } from './trains/c7100-cab';
 import { CAR_LEN, carLenOf } from '../route/service';
+export { front7169ForRoute } from '../route/vehicle-direction';
 
 /** 1両分の生成結果。原点 = 車体中心・レール面高さ、前 = -Z */
 export interface TrainCar {
@@ -33,7 +38,10 @@ export interface TrainSetOptions {
   unitKinds?: TrainKind[];
   /** 車庫・留置線に留置中: 夕方・夜も車内灯（窓・外板の明かり）を点けない */
   dark?: boolean;
+  /** 先頭が編成の難波方か。パンタグラフ配置と復刻塗装の車号に使う。 */
+  nambaFirst?: boolean;
 }
+
 
 /** 編成を生成（先頭車 index 0、最後尾は逆向きの先頭車） */
 export type CreateTrainSet = (kind: TrainKind, cars: number, renderer: THREE.WebGLRenderer, opts?: TrainSetOptions) => TrainCar[];
@@ -41,6 +49,7 @@ export type CreateTrainSet = (kind: TrainKind, cars: number, renderer: THREE.Web
 export const TRAIN_KINDS: Record<TrainKind, { label: string; service: string }> = {
   'commuter-new': { label: '通勤形（ステンレス・黒顔）', service: '普通' },
   'commuter-old': { label: '通勤形（鋼製・貫通扉）', service: '急行' },
+  'commuter-7100-restored': { label: '7100系7169編成（復元塗装）', service: '急行' },
   limited: { label: '特急形', service: '特急' },
   'commuter-2300': { label: '山岳線用（18m・2扉・2両ユニット）', service: '各停' },
   'southern-10000': { label: '特急形（サザン座席指定車・1扉）', service: '特急' },
@@ -59,14 +68,10 @@ const lbOf = (kind: TrainKind) => carLenOf(kind) - .5;
 /** 台車中心の車体中心からの距離 [m]（common.addUnderfloor と同じ: 車体端から 2.6m） */
 export const bogieOffset = (carLen: number): number => carLen / 2 - .25 - 2.6;
 
-/** n 両ユニットの車種並び（両端 = 運転台付きの先頭車、所々にパンタ付き） */
-export function formation(n: number): CarKind[] {
-  return Array.from({ length: n }, (_, i): CarKind => i === 0 || i === n - 1 ? 'head' : i % 3 === 2 ? 'pan' : 'mid');
-}
-
 /** 既定のユニット分け（通勤形は 4両 + 端数、2300系・2000系は 2両ずつ、特急形・1000系の6両は1ユニット） */
 export function defaultUnits(kind: TrainKind, n: number): number[] {
   const u = kind === 'commuter-2300' || kind === 'commuter-2000' ? 2 : 4;
+  if (kind === 'commuter-7100-restored') return [4];
   if (kind === 'limited' || kind === 'limited-30000' || kind === 'southern-12000' || (kind === 'commuter-1000' && n === 6) || n <= u) return [Math.max(1, n)];
   const out: number[] = []; let r = n;
   while (r > u) { out.push(u); r -= u; }
@@ -75,12 +80,13 @@ export function defaultUnits(kind: TrainKind, n: number): number[] {
 }
 
 interface KindKit {
-  geo(k: CarKind): CarParts;
+  geo(k: CarKind, panZ: readonly number[]): CarParts;
   side: { head: THREE.MeshStandardMaterial; mid: THREE.MeshStandardMaterial };
   /** ドアを開けた側面（初めて開けるときに作る） */
   open(head: boolean): THREE.MeshStandardMaterial;
   openMats: THREE.MeshStandardMaterial[];
   face?: THREE.MeshStandardMaterial;
+  faceRear?: THREE.MeshStandardMaterial;
   paint: THREE.MeshStandardMaterial;
   glass: THREE.MeshStandardMaterial;
   base: { env: number; paintEnv: number };
@@ -127,14 +133,21 @@ function sheetMat(m: SheetMaps, env: THREE.Texture, physical: boolean, envI: num
 function kindKit(kind: TrainKind, renderer: THREE.WebGLRenderer): KindKit {
   let k = kindKits.get(kind);
   if (k) return k;
-  const env = envMap(renderer), geos = new Map<CarKind, CarParts>();
+  const env = envMap(renderer), geos = new Map<string, CarParts>();
   shared.off ??= new THREE.MeshStandardMaterial({ color: 0x8a8f95, roughness: .2, metalness: .5, envMap: env });
   const LB = lbOf(kind);
+  const cached = (build: KindKit['geo']): KindKit['geo'] => (car, panZ) => {
+    const key = [car, ...panZ].join(':');
+    let parts = geos.get(key);
+    if (!parts) { parts = build(car, panZ); geos.set(key, parts); }
+    return parts;
+  };
   const glass = new THREE.MeshStandardMaterial({ color: 0x0c0f13, roughness: .06, metalness: .3, envMap: env, envMapIntensity: 1.2, emissive: 0xfff1d6, emissiveIntensity: 0 });
   if (kind === 'limited') {
-    const paint = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: .22, metalness: .5, clearcoat: 1, clearcoatRoughness: .07, envMap: env, envMapIntensity: 1.2, side: THREE.DoubleSide });
+    glass.color.setHex(0x38434b); glass.roughness = .72; glass.metalness = .03;
+    const paint = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: .35, metalness: .24, clearcoat: .50, clearcoatRoughness: .22, envMap: env, envMapIntensity: 1.05, side: THREE.DoubleSide });
     k = {
-      geo: c => geos.get(c) ?? (geos.set(c, buildLimitedCar(c, LB)), geos.get(c)!),
+      geo: cached((c, panZ) => buildLimitedCar(c, LB, panZ)),
       side: { head: sheetMat(paintLimitedSide(LB, true), env, true, 1.2), mid: sheetMat(paintLimitedSide(LB, false), env, true, 1.2) },
       paint, glass, base: { env: 1.2, paintEnv: 1.2 },
       openMats: [], open: h => openMat(k!, h, () => sheetMat(paintLimitedSide(LB, h, true), env, true, 1.2)),
@@ -143,16 +156,17 @@ function kindKit(kind: TrainKind, renderer: THREE.WebGLRenderer): KindKit {
     const premium = kind === 'southern-12000';
     const paint = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .35, metalness: .5, envMap: env, envMapIntensity: .8 });
     k = {
-      geo: c => geos.get(c) ?? (geos.set(c, premium ? build12000Car(c, LB) : buildSouthernCar(c, LB)), geos.get(c)!),
+      geo: cached((c, panZ) => premium ? build12000Car(c, LB, panZ) : buildSouthernCar(c, LB, panZ)),
       side: { head: sheetMat(premium ? paint12000Side(LB, true) : paintSouthernSide(LB, true), env, false, .9), mid: sheetMat(premium ? paint12000Side(LB, false) : paintSouthernSide(LB, false), env, false, .9) },
-      face: sheetMat(premium ? paint12000Face() : paintSouthernFace(), env, false, .9),
+      face: sheetMat(premium ? paint12000Face() : paintSouthernFace('10009'), env, false, .9),
+      faceRear: premium ? undefined : sheetMat(paintSouthernFace('10909'), env, false, .9),
       paint, glass, base: { env: .9, paintEnv: .8 },
       openMats: [], open: h => openMat(k!, h, () => sheetMat(premium ? paint12000Side(LB, h, true) : paintSouthernSide(LB, h, true), env, false, .9)),
     };
   } else if (kind === 'commuter-2300') {
     const paint = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .5, metalness: .35, envMap: env, envMapIntensity: .6 });
     k = {
-      geo: c => geos.get(c) ?? (geos.set(c, build2300Car(c, LB)), geos.get(c)!),
+      geo: cached((c, panZ) => build2300Car(c, LB, panZ)),
       side: { head: sheetMat(paint2300Side(LB, true), env, false, .9), mid: sheetMat(paint2300Side(LB, false), env, false, .9) },
       face: sheetMat(paint2300Face(), env, false, .9),
       paint, glass, base: { env: .9, paintEnv: .6 },
@@ -161,9 +175,10 @@ function kindKit(kind: TrainKind, renderer: THREE.WebGLRenderer): KindKit {
   } else if (kind === 'commuter-9000') {
     const paint = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .4, metalness: .7, envMap: env, envMapIntensity: .8 });
     k = {
-      geo: c => geos.get(c) ?? (geos.set(c, build9000Car(c, LB)), geos.get(c)!),
+      geo: cached((c, panZ) => build9000Car(c, LB, panZ)),
       side: { head: sheetMat(paint9000Side(LB, true), env, false, .9), mid: sheetMat(paint9000Side(LB, false), env, false, .9) },
       face: sheetMat(paint9000Face(), env, false, .9),
+      faceRear: sheetMat(paint9000Face('9502'), env, false, .9),
       paint, glass, base: { env: .9, paintEnv: .7 },
       openMats: [], open: h => openMat(k!, h, () => sheetMat(paint9000Side(LB, h, true), env, false, .9)),
     };
@@ -171,27 +186,38 @@ function kindKit(kind: TrainKind, renderer: THREE.WebGLRenderer): KindKit {
     const m = kind === 'commuter-1000' ? '1000' : '2000', envI = m === '2000' ? .9 : .7;
     const paint = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .5, metalness: .35, envMap: env, envMapIntensity: .6 });
     k = {
-      geo: c => geos.get(c) ?? (geos.set(c, buildNewLiveryCar(m, c, LB)), geos.get(c)!),
+      geo: cached((c, panZ) => buildNewLiveryCar(m, c, LB, panZ)),
       side: { head: sheetMat(paintNewLiverySide(m, LB, true), env, false, envI), mid: sheetMat(paintNewLiverySide(m, LB, false), env, false, envI) },
       face: sheetMat(paintNewLiveryFace(m), env, false, envI),
+      faceRear: m === '2000' ? sheetMat(paintNewLiveryFace(m, '2189'), env, false, envI) : undefined,
       paint, glass, base: { env: envI, paintEnv: .6 },
       openMats: [], open: h => openMat(k!, h, () => sheetMat(paintNewLiverySide(m, LB, h, true), env, false, envI)),
     };
   } else if (kind === 'limited-30000') {
     const paint = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .45, metalness: .25, envMap: env, envMapIntensity: .6 });
     k = {
-      geo: c => geos.get(c) ?? (geos.set(c, build30000Car(c, LB)), geos.get(c)!),
+      geo: cached((c, panZ) => build30000Car(c, LB, panZ)),
       side: { head: sheetMat(paint30000Side(LB, true), env, false, .8), mid: sheetMat(paint30000Side(LB, false), env, false, .8) },
       face: sheetMat(paint30000Face(), env, false, .8),
       paint, glass, base: { env: .8, paintEnv: .6 },
       openMats: [], open: h => openMat(k!, h, () => sheetMat(paint30000Side(LB, h, true), env, false, .8)),
     };
+  } else if (kind === 'commuter-7100-restored') {
+    const paint = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .5, metalness: .12, envMap: env, envMapIntensity: .6 });
+    k = {
+      geo: cached((c, panZ) => buildCommuterCar('old', c, LB, false, panZ)),
+      side: { head: sheetMat(paint7100Side(LB, YTOP, true, false, true), env, false, .6), mid: sheetMat(paint7100Side(LB, YTOP, false, false, true), env, false, .6) },
+      face: sheetMat(paint7100Cab(HW, YTOP, true, '7169'), env, false, .6),
+      faceRear: sheetMat(paint7100Cab(HW, YTOP, true, '7170'), env, false, .6),
+      paint, glass, base: { env: .6, paintEnv: .5 },
+      openMats: [], open: h => openMat(k!, h, () => sheetMat(paint7100Side(LB, YTOP, h, true, true), env, false, .6)),
+    };
   } else {
-    // 8300系・7100系。6300系（ss）は 7100系と同じ形でステンレス無塗装
+    // 8300系・7100系と、ステンレス無塗装の6300系を描き分ける。
     const v = kind === 'commuter-new' ? 'new' : 'old', ss = kind === 'commuter-6300', envI = v === 'new' || ss ? .9 : .6;
     const paint = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .5, metalness: v === 'new' ? .35 : .15, envMap: env, envMapIntensity: .6 });
     k = {
-      geo: c => geos.get(c) ?? (geos.set(c, buildCommuterCar(v, c, LB, ss)), geos.get(c)!),
+      geo: cached((c, panZ) => buildCommuterCar(v, c, LB, ss, panZ)),
       side: { head: sheetMat(paintCommuterSide(v, LB, true, false, ss), env, false, envI), mid: sheetMat(paintCommuterSide(v, LB, false, false, ss), env, false, envI) },
       face: sheetMat(paintCommuterFace(v, ss), env, false, envI),
       paint, glass, base: { env: envI, paintEnv: .6 },
@@ -211,7 +237,7 @@ function darkKit(kind: TrainKind, renderer: THREE.WebGLRenderer): KindKit {
   const k = kindKit(kind, renderer);
   d = {
     ...k, dark: true, openMats: [],
-    side: { head: k.side.head.clone(), mid: k.side.mid.clone() }, face: k.face?.clone(), glass: k.glass.clone(),
+    side: { head: k.side.head.clone(), mid: k.side.mid.clone() }, face: k.face?.clone(), faceRear: k.faceRear?.clone(), glass: k.glass.clone(),
     open: h => openMat(d!, h, () => k.open(h).clone()),
   };
   darkKits.set(kind, d);
@@ -245,11 +271,38 @@ function ledSouthernMat(label: string, dest: string): THREE.MeshBasicMaterial {
   return m;
 }
 
-function ledMat(label: string, dest: string, typeFraction = .47): THREE.MeshBasicMaterial {
-  const key = `${typeFraction}:${label}|${dest}`;
+function ledMat(label: string, dest: string, typeFraction = .47, rollsign = false): THREE.MeshBasicMaterial {
+  const key = `${rollsign}:${typeFraction}:${label}|${dest}`;
   let m = ledMats.get(key);
-  if (!m) { m = new THREE.MeshBasicMaterial({ map: ledTexture(label, dest, typeFraction), toneMapped: false }); ledMats.set(key, m); }
+  if (!m) { m = new THREE.MeshBasicMaterial({ map: ledTexture(label, dest, typeFraction, rollsign), toneMapped: false }); ledMats.set(key, m); }
   return m;
+}
+
+const frontDisplays = new WeakMap<THREE.MeshBasicMaterial, THREE.MeshStandardMaterial>();
+function displayBehindGlass(ink: THREE.MeshBasicMaterial, glass: THREE.MeshStandardMaterial) {
+  let display = frontDisplays.get(ink);
+  if (!display) {
+    // 表示窓の暗部には車体側のガラスが透ける。昼の反射と夜の発光は文字に重ねる。
+    const source = ink.map!.image as HTMLCanvasElement;
+    const canvas = document.createElement('canvas');
+    canvas.width = source.width; canvas.height = source.height;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(source, 0, 0);
+    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    for (let i = 0; i < pixels.data.length; i += 4) {
+      const brightness = Math.max(pixels.data[i], pixels.data[i + 1], pixels.data[i + 2]);
+      pixels.data[i + 3] = Math.max(0, brightness - 12) * .85;
+    }
+    ctx.putImageData(pixels, 0, 0);
+    const map = new THREE.CanvasTexture(canvas);
+    map.colorSpace = THREE.SRGBColorSpace;
+    display = new THREE.MeshStandardMaterial({
+      map, transparent: true, depthWrite: false, roughness: .24, metalness: .15, envMap: glass.envMap, envMapIntensity: .45,
+      emissive: 0xffffff, emissiveMap: map, emissiveIntensity: .45,
+    });
+    frontDisplays.set(ink, display);
+  }
+  return display;
 }
 
 const sideDisplayPlane = new THREE.PlaneGeometry(1, 1);
@@ -258,26 +311,27 @@ const sideDisplayFrameMat = new THREE.MeshBasicMaterial({ color: 0x242424 });
 
 /** 側面は左右それぞれ外向きの面に貼り、文字の鏡像を避ける。 */
 function addSideDisplays(body: THREE.Group, kind: TrainKind, label: string, dest: string) {
-  const split = kind === 'commuter-1000' || kind === 'limited';
-  const combined = kind === 'commuter-old' || kind === 'commuter-9000' || kind === 'commuter-new' || kind === 'southern-12000';
+  const split = kind === 'commuter-1000' || kind === 'commuter-2000';
+  const combined = kind === 'commuter-old' || kind === 'commuter-7100-restored' || kind === 'commuter-9000' || kind === 'commuter-new' || kind === 'southern-12000';
   if (!split && !combined) return;
-  const x = kind === 'limited' ? 1.43 : 1.46, y = kind === 'limited' ? 3.12 : 3.21;
+  const rollsign = kind === 'commuter-old' || kind === 'commuter-7100-restored';
+  const x = kind === 'commuter-2000' ? 1.40 : 1.46, y = kind === 'commuter-2000' ? 3.20 : 3.21;
   // 1000系: 車体中央の2枚の窓（扉 ±2.4m の間。ガラスの中心は ±0.47m、幅 0.82m。trains/c1000.ts）の上に、種別と行先の2枠をそれぞれ窓の中心に合わせて置く
   const signs = kind === 'commuter-1000'
     ? [{ z: -.47, w: .76, mat: ledMatPart('type', label, dest) }, { z: .47, w: .76, mat: ledMatPart('dest', label, dest) }]
     : split
-    ? [{ z: kind === 'limited' ? 0 : -4.5, w: .78, mat: ledMatPart('type', label, dest) },
-      { z: 4.5, w: 1.05, mat: ledMatPart('dest', label, dest) }]
-    : [{ z: 0, w: kind === 'commuter-new' || kind === 'southern-12000' ? 1.55 : 1.20,
-      mat: ledMat(label, dest, kind === 'commuter-new' || kind === 'southern-12000' ? 1 / 3 : .47) }];
+    ? [{ z: -.48, w: .48, mat: ledMatPart('type', label, dest) },
+      { z: .48, w: .48, mat: ledMatPart('dest', label, dest) }]
+    : [{ z: 0, w: rollsign ? .60 : kind === 'commuter-new' || kind === 'southern-12000' ? 1.55 : 1.20,
+      mat: ledMat(label, dest, kind === 'commuter-new' || kind === 'southern-12000' ? 1 / 3 : .47, rollsign) }];
   for (const side of [-1, 1]) for (const sign of signs) {
     const z = split ? -side * sign.z : sign.z;
     const frame = new THREE.Mesh(sideDisplayFrame, sideDisplayFrameMat);
-    frame.position.set(side * x, y, z); frame.scale.set(.035, .29, sign.w + .07);
+    frame.position.set(side * x, y, z); frame.scale.set(.035, rollsign ? .19 : .29, sign.w + .07);
     frame.name = 'side-display-frame'; body.add(frame);
     const panel = new THREE.Mesh(sideDisplayPlane, sign.mat);
     panel.rotation.y = side * Math.PI / 2;
-    panel.position.set(side * (x + .021), y, z); panel.scale.set(sign.w, .23, 1);
+    panel.position.set(side * (x + .021), y, z); panel.scale.set(sign.w, rollsign ? .15 : .23, 1);
     panel.name = 'side-display'; body.add(panel);
   }
 }
@@ -289,20 +343,27 @@ const blankLed = new THREE.MeshBasicMaterial({ color: 0x060606 });
 /** 優等列車（急行・特急・サザン）の表示。標識灯は普通 = 前から見て左のみ、優等 = 両方点灯 */
 const isExpress = (label: string) => /急|特|サザン/.test(label);
 
-function makeCar(kit: KindKit, kind: CarKind, role: Role, led: THREE.Material, led2: THREE.Material | undefined, express: boolean, trainKind: TrainKind, label: string, dest: string): { car: THREE.Group; setDoors: TrainCar['setDoors'] } {
-  const g = kit.geo(kind), car = new THREE.Group(), body = new THREE.Group();
+function makeCar(kit: KindKit, kind: CarKind, panZ: readonly number[], role: Role, led: THREE.MeshBasicMaterial, led2: THREE.MeshBasicMaterial | undefined, express: boolean, trainKind: TrainKind, label: string, dest: string, front7169 = true): { car: THREE.Group; setDoors: TrainCar['setDoors'] } {
+  const g = kit.geo(kind, panZ), car = new THREE.Group(), body = new THREE.Group();
   const closed = kind === 'head' ? kit.side.head : kit.side.mid;
   // 外板は +X 側 / -X 側の2グループ（材質配列 [+X, -X]）。+X = 車の進行方向右。後ろ向きの運転台付き車（body を PI 回転）は左右が入れ替わる
   const shell = new THREE.Mesh(g.shell, [closed, closed]);
   shell.name = 'train-shell';
   body.add(shell);
   body.add(new THREE.Mesh(g.paint, kit.paint));
-  if (g.face && kit.face) body.add(new THREE.Mesh(g.face, kit.face));
+  const restoredFace = trainKind === 'commuter-7100-restored';
+  const numberedCab = restoredFace || trainKind === 'southern-10000' || trainKind === 'commuter-2000' || trainKind === 'commuter-9000';
+  const face = numberedCab && (role === 'front' || role === 'jointFront') ? (front7169 ? kit.face : kit.faceRear ?? kit.face)
+    : numberedCab && (role === 'rear' || role === 'jointRear') ? (front7169 ? kit.faceRear ?? kit.face : kit.face)
+    : role === 'rear' ? kit.faceRear ?? kit.face : kit.face;
+  if (g.face && face) body.add(new THREE.Mesh(g.face, face));
   if (g.glass) body.add(new THREE.Mesh(g.glass, kit.glass));
   const lit = role === 'front' || role === 'rear';
-  if (g.led) body.add(new THREE.Mesh(g.led, lit ? led : blankLed));
-  if (g.led2) body.add(new THREE.Mesh(g.led2, lit && led2 ? led2 : blankLed));
+  const frontDisplay = (ink: THREE.MeshBasicMaterial) => trainKind === 'commuter-old' || restoredFace || trainKind === 'commuter-6300' ? ink : displayBehindGlass(ink, kit.glass);
+  if (g.led) body.add(new THREE.Mesh(g.led, lit ? frontDisplay(led) : blankLed));
+  if (g.led2) body.add(new THREE.Mesh(g.led2, lit && led2 ? frontDisplay(led2) : blankLed));
   addSideDisplays(body, trainKind, label, dest);
+  addSideLettering(body, trainKind, lbOf(trainKind), kind === 'head', panZ.length > 0);
   if (kind === 'head') {
     // 前: 前照灯点灯（尾灯は付けない）、後: 尾灯点灯・前照灯は消灯色
     if (role === 'front' && g.head) body.add(new THREE.Mesh(g.head, shared.headOn));
@@ -340,21 +401,24 @@ export const createTrainSet: CreateTrainSet = (kind, cars, renderer, opts = {}) 
   const label = opts.label ?? TRAIN_KINDS[kind].service, dest = opts.dest ?? '堺';
   const shown = label === '特急サザン' ? 'サザン' : label, express = isExpress(label);
   // 前面の表示器: 8300系・1000系・12000系・2300系は左に種別・右に行先の2面。
-  const leds = (k: TrainKind) => k === 'commuter-new' || k === 'commuter-2300' || k === 'commuter-1000' || k === 'southern-12000'
+  const leds = (k: TrainKind) => k === 'commuter-new' || k === 'commuter-2300' || k === 'commuter-1000' || k === 'commuter-2000' || k === 'southern-12000'
     ? { led: ledMatPart('type', shown, dest), led2: ledMatPart('dest', shown, dest) }
-    : k === 'southern-10000' ? { led: ledSouthernMat(label, dest), led2: undefined } : { led: ledMat(shown, dest), led2: undefined };
+    : k === 'southern-10000' ? { led: ledSouthernMat(label, dest), led2: undefined } : { led: ledMat(shown, dest, .47, k === 'commuter-old' || k === 'commuter-7100-restored'), led2: undefined };
+  const nambaFirst = opts.nambaFirst ?? (opts.dest ? opts.dest === 'なんば' || opts.dest === '難波' : true);
   const units = opts.units?.length ? opts.units : defaultUnits(kind, Math.max(1, cars));
   const out: TrainCar[] = [];
   units.forEach((m, u) => {
     // ユニットごとの車種（サザンは 10000系 + 7100系）。未指定は編成の kind
     const uk = opts.unitKinds?.[u] ?? kind, kit = opts.dark ? darkKit(uk, renderer) : kindKit(uk, renderer), len = carLenOf(uk), { led, led2 } = leds(uk);
     const first = u === 0, last = u === units.length - 1;
-    formation(m).forEach((k, i) => {
+    for (let i = 0; i < m; i++) {
       const lastCar = i === m - 1;
       const role: Role = i === 0 ? (first ? 'front' : 'jointFront') : lastCar ? (last ? 'rear' : 'jointRear') : 'mid';
-      const c = makeCar(kit, m === 1 ? 'head' : k, role, led, led2, express, uk, shown, dest);
+      const panZ = pantographPositions(uk, m, i, nambaFirst, lbOf(uk));
+      const carKind = i === 0 || lastCar ? 'head' : panZ.length ? 'pan' : 'mid';
+      const c = makeCar(kit, carKind, panZ, role, led, led2, express, uk, shown, dest, nambaFirst);
       out.push({ object: c.car, length: len, setDoors: c.setDoors });
-    });
+    }
   });
   for (const l of lookListeners) for (const c of out) l.car(c.object);
   return out;
@@ -362,7 +426,7 @@ export const createTrainSet: CreateTrainSet = (kind, cars, renderer, opts = {}) 
 
 function applyNight(k: KindKit) {
   const lit = k.dark ? 0 : night; // 留置中の編成は車内灯を点けない（反射は昼夜で同じに落とす）
-  for (const m of [k.side.head, k.side.mid, k.face, ...k.openMats]) if (m) { m.emissiveIntensity = lit * 1.1; m.envMapIntensity = k.base.env * (1 - night * .75); }
+  for (const m of [k.side.head, k.side.mid, k.face, k.faceRear, ...k.openMats]) if (m) { m.emissiveIntensity = lit * 1.1; m.envMapIntensity = k.base.env * (1 - night * .75); }
   if (!k.dark) k.paint.envMapIntensity = k.base.paintEnv * (1 - night * .75);
   k.glass.envMapIntensity = 1.2 - night * .9; k.glass.emissiveIntensity = lit * .5;
 }

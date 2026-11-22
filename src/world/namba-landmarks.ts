@@ -1,7 +1,6 @@
 // 南海本線 堺〜難波（route.id = 'namba'）専用の景観（描画専用・静的）。実在の名称・ロゴは持たない概形。
 //   1. 七道駅西側の大型商業施設（s 1420〜1880, 左 lat -46〜-180）と連絡デッキ（s≈1700）
 //   2. 新今宮の下をくぐる JR 高架（4線・s≈8530 で約78°に交差）と JR の島式でない相対ホーム2面
-//   3. 大和川（s 2155〜2375）の堤防の法面・堤防道路・並行する道路橋（右 lat≈+30）
 // ctx.rng は使わない（局所の PRNG）。列車は作らない。
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
@@ -359,85 +358,8 @@ function buildJr(ctx: GameContext): void {
   ctx.scene.add(farRoot, nearRoot);
 }
 
-// ================= 3. 大和川の堤防と道路橋 =================
-function buildRiver(ctx: GameContext): void {
-  const { T, track, pos, box } = localTools(ctx);
-  const far = new GeoBatch(), near = new GeoBatch(), lit = new GeoBatch();
-  const c = (2155 + 2375) / 2, half = (2375 - 2155) / 2, crest = half * .85;     // 地形の窪みの肩（|s-c| = 93.5）
-  const rnd = seeded(2265);
-  const LAT = 300;
-  const latRanges: [number, number][] = [[-LAT, -11], [17, LAT]];
-
-  // ---- 法面（芝＋下はコンクリートブロック張り）。地面メッシュの上に薄く重ねる
-  const quad = (A: THREE.Vector3, B: THREE.Vector3, Cc: THREE.Vector3, D: THREE.Vector3, color: number) =>
-    far.addTris('slope', [A.x, A.y, A.z, B.x, B.y, B.z, Cc.x, Cc.y, Cc.z, A.x, A.y, A.z, Cc.x, Cc.y, Cc.z, D.x, D.y, D.z], color);
-  const rows = 11, d0 = crest, d1 = 45;
-  for (const sg of [-1, 1]) for (let i = 0; i < rows; i++) {
-    const da = d0 + (d1 - d0) * i / rows, db = d0 + (d1 - d0) * (i + 1) / rows, sa = c + sg * da, sb = c + sg * db;
-    const color = db > 74 ? (i % 2 ? 0x6b9a4a : 0x739f50) : (i % 2 ? 0x9da19a : 0xaeb1a9);
-    for (const [l0, l1] of latRanges) {
-      const pa0 = track.at(sa, l0, 0), pa1 = track.at(sa, l1, 0), pb0 = track.at(sb, l0, 0), pb1 = track.at(sb, l1, 0);
-      pa0.y = pa1.y = T.groundY(sa) + .1; pb0.y = pb1.y = T.groundY(sb) + .1;
-      quad(pa0, pa1, pb1, pb0, color);
-    }
-  }
-  // ---- 堤防道路（川の両岸の肩の外側）・ガードレール・街灯・並木
-  for (const sg of [-1, 1]) {
-    const sA = c + sg * (crest + 3), sB = c + sg * (crest + 11);
-    box(far, 'body', Math.min(sA, sB), Math.max(sA, sB), -LAT, LAT, 0, .12, C.asphalt, 40);
-    const rs = c + sg * (crest + .6);
-    for (const [l0, l1] of latRanges) {
-      box(near, 'body', rs - .04, rs + .04, l0, l1, .5, .62, 0xc9ccd0, 40);
-      for (let l = l0 + 2; l < l1; l += 6) box(near, 'body', rs - .05, rs + .05, l - .05, l + .05, 0, .75, 0xc9ccd0);
-      for (let l = l0 + 10; l < l1; l += 36) {
-        const s = c + sg * (crest + 10.5);
-        box(near, 'body', s - .12, s + .12, l - .12, l + .12, 0, 8, C.steel);
-        box(lit, 'lit', s - .6, s + .6, l - .4, l + .4, 8, 8.2, WARM);
-      }
-      for (let l = l0 + 18; l < l1; l += 24) {
-        const p = pos(c + sg * (crest + 14 + rnd() * 3), l + rnd() * 6, 0), r = 3.2 + rnd() * 1.8;
-        near.add('body', P.boxB, M(p.x, p.y, p.z, 0, .35, 3.6, .35), 0x6d5640);
-        near.add('body', P.sphere, M(p.x, p.y + 5, p.z, 0, r * 2, r * 1.7, r * 2), 0x5f8f4a);
-      }
-    }
-  }
-
-  // ---- 道路橋（右側 lat≈+30、地面と同じ高さで川の窪みをまたぐ）
-  const L0 = 23, L1 = 37, DK = .45;
-  const bs0 = c - crest - 8.5, bs1 = c + crest + 8.5;
-  box(far, 'body', bs0, bs1, L0, L1, DK - 1.0, DK, C.concrete, 40);
-  box(far, 'body', bs0, bs1, L0 + .3, L1 - .3, DK, DK + .06, 0x3f4246, 40);             // 舗装
-  for (const sd of [L0, L1]) {
-    box(far, 'body', bs0, bs1, sd - .25 + (sd === L0 ? .25 : 0), sd + .25 - (sd === L0 ? 0 : .25), DK, DK + 1.0, C.slab, 40);   // 高欄の腰壁
-    box(near, 'body', bs0, bs1, sd + (sd === L0 ? .1 : -.1) - .05, sd + (sd === L0 ? .1 : -.1) + .05, DK + 1.0, DK + 1.3, C.steel, 40);
-  }
-  for (let s = bs0 + 4; s < bs1; s += 8) box(near, 'body', s - 1.4, s + 1.4, 29.85, 30.15, DK + .06, DK + .09, 0xe8e8e0);   // 中央線の破線
-  for (const s of [bs0 + 2.5, bs1 - 2.5, ...Array.from({ length: 6 }, (_, i) => bs0 + 38 * (i + 1))]) {
-    // 橋脚（壁式）
-    if (s > bs0 + 5 && s < bs1 - 5) box(far, 'body', s - .7, s + .7, L0 + 1.5, L1 - 1.5, -6.6, DK - 1.0, C.concrete);
-    for (const l of [L0 + .6, L1 - .6]) {
-      box(near, 'body', s - .1, s + .1, l - .1, l + .1, DK, DK + 7, C.steel);
-      box(lit, 'lit', s - .35, s + .35, l - (l < 30 ? -.9 : .9) - .25, l - (l < 30 ? -.9 : .9) + .25, DK + 7, DK + 7.15, WARM);
-    }
-  }
-  // 橋の前後の取付道路（地面上）
-  for (const [a, b] of [[c - crest - 8.5 - 90, c - crest - 8.5], [c + crest + 8.5, c + crest + 8.5 + 90]] as const) {
-    box(far, 'body', a, b, L0 + .3, L1 - .3, .0, .1, 0x3f4246, 16);
-    for (let s = a + 4; s < b; s += 8) box(near, 'body', s - 1.4, s + 1.4, 29.85, 30.15, .1, .13, 0xe8e8e0);
-  }
-
-  const farG = new THREE.Group(), nearG = new THREE.Group();
-  const bm = bodyMat(), slope = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
-  far.build({ body: bm, slope }, farG);
-  near.build({ body: bm }, nearG); lit.build({ lit: litMaterial(ctx) }, nearG);
-  ctx.scene.add(farG, nearG);
-  cullByDistance(ctx, farG, 2000);
-  cullByDistance(ctx, nearG, 800);
-}
-
 export function buildNambaLandmarks(ctx: GameContext): void {
   if (ctx.route.id !== 'namba') return;
   buildMall(ctx);
   buildJr(ctx);
-  buildRiver(ctx);
 }

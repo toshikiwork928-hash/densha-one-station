@@ -4,9 +4,9 @@ import type { GameContext } from '../core/context';
 import { onLight } from './batch';
 import { placeCar } from './emu';
 import { destOf, kindsKey } from '../route/service';
-import { bogieOffset, carLenOf, createTrainSet, setTrainNight, type TrainCar } from './train-models';
+import { bogieOffset, carLenOf, createTrainSet, front7169ForRoute, setTrainNight, type TrainCar } from './train-models';
 
-export { formation } from './train-models';
+
 
 export interface PlayerTrain {
   readonly group: THREE.Group;
@@ -29,7 +29,7 @@ export function createPlayerTrain(ctx: GameContext): PlayerTrain {
     if (key === built) return;
     built = key;
     for (const c of cars) group.remove(c.object);
-    cars = createTrainSet(kind, n, ctx.renderer, { dest: destOf(route, svc), label: svc?.name, units, unitKinds: svc?.unitKinds });
+    cars = createTrainSet(kind, n, ctx.renderer, { dest: destOf(route, svc), label: svc?.name, units, unitKinds: svc?.unitKinds, nambaFirst: front7169ForRoute(route.id) });
     for (const c of cars) group.add(c.object);
   }
   build();

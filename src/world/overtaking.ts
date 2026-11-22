@@ -1,3 +1,4 @@
+import { front7169ForRoute } from '../route/vehicle-direction';
 // 待避の描画: 普通の待避中に本線を通過していく後続列車（st.overtake）と、
 // 急行・特急で通過する2面4線駅の待避線に止まっている先行の普通（st.precedingS が待避線にいる間）
 import * as THREE from 'three';
@@ -21,7 +22,7 @@ export function createOvertaking(ctx: GameContext): void {
     let v = cache.get(key);
     if (!v) {
       const group = new THREE.Group(); group.name = 'overtake-' + key; group.visible = false; scene.add(group);
-      const cars = createTrainSet(kind, units.reduce((a, n) => a + n, 0), ctx.renderer, { dest, label, units, unitKinds });
+      const cars = createTrainSet(kind, units.reduce((a, n) => a + n, 0), ctx.renderer, { nambaFirst: front7169ForRoute(route.id), dest, label, units, unitKinds });
       for (const c of cars) group.add(c.object);
       v = { group, cars }; cache.set(key, v);
     }

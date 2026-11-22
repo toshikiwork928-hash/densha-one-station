@@ -1,11 +1,15 @@
+import { windowSill } from './cab-glazing';
 // 通勤形 20m 級4扉（架空塗装の青帯＋橙線）
 //  new: ステンレス車体・黒い前面・中央貫通扉・角ばったスカート・シングルアーム
-//  old: 鋼製（銀灰色塗装）・丸みのある前面・屋根上の2灯前照灯・分散冷房・菱形パンタ
-//  6300系（ss = true）: old と同じ形で、車体は塗装なしのステンレス（銀）。材質（塗装シート）だけを替える
+//  old: 7100系。銀灰色の鋼製車体、屋根上の2灯前照灯、分散冷房、下枠交差形パンタグラフ
+//  6300系（ss = true）はステンレスの外板と菱形パンタグラフを使う。
 import * as THREE from 'three';
+import { BLUE_7100, FRONT_BLUE_7100, FRONT_ORANGE_7100, ORANGE_7100, paint7100Side } from './c7100-side';
+import { add7100Skirt, addWrapSkirt } from './c7100-skirt';
+import { SECTION_7100, paint7100Cab, add7100Gangway, add7100HeadlightShell, curve7100Shell, curve7100Z } from './c7100-cab';
 import { GeoBatch, M, P } from '../batch';
 import {
-  Y0, adder, addCrossArm, addEndWall, addLozenge, addSingleArm, addTaperedSkirt, addUnderfloor, capGeo, faceSheet, roundRings, shellGeo, sideSheet, sweepBand,
+  Y0, adder, addCrossArm, addEndWall, addSingleArm, addUnderfloor, capGeo, curvedCab, faceSheet, roundRings, shellGeo, sideSheet, sweepBand,
   type CarKind, type CarParts, type Ring, type SheetMaps, type V2,
 } from './common';
 
@@ -30,7 +34,7 @@ const LOOK: Record<CommuterVariant, Look> = {
   new: {
     r: .24, base: ['#d3d7dc', '#b4bac1'], roof: '#a7acb2', rough: .38, metal: .75,
     topBand: [3.34, 3.48], topLine: [3.24, 3.33], lowBand: [1.66, 1.77], lowLine: [1.54, 1.64],
-    frontBand: [1.58, 2.0], frontLine: [1.48, 1.55], win: [2.04, 2.93], door: '#c4c9cf', roofY: 3.55, // 窓は戸間に1枚（2枚引き違い）の約1.76m幅。上下端は客用扉の窓と揃える
+    frontBand: [1.58, 2.0], frontLine: [1.48, 1.55], win: [2.04, 2.93], door: '#c4c9cf', roofY: 3.55, // 側窓は実車の横長二枚窓。客用扉だけ縦長窓にする
   },
   old: {
     r: .3, base: ['#c6cbd6', '#b3b9c6'], roof: '#9fa4aa', rough: .42, metal: .12,
@@ -40,12 +44,17 @@ const LOOK: Record<CommuterVariant, Look> = {
 };
 
 /** 6300系（old の形・ステンレス無塗装）の外板。帯・窓は old のまま */
-const stainless = (L: Look): Look => ({ ...L, base: ['#d8dce0', '#b5bbc2'], roof: '#a3a8ae', rough: .36, metal: .78, door: '#c8cdd3' });
+const stainless = (L: Look): Look => ({ ...L, base: ['#d8dce0', '#b5bbc2'], roof: '#a3a8ae', rough: .36, metal: .78, door: '#c8cdd3',
+  frontBand: FRONT_BLUE_7100, frontLine: FRONT_ORANGE_7100,
+  // 6300系の側面写真に合わせ、青帯を太く、橙帯を細くして幕板を少し下げる。
+  topBand: [3.29, 3.50], topLine: [3.16, 3.23], lowBand: [1.55, 1.615], lowLine: [1.455, 1.525],
+});
 const lookOf = (v: CommuterVariant, ss: boolean): Look => ss ? stainless(LOOK[v]) : LOOK[v];
 
 /** 側面（head = 先頭車。前端 = -Z 側に乗務員扉と帯の立ち上がり） */
 /** open = 客用ドアを開けた状態（開口部は暗い車内、夜は点灯）。ss = ステンレス無塗装（6300系） */
 export function paintCommuterSide(v: CommuterVariant, Lb: number, head: boolean, open = false, ss = false): SheetMaps {
+  if (v === 'old' && !ss) return paint7100Side(Lb, YTOP, head, open);
   const L = lookOf(v, ss), s = sideSheet(Lb, YTOP), hz = Lb / 2;
   const grd = s.c.createLinearGradient(0, 0, 0, s.H); grd.addColorStop(0, L.base[0]); grd.addColorStop(1, L.base[1]);
   s.base(grd, L.rough, L.metal);
@@ -61,19 +70,24 @@ export function paintCommuterSide(v: CommuterVariant, Lb: number, head: boolean,
     rib(Y0 + .08, L.win[0] - .08); rib(L.win[1] + .1, L.roofY - .04);
   }
   const band = (b: V2, col: string, z0 = -hz - 1) => s.rect(z0, hz + 1, b[0], b[1], col, .35, .1);
+  const blue = ss ? BLUE_7100 : BLUE, orange = ss ? ORANGE_7100 : ORANGE;
   // 先頭車: 乗務員扉（幅0.64m）→ 窓（約1.1m）→ 客用扉。1つ目の客用扉は中間車より後ろ（+0.35m）へずらして窓の幅を取る
   const crewZ = -hz + CREW_OFF;
   const doors = head ? [DOORS[0] + HEAD_SHIFT, ...DOORS.slice(1)] : DOORS;
   if (head) {
     const zs = crewZ + CREW_W / 2 + .06, k = .62;
-    sweepBand(s, Lb, L.frontLine, L.topLine, zs + .12, k, ORANGE, .35, .1);
-    sweepBand(s, Lb, L.frontBand, L.topBand, zs, k, BLUE, .35, .1, -.12);
-    band(L.lowBand, BLUE, doors[0]); band(L.lowLine, ORANGE, doors[0]);
-  } else {
-    band(L.topBand, BLUE); band(L.topLine, ORANGE); band(L.lowBand, BLUE); band(L.lowLine, ORANGE);
+    sweepBand(s, Lb, L.frontLine, L.topLine, zs + .12, k, orange, ss ? .38 : .35, ss ? .12 : .1);
+    sweepBand(s, Lb, L.frontBand, L.topBand, zs, k, blue, ss ? .38 : .35, ss ? .12 : .1, -.12);
+  } else { band(L.topBand, blue); band(L.topLine, orange); }
+  // 一つ目の戸間にある社名の後ろから、腰の二本線が始まる。
+  const nameZ = (ss ? -.245 : -.278) * Lb;
+  for (const [stripe, color] of [[L.lowBand, blue], [L.lowLine, orange]] as const) {
+    if (!head) s.rect(-hz, doors[0], ...stripe, color, .35, .1);
+    band(stripe, color, nameZ + .53);
   }
-  /** 窓の上下端（側窓・客用扉の窓・乗務員扉の窓で共通） */
-  const [w0, w1] = L.win, sq = (w1 - w0) / 2; // sq = old の正方形窓の半幅
+  // 8310号の真横写真では、客用扉の細い窓と戸間の二枚窓は上下端がほぼ揃う。
+  const [w0, w1] = L.win;
+  const sq = (w1 - w0) / 2; // sq = old の正方形窓の半幅
   const door = (zc: number, w: number, dbl: boolean) => {
     s.rect(zc - w / 2 - .03, zc + w / 2 + .03, 1.13, 3.08, v === 'old' ? '#a9adb3' : '#8b9198', .5, .3);
     if (open && dbl) {
@@ -91,23 +105,29 @@ export function paintCommuterSide(v: CommuterVariant, Lb: number, head: boolean,
     s.rect(zc - w / 2, zc + w / 2, 1.16, 3.05, L.door, v === 'old' ? L.rough : .4, v === 'old' ? L.metal : .7);
     if (dbl) {
       s.rect(zc - .012, zc + .012, 1.16, 3.05, '#5e646b');
-      for (const sg of [-1, 1]) s.glass(zc + sg * w / 4 - .22, zc + sg * w / 4 + .22, w0, w1, '#5a6067', .06);
-    } else s.glass(zc - .2, zc + .2, w0, w1, '#5a6067', .03); // 乗務員扉の窓も側窓・客用扉の窓と同じ高さ
+      for (const sg of [-1, 1]) {
+        const x = zc + sg * w / 4;
+        if (v === 'new') s.cabGlass(x - .175, x + .175, w0, w1, '#858b8b', .085, ['#758b87','#4a605e']);
+        else s.glass(x - .22, x + .22, w0, w1, '#5a6067', .06);
+      }
+    } else if (v === 'new') s.cabGlass(zc - .14, zc + .14, w0 + .12, w1, '#858b8b', .045, ['#758b87','#4a605e']);
+    else s.glass(zc - .2, zc + .2, w0, w1, '#5a6067', .03);
   };
   for (const d of doors) door(d, DOOR_W, true);
   // 側窓
   for (let i = 0; i < doors.length - 1; i++) {
     const zc = (doors[i] + doors[i + 1]) / 2;
     if (v === 'new') {
-      // 幅1.76mの大窓: 外枠の中に2枚の窓ガラスと、中央の細い仕切り（約6cm）
-      const bw = .88;
-      s.rect(zc - bw - .045, zc + bw + .045, w0 - .045, w1 + .045, '#4a5056', .5, 0, .12);
-      for (const sg of [-1, 1]) s.glass(sg < 0 ? zc - bw : zc + .03, sg < 0 ? zc - .03 : zc + bw, w0, w1, '', .04);
+      s.cabGlass(zc - .90, zc + .90, w0, w1, '#848c8b', .12, ['#758b87','#4a605e']);
+      s.rect(zc - .023, zc + .023, w0, w1, '#b8beb9', .4, .5);
+    } else if (ss) {
+      // 6301号の戸間には、銀のサッシを持つ独立した窓が2枚並ぶ。
+      for (const offset of [-.51, .51]) s.glass(zc + offset - .45, zc + offset + .45, w0, w1, '#848b8d', .055);
     } else for (const dz of [-.53, .53]) s.glass(zc + dz - sq, zc + dz + sq, w0, w1, '#565c63', .07); // 正方形の1段下降窓を2枚ずつ（間に約13cmの窓柱）
   }
   if (v === 'new') {
     const zc = (DOORS[3] + DOOR_W / 2 + .35 + hz - .4) / 2;
-    s.glass(zc - sq, zc + sq, w0, w1, '#565c63', .05);
+    s.cabGlass(zc - sq, zc + sq, w0, w1, '#848c8b', .12, ['#758b87','#4a605e']);
   }
   else if (head) s.glass((DOORS[3] + DOOR_W / 2 + hz) / 2 - sq, (DOORS[3] + DOOR_W / 2 + hz) / 2 + sq, w0, w1, '#565c63', .03);
   else {
@@ -117,6 +137,13 @@ export function paintCommuterSide(v: CommuterVariant, Lb: number, head: boolean,
   }
   if (head) {
     door(crewZ, CREW_W, false);
+    if (ss) {
+      s.rect(crewZ - CREW_W / 2, crewZ + CREW_W / 2, ...L.frontBand, blue, .38, .12);
+      s.rect(crewZ - CREW_W / 2, crewZ + CREW_W / 2, ...L.frontLine, orange, .38, .12);
+      for (let y = L.frontBand[0]; y < L.frontBand[1] - .03; y += .067) {
+        s.rect(-hz, crewZ - CREW_W / 2 - .03, y, y + .022, 'rgba(20,22,40,.25)');
+      }
+    }
     // 乗務員扉と客用扉の間の窓: 7100系にはあり、8300系は窓の無い壁（帯の立ち上がりだけ）
     // 7100系の窓は他の側窓と同じ正方形（乗務員扉と客用扉の間の中央）
     if (v === 'old') {
@@ -125,7 +152,7 @@ export function paintCommuterSide(v: CommuterVariant, Lb: number, head: boolean,
     }
   } else if (v === 'new') {
     const zc = (-hz + .4 + DOORS[0] - DOOR_W / 2 - .35) / 2;
-    s.glass(zc - sq, zc + sq, w0, w1, '#565c63', .05);
+    s.cabGlass(zc - sq, zc + sq, w0, w1, '#848c8b', .12, ['#758b87','#4a605e']);
   }
   else s.glass((DOORS[0] - DOOR_W / 2 - hz) / 2 - sq, (DOORS[0] - DOOR_W / 2 - hz) / 2 + sq, w0, w1, '#565c63', .03);
   // 号車札・小表示（文字なし）
@@ -139,79 +166,59 @@ export function paintCommuterSide(v: CommuterVariant, Lb: number, head: boolean,
 
 /** 前面シート（ss = ステンレス無塗装の 6300系） */
 export function paintCommuterFace(v: CommuterVariant, ss = false): SheetMaps {
+  if (v === 'old') return paint7100Cab(HW, YTOP, false, ss ? '6301' : '7157', ss);
   const L = lookOf(v, ss), s = faceSheet(HW, YTOP);
   const grd = s.c.createLinearGradient(0, 0, 0, s.H); grd.addColorStop(0, L.base[0]); grd.addColorStop(1, L.base[1]);
   s.base(grd, L.rough, L.metal);
   if (v === 'new') {
-    // 黒い前面（窓まわり）
-    s.rect(-HW, HW, 2.0, 3.7, '#121417', .18, .3);
-    s.glass(.56, 1.3, 2.3, 3.28, '', .03, ['#2e3a46', '#10151b']);
-    s.glass(-1.3, -.56, 2.3, 3.28, '', .03, ['#2e3a46', '#10151b']);
-    s.rect(-HW, HW, L.frontBand[0], 2.0, BLUE, .3, .15);
-    s.rect(-HW, HW, L.frontLine[0], L.frontLine[1], ORANGE, .3, .1);
-    s.rect(-HW, HW, Y0, 1.25, '#c1c6cc', .4, .7);
-    // 貫通扉（銀）
-    s.rect(-.5, .5, 1.18, 3.42, '#9aa0a7', .4, .7, .03);
-    s.rect(-.44, .44, 1.22, 3.36, '#cdd2d7', .35, .8, .02);
-    s.glass(-.3, .3, ss ? 2.38 : 2.20, ss ? 3.12 : 3.18, '#3d434a', .03);
-    s.rect(-.2, .2, 1.24, 1.3, '#8a9097');
+    s.base('#e2e5e5', .34, .40);
+    for (const sx of [-1, 1]) {
+      const l = sx < 0 ? -1.25 : .51, r = sx < 0 ? -.51 : 1.25;
+      s.rect(l - .012, r + .012, 1.58, 3.63, '#22282d', .30, .18, .035);
+      s.cabGlass(l + .019, r - .019, 2.21, 3.18, '', .025, ['#536568', '#273739']);
+      s.rect(l, r, 3.22, 3.59, '#1e262d', .12, .18, .035);
+      s.rect(l, r, ...L.frontBand, BLUE, .35, .15);
+      s.poly([[l, L.frontBand[0]], [r, L.frontBand[0]], [r, L.frontLine[0]], [l, L.frontLine[0]]], ORANGE, .35, .1);
+      windowSill(s, .78 * sx, 2.05);
+    }
+    s.rect(-.47, .47, 1.18, 3.37, '#e7e8e6', .39, .22, .06);
+    s.cabGlass(-.28, .28, 2.12, 3.01, '#b4b9b9', .025);
+    s.text('8360', -.92, 1.92, .12, '#edf0ec', 700);
     // 上部の前照灯箱まわり
     s.rect(-.42, .42, 3.47, 3.72, '#0d0f11', .2, .2);
-  } else {
-    // 実効幅は端部の丸み（r = .3）を除いた ±1.15。前面窓・表示器はその内側に収める（外周が車体の角で見切れない）
-    s.base(ss ? '#ccd0d5' : '#c9cdd3', L.rough, L.metal); // 前面は明るい灰色（6300系はステンレス）
-    if (ss) for (let y = Y0 + .06; y < 2.28; y += .055) { // 6300系: 前面の腰部もコルゲート（帯・貫通扉はこの上に描く）
-      s.rect(-HW, HW, y, y + .018, 'rgba(255,255,255,.22)');
-      s.rect(-HW, HW, y + .018, y + .03, 'rgba(0,0,0,.1)');
-    }
-    s.rect(-HW, HW, L.frontBand[0], L.frontBand[1], BLUE, .35, .1);
-    s.rect(-HW, HW, L.frontLine[0], L.frontLine[1], ORANGE, .35, .1);
-    s.rect(-HW, HW, 1.4, 1.43, '#f3f5f8', .35, .1); // 細い白線
-    // 前面窓: 左右とも正方形（約0.58m角）。上下端は貫通扉の窓とそろえる（FW）。黒ゴム枠・角の丸い四角
-    const FW: V2 = ss ? [2.36, 2.96] : [2.25, 3.04];
-    s.glass(ss ? .54 : .50, ss ? 1.12 : 1.18, FW[0], FW[1], '#22262b', .07);
-    s.glass(ss ? -1.12 : -1.18, ss ? -.54 : -.50, FW[0], FW[1], '#22262b', .07);
-    // 貫通扉と、その周りの幌の枠（灰色の太い枠）
-    s.rect(-.5, .5, 1.2, 3.22, '#7f858c', .5, .1, .06);
-    s.rect(-.37, .37, 1.27, 3.12, L.door, L.rough, L.metal, .04);
-    s.rect(-.37, .37, L.frontBand[0], L.frontBand[1], BLUE, .35, .1);
-    s.rect(-.37, .37, L.frontLine[0], L.frontLine[1], ORANGE, .35, .1);
-    // 貫通扉の窓: 縦長の長方形（幅0.42m・高さは前面窓と同じ）
-    s.glass(ss ? -.21 : -.25, ss ? .21 : .25, FW[0], FW[1], '#22262b', .05);
-    // 車号は中央（貫通扉の窓の下、青い帯の中に白文字）
-    s.text(ss ? '6301' : '7157', 0, 1.81, .2, '#f4f6fa', 600);
-    // 行先表示器（左窓の上）の枠
-    s.rect(.52, 1.12, 3.16, 3.4, '#15171a', .3, 0, .02);
-    s.emit(-HW, HW, Y0, YTOP + .1, '#000'); // 夜は運転台の窓を光らせない
+    s.rect(-.30, .30, 3.51, 3.64, '#252b31', .1, .2);
   }
   return s.textures();
 }
 
 /** 1両分のジオメトリ */
-export function buildCommuterCar(v: CommuterVariant, kind: CarKind, Lb: number, ss = false): CarParts {
-  const L = LOOK[v], HALF = HALFS[v], hz = Lb / 2, head = kind === 'head', zf = -hz;
-  const rings: Ring[] = [...(head ? roundRings(zf, L.r, 1) : [{ z: -hz, inset: 0 }]), { z: hz, inset: 0 }];
-  const shell = shellGeo(HALF, rings, YTOP, Lb);
+export function buildCommuterCar(v: CommuterVariant, kind: CarKind, Lb: number, ss: boolean, panZ: readonly number[]): CarParts {
+  const cross7100 = v === 'old' && !ss;
+  // 6300系も7100系と同じく、前面の肩を中央扉から後退させた曲面形状を持つ。
+  // 外板の材質・屋上機器・スカートは ss 側の実車差分をそのまま残す。
+  const curvedOld = v === 'old';
+  const radius = curvedOld ? .20 : .13;
+  const HALF = curvedOld ? SECTION_7100 : HALFS[v], hz = Lb / 2, head = kind === 'head', zf = -hz;
+  const rings: Ring[] = [...(head ? roundRings(zf, radius, 1) : [{ z: -hz, inset: 0 }]), { z: hz, inset: 0 }];
+  const shell0 = shellGeo(HALF, rings, YTOP, Lb);
+  const shell = curvedOld && head ? curve7100Shell(shell0, zf) : shell0;
   const b = new GeoBatch(), add = adder(b), lit = new GeoBatch(), tl = new GeoBatch(), gl = new GeoBatch();
   const glows: THREE.Vector3[] = [];
   const roofTop = YTOP;
-  // パンタグラフ: 7100系は両先頭の制御電動車（モハ7101形）に下枠交差形を1基（Wikipedia「南海7100系電車」。2両編成は実際は難波側の1両だけだが、先頭車の形は両端で共有）。
-  // 先頭車の中の位置は資料に記載が無い（不明）ので連結面寄り。8300系（シングルアーム）・6300系（菱形）は従来どおり3両目
-  const cross7100 = v === 'old' && !ss;
-  const panZ: number[] = cross7100 ? (head ? [hz - 4.0] : []) : kind === 'pan' ? [-hz + 4.0] : [];
   // 雨樋
-  for (const sx of [-1, 1]) add(sx * (HW - .03), 3.56, 0, .04, .04, Lb - (head ? .6 : 0), 0x8d939a, 0, 0, 0);
+  // 8300系は雨樋を屋根に内蔵したビードレス車体。7100系だけ従来の外付け雨樋を残す。
+  if (v !== 'new') for (const sx of [-1, 1]) add(sx * (HW - .03), cross7100 ? 3.45 : 3.56, 0, .04, .04, Lb - (head ? .6 : 0), 0x8d939a, 0, 0, 0);
   addEndWall(b, hz, YTOP, HW, v === 'new' ? 0xb9bec4 : 0xbfc3c9);
   let face: THREE.BufferGeometry | undefined, led: THREE.BufferGeometry | undefined, led2: THREE.BufferGeometry | undefined;
   let marks: CarParts['marks'];
   const mkL = new GeoBatch(), mkR = new GeoBatch();
   if (head) {
-    face = capGeo(HALF, { z: zf, inset: L.r }, YTOP, HW, -1);
+    face = curvedOld ? curvedCab(HALF, radius, YTOP, HW, (x, y) => curve7100Z(x, y, zf))
+      : capGeo(HALF, { z: zf, inset: radius }, YTOP, HW, -1);
     const z = zf - .005;
     if (v === 'new') {
       // 貫通扉の枠（銀の張り出し）
-      add(0, 3.42, z - .03, 1.04, .06, .08, 0xb8bdc3);
-      for (const sx of [-1, 1]) add(sx * .5, 2.3, z - .03, .06, 2.24, .08, 0xb8bdc3);
+      add7100Gangway(b, zf);
       add(0, 1.21, z - .1, .9, .05, .22, 0x9da3aa); // 渡り板
       // 前照灯（上部中央の LED）と標識灯（帯の中）
       for (const sx of [-1, 1]) {
@@ -223,52 +230,54 @@ export function buildCommuterCar(v: CommuterVariant, kind: CarKind, Lb: number, 
       }
       // 行先 LED（左右の黒い部分の上）
       // 左（正面から見て +X 側）= 種別、右 = 行先
-      led = mergeLed([[.93, 3.42, .62]], z - .01, .17);
-      led2 = mergeLed([[-.93, 3.42, .62]], z - .01, .17);
+      led = mergeLed([[.90, 3.42, .52]], zf - .003, .17);
+      led2 = mergeLed([[-.90, 3.42, .52]], zf - .003, .17);
       // スカート（角ばった銀灰色）と連結器
-      addTaperedSkirt(b, zf, 1.30, .97, .78, .42, 0xd3d7dc);
-      add(0, .88, zf - .15, .3, .24, .5, 0x22252a);
+      addWrapSkirt(b, zf, HW - .06, radius, 0xc7cbce);
+
       // ワイパー
-      for (const sx of [-1, 1]) add(sx * .95, 2.38, z - .03, .55, .025, .025, 0x111111, 0, 0, sx * .35);
+      for (const sx of [-1, 1]) add(sx * .83, 2.33, z - .04, .025, .53, .025, 0x202529, 0, 0, -sx * .50);
     } else {
-      // 貫通扉まわりの幌の枠（灰色の太い枠）
-      const hood = 0x7f858c;
-      add(0, 3.26, z - .05, 1.08, .12, .1, hood);
-      for (const sx of [-1, 1]) add(sx * .44, 2.2, z - .05, .12, 2.1, .1, hood);
+      add7100Gangway(b, curve7100Z(0, 2.27, zf));
       add(0, 1.2, z - .12, .9, .05, .24, 0x8f959b);
       // 前照灯: 前面最上部の中央。屋根の縁の上に、丸い2灯が横に並ぶ灯具
-      add(0, 3.62, zf + .1, .86, .2, .34, 0x7a8087);
-      add(0, 3.62, zf - .065, .8, .17, .02, 0x15171a);
+      // 6300系も7100系と同じ中央2灯の丸い前照灯箱を使う。
+      add7100HeadlightShell(b, curve7100Z(0, 3.62, zf));
       for (const sx of [-1, 1]) {
-        b.add('paint', P.cyl, M(sx * .2, 3.62, zf - .08, 0, .22, .03, .22, Math.PI / 2), 0xdadde1);
-        lit.add('l', P.cyl, M(sx * .2, 3.62, zf - .1, 0, .17, .02, .17, Math.PI / 2), 0xffffff);
-        glows.push(new THREE.Vector3(sx * .2, 3.62, zf - .25));
+        const lz = curvedOld ? curve7100Z(sx * .2, 3.62, zf) : zf - .025;
+        b.add('paint', P.cyl, M(sx * .2, 3.62, lz - .08, 0, .22, .03, .22, Math.PI / 2), 0xdadde1);
+        lit.add('l', P.cyl, M(sx * .2, 3.62, lz - .1, 0, .17, .02, .17, Math.PI / 2), 0xffffff);
+        glows.push(new THREE.Vector3(sx * .2, 3.62, lz - .25));
       }
       // 標識灯（列車識別灯）: 下部の左右端に小さな四角い灯具。点灯は makeCar（普通 = 左のみ / 優等 = 両方 / 後尾 = 赤）
       const mk: [GeoBatch, number][] = [[mkL, 1], [mkR, -1]];
       for (const [bt, sx] of mk) {
-        add(sx * .98, 1.28, z - .04, .3, .24, .06, 0x15171a);
-        add(sx * .98, 1.28, z - .075, .33, .02, .02, 0x8f959b);
-        bt.add('l', P.box, M(sx * .98, 1.28, z - .075, 0, .2, .16, .02), 0xffffff);
+        const scale = .70;
+        const mz = curve7100Z(sx * .98, 1.28, zf);
+        add(sx * .98, 1.28, mz - .04, .3 * scale, .24 * scale, .06, 0x15171a);
+        add(sx * .98, 1.28, mz - .075, .33 * scale, .02 * scale, .02, 0x8f959b);
+        bt.add('l', P.box, M(sx * .98, 1.28, mz - .075, 0, .2 * scale, .16 * scale, .02), 0xffffff);
       }
       marks = { l: mkL.geometry('l')!, r: mkR.geometry('l')! };
       // 行先表示器（左窓の上）: 枠・庇・奥行きを付けて1面に種別 + 行先
-      add(.82, 3.28, z - .015, .62, .27, ss ? .03 : .01, 0x15171a);
-      add(.82, 3.425, z - .03, .66, .03, .06, 0x2a2d31);
-      led = mergeLed([[.82, 3.28, .54]], ss ? z - .05 : z - .025, .2);
-      // 簡易スカート・連結器・ホース
-      if (ss) add(0, .78, zf + .05, 2.4, .42, .1, 0x8e9399, -.1);
-      else addTaperedSkirt(b, zf, 1.30, 1.20, .66, .56, 0x8e9399);
-      add(0, .9, zf - .15, .3, .24, .5, 0x22252a);
-      for (const sx of [-.75, -.55, -.35]) b.add('paint', P.cyl, M(sx, 1.0, zf - .1, 0, .07, .35, .07), 0x1c1e21);
-      for (const sx of [-1, 1]) add(sx * .93, 2.5, z - .03, .5, .025, .025, 0x111111, 0, 0, sx * .5);
+      led = mergeLed([[0, 0, .59]], 0, .155).rotateY(-Math.atan(.30 * (.85 - .46)))
+        .translate(.85, 3.15, curve7100Z(.85, 3.15, zf) - .015);
+      add7100Skirt(b, ss ? zf + .09 : zf);
+      for (const sx of [-1, 1]) {
+        if (ss) add(sx * .93, 2.5, z - .03, .5, .025, .025, 0x111111, 0, 0, sx * .5);
+        else {
+          add(sx * .81, 2.27, curve7100Z(sx * .81, 2.27, zf) - .035, .35, .022, .025, 0x72787b, 0, 0, sx * 1.03);
+          add(sx * .90, 2.42, curve7100Z(sx * .90, 2.42, zf) - .05, .46, .019, .025, 0x262d31, 0, 0, sx * 1.20);
+        }
+      }
     }
   } else addEndWall(b, -hz, YTOP, HW, v === 'new' ? 0xb9bec4 : 0xbfc3c9);
-  addUnderfloor(b, Lb, kind, { frame: 0x3a3d42, equip: 0x2b2e33, bogie: 0x24272b });
+  addUnderfloor(b, Lb, kind, { frame: 0x3a3d42, equip: 0x2b2e33, bogie: 0x24272b, equipmentDetail: !cross7100, frontCut: head && !cross7100 ? .65 : 0 });
   // 屋根上: 冷房装置
   if (v === 'new') {
     // セミ集中式の冷房装置（2基）と独立した車外スピーカー
     for (const z of [-4.2, 4.2]) {
+      if (panZ.some(p => Math.abs(p - z) < 2.25)) continue;
       add(0, roofTop + .12, z, 1.8, .24, 2.7, 0xb5bac0);
       add(0, roofTop + .25, z, 1.4, .03, 2.2, 0x9fa5ab);
       for (const dz of [-.7, 0, .7]) add(0, roofTop + .27, z + dz, 1.0, .02, .4, 0x6a7076);
@@ -276,19 +285,30 @@ export function buildCommuterCar(v: CommuterVariant, kind: CarKind, Lb: number, 
     add(0, roofTop + .08, 0, .5, .16, .9, 0x9da2a8);
     add(0, roofTop + .03, 0, .5, .06, Lb - 2, 0x868b91);
   } else {
-    // 分散冷房（箱形・両側にルーバー）
-    // 低い箱形クーラーを約2.4m間隔で並べる（実車は1両8基ほど）
-    for (const z of [-8.4, -6, -3.6, -1.2, 1.2, 3.6, 6, 8.4]) {
+    // モハ7189ではパンタグラフの前後に間隔を取って冷房装置を並べる。
+    const coolers = cross7100 && head ? [-8.2, -4.65, -2.99, -.75, 1.5, 3.76, 6.02, 8.28] : [-8.4, -6, -3.6, -1.2, 1.2, 3.6, 6, 8.4];
+    for (const z of coolers) {
       if (panZ.some(p => Math.abs(z - p) < 1.6)) continue;
-      if (head && z < -8) continue;
-      add(0, roofTop + .15, z, 1.3, .32, 1.3, 0xc0c4c9);
-      for (const sx of [-1, 1]) for (const dz of [-.33, .33]) add(sx * .66, roofTop + .16, z + dz, .02, .18, .44, 0x3a3f45); // 側面のフィルター（1基に2つ）
+      if (head && !cross7100 && z < -8) continue;
+      add(0, roofTop + .15, z, 1.3, .32, 1.3, cross7100 ? 0xa2a5a7 : 0xc0c4c9);
+      if (cross7100) {
+        add(0, roofTop + .305, z, 1.34, .055, 1.34, 0xb3b5b4);
+        add(0, roofTop + .335, z, .82, .014, .79, 0x909597);
+      }
+      for (const sx of [-1, 1]) for (const dz of [-.33, .33]) {
+        add(sx * .66, roofTop + .16, z + dz, .02, .18, .44, 0x3a3f45);
+        if (cross7100) for (const y of [.13, .19]) add(sx * .676, roofTop + y, z + dz, .014, .022, .44, 0x84898a);
+      }
     }
     for (const sx of [-.85, .85]) add(sx, roofTop - .05, 0, .06, .06, Lb - 1, 0x8a8f95); // 配管
     for (const z of [-8.2, -4, 0, 4, 8.2]) add(0, roofTop + .06, z, .3, .1, .3, 0x8a8f95); // 通風器
     if (kind === 'head') add(0, roofTop + .05, zf + .9, .5, .06, .5, 0x8a8f95);
+    if (cross7100) {
+      for (const p of panZ) for (const x of [-.80, .80]) add(x, roofTop + .025, p, .22, .07, 1.93, 0x85898b);
+    }
   }
-  for (const p of panZ) (v === 'new' ? addSingleArm : cross7100 ? addCrossArm : addLozenge)(b, p, roofTop - .02);
+  // 6300系も7100系と同じ下枠交差形を使う。8300系だけシングルアームを残す。
+  for (const p of panZ) (v === 'new' ? addSingleArm : addCrossArm)(b, p, roofTop - .02);
   return { shell, face, paint: b.geometry('paint')!, glass: gl.geometry('l') ?? undefined, led, led2, head: lit.geometry('l') ?? undefined, tail: tl.geometry('l') ?? undefined, marks, glows };
 }
 

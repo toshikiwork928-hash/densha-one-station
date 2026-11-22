@@ -1,3 +1,4 @@
+import { front7169ForRoute } from '../route/vehicle-direction';
 // 対向列車は列車番号と実際の発車時刻を持つ。到着時刻・閉そくはゲーム用の推定。
 // 描画距離と運行を分離し、プレイヤーの位置・種別に発車や本数を依存させない。
 import * as THREE from 'three';
@@ -190,7 +191,8 @@ export function createCounterTraffic(route: Route, tod: TimeOfDay, consist: (cod
       for (const path of q.paths) {
         const merge = path.zone?.inFrom ?? path.profile?.[0][0];
         const hold = path.zone ? path.zone.inTo + 20 : path.profile ? path.profile[1][0] + 20 : undefined;
-        if (merge != null && hold != null && q.head < hold && q.head + q.length > merge && o.head > q.head && Math.abs(laneAt(o, merge) - laneAt(q, merge)) < 3.4 && Math.abs(laneAt(o, hold) - laneAt(q, hold)) >= 3.4) {
+        // ホームに収まっている普通は本線を空けている。停止余裕の20mを分岐器の始点に含めない。
+        if (merge != null && hold != null && q.head < hold - 20 && q.head + q.length > merge && o.head > q.head && Math.abs(laneAt(o, merge) - laneAt(q, merge)) < 3.4 && Math.abs(laneAt(o, hold) - laneAt(q, hold)) >= 3.4) {
           floor = Math.max(floor, hold + q.length + COUNTER_BLOCK_GAP);
         }
       }
@@ -241,21 +243,19 @@ export function createCounterTraffic(route: Route, tod: TimeOfDay, consist: (cod
       const oldHead = o.head;
       let head = Math.max(m.head, floor);
       if (started) {
-        o.head = head;
-        const rear = () => trains.find(q => q !== o && q.active && q.head >= o.head && q.head < o.head + o.length + COUNTER_BLOCK_GAP && conflict(o, q));
-        if (!initial && rear()) {
-          // 先行に合わせて入場位置が延びても、既存編成の途中へ割り込まない。
+        const rear = trains.some(q => q !== o && q.active && q.head >= o.head && q.head < o.head + o.length + COUNTER_BLOCK_GAP && conflict(o, q));
+        if (floor > m.head + .01 || rear) {
+          // コース途中の駅や支線から入る列車は所定の位置が空くまで入場を待つ。
+          // 閉そくの手前へ移して出すと、泉佐野で空港線から来た列車が和歌山方面の駅間に現れる。
           o.active = false; o.head = Infinity; o.v = 0;
-          o.delay = clock - o.plan.points[0].arrive;
+          o.delay += dt;
           continue;
-        }
-        if (initial) for (let n = 0; n < trains.length; n++) {
-          const q = rear(); if (!q) break;
-          head = q.head + q.length + COUNTER_BLOCK_GAP; o.head = head;
         }
       }
       if (!started && dt > 0) {
-        const cap = Math.sqrt(2 * DECEL * Math.max(0, o.head - floor));
+        // 前方がふさがっている間は手前から速度を落とし、閉そく境界ぎりぎりで停止・再加速を繰り返さない。
+        const gap = Math.max(0, o.head - floor);
+        const cap = Math.min(Math.sqrt(2 * DECEL * gap), gap / 35);
         let speed = Math.min(maximumSpeed(o.code), o.v + ACCEL * dt, cap);
         for (const path of o.paths) if (path.zone && o.head + o.length > path.zone.inFrom && o.head < path.zone.outTo + 150) speed = Math.min(speed, path.zone.limit / 3.6);
         // 頭端駅（なんば）へ着く列車: 自列車と同じ終端の速度照査（1000m 手前 65km/h → 停止位置 10km/h）と、800m 手前からの構内制限 45km/h
@@ -267,7 +267,10 @@ export function createCounterTraffic(route: Route, tod: TimeOfDay, consist: (cod
         head = Math.max(head, oldHead - speed * dt);
         head = Math.min(oldHead, head);
       }
-      if (head > m.head + .01) {
+      // 停車位置に着いている編成の遅延は、駅間の安全保持位置として再計算しない。
+      // clockAt(stop) は発車時刻を返すため、ここで毎 tick 遅延を現在時刻まで戻すと、
+      // 実効時計が発車時刻に固定され、駅を出られなくなる。
+      if (head > m.head + .01 && !(m.stopped && Math.abs(head - m.head) < .01)) {
         o.delay = Math.max(o.delay, clock - o.plan.clockAt(head));
         m = o.plan.at(clock - o.delay) ?? m;
       }
@@ -309,7 +312,7 @@ export function createTimetableOncoming(ctx: GameContext, consist: (code: string
         view = pool.find(v => !v.train && v.key === key);
         if (!view) {
           const group = new THREE.Group(); ctx.scene.add(group);
-          const cars = createTrainSet(o.spec.kind, o.spec.cars, ctx.renderer, { units: o.spec.units, unitKinds: o.spec.unitKinds, label: o.spec.label, dest: o.spec.dest });
+          const cars = createTrainSet(o.spec.kind, o.spec.cars, ctx.renderer, { nambaFirst: !front7169ForRoute(ctx.route.id), units: o.spec.units, unitKinds: o.spec.unitKinds, label: o.spec.label, dest: o.spec.dest });
           for (const c of cars) group.add(c.object);
           view = { group, cars, key }; pool.push(view);
         }

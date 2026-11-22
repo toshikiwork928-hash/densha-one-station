@@ -1,3 +1,4 @@
+import { add7100Skirt } from './c7100-skirt';
 // 山岳線用 2300系: 18m 級ステンレス車体・片側2扉・2両ユニット（両車とも運転台・パンタ付き）・ワンマン対応
 //  前面: FRP の平面的な顔を朱色一色で塗装、窓まわりは黒、中央の貫通扉も朱色、前照灯は貫通扉の上、尾灯は下部の左右
 //  側面: 扉間に大きな1枚窓 3枚、車端は小さな下降窓、窓の上に朱色の細い線、窓の下に朱色〜橙のグラデーションの太い帯（実車はフィルム）
@@ -20,8 +21,8 @@ const DOORS = [-4.3, 4.3], DOOR_W = 1.3;
 const R = .16, CREW_OFF = .6, CREW_W = .6;
 /** 窓の上下端（側窓・客用扉の窓・乗務員扉の窓で共通） */
 const WIN: V2 = [2.05, 2.9];
-const RED = '#e04a26', RED_D = '#c8361c', LINE = '#f5a46a';
-const FACE_RED = '#e2502a';
+const RED = '#c12d36', RED_D = '#a72531', LINE = '#e88a83';
+const FACE_RED = '#c63742';
 const ROOF_Y = 3.48;
 
 /** 窓の上下の帯（朱色。上は窓の上の細い線、下は窓の下の太い帯で、上から 朱 → 細い白 → 朱から橙へ抜けるグラデーション） */
@@ -92,8 +93,9 @@ export function paint2300Face(): SheetMaps {
   s.base(FACE_RED, .28, .15);
   // 窓まわりの黒
   s.rect(-HW_23, HW_23, 2.1, 3.48, '#111316', .15, .25, .04);
-  s.glass(.5, 1.24, 2.26, 3.16, '', .03, ['#2e3a46', '#10151b']);
-  s.glass(-1.24, -.5, 2.26, 3.16, '', .03, ['#2e3a46', '#10151b']);
+  // 大型1枚窓を左右に分けた前面窓。角を丸くしてFRP前面の実車形状を出す。
+  s.glass(.43, 1.24, 2.24, 3.43, '', .11, ['#2e3a46', '#10151b']);
+  s.glass(-1.24, -.43, 2.24, 3.43, '', .11, ['#2e3a46', '#10151b']);
   // 帯（側面の帯を前面へ回す）
   s.rect(-HW_23, HW_23, 1.84, 1.96, RED_D, .3, .1);
   s.rect(-HW_23, HW_23, 1.725, 1.765, LINE, .3, .1);
@@ -114,7 +116,7 @@ export function paint2300Face(): SheetMaps {
 }
 
 /** 1両分のジオメトリ（2両ユニットの各車 = 運転台付き。head 以外は中間車として妻面両側） */
-export function build2300Car(kind: CarKind, Lb: number): CarParts {
+export function build2300Car(kind: CarKind, Lb: number, panZ: readonly number[]): CarParts {
   const hz = Lb / 2, head = kind === 'head', zf = -hz;
   const rings: Ring[] = [...(head ? roundRings(zf, R, 1) : [{ z: -hz, inset: 0 }]), { z: hz, inset: 0 }];
   const shell = shellGeo(HALF, rings, YTOP_23, Lb);
@@ -141,13 +143,10 @@ export function build2300Car(kind: CarKind, Lb: number): CarParts {
       tl.add('l', P.box, M(sx * .88, 1.57, z - .02, 0, .18, .1, .02), 0xffffff); // 尾灯（内側）
     }
     // 行先 LED（窓まわりの黒の上部）: 正面から見て左 = 種別、右 = 行先の2面
-    led = mergeLed([[.86, 3.32, .58]], z - .01, .15);
-    led2 = mergeLed([[-.86, 3.32, .58]], z - .01, .15);
-    // スカート（細身・黒灰）・連結器・ホース
-    for (const sx of [-1, 1]) b.add('paint', P.box, M(sx * .82, .72, zf - .06, sx * .2, .95, .56, .07, -.18), 0x3a3e44);
-    add(0, .5, zf - .08, 1.0, .1, .1, 0x3a3e44, -.18);
-    add(0, .88, zf - .16, .3, .24, .5, 0x22252a);
-    for (const sx of [-.5, -.35, .35]) b.add('paint', P.cyl, M(sx, 1.0, zf - .1, 0, .07, .34, .07), 0x1c1e21);
+    // 表示器を左右の前面窓の上部へ収め、赤い幕板ではなくガラス内に見せる。
+    led = mergeLed([[.86, 3.29, .50]], zf - .003, .15);
+    led2 = mergeLed([[-.86, 3.29, .50]], zf - .003, .15);
+    add7100Skirt(b, zf + .10, 0x383d42);
     // ワイパー・後写鏡（ワンマン用の大きめのミラー）
     for (const sx of [-1, 1]) add(sx * .88, 2.36, z - .03, .52, .025, .025, 0x111111, 0, 0, sx * .35);
     for (const sx of [-1, 1]) {
@@ -161,12 +160,13 @@ export function build2300Car(kind: CarKind, Lb: number): CarParts {
   addUnderfloor(b, Lb, 'pan', { frame: 0x3a3d42, equip: 0x2b2e33, bogie: 0x24272b });
   // セミ集中式冷房2基
   for (const z of [-3.6, 2.0]) {
+    if (panZ.some(p => Math.abs(z - p) < 1.8)) continue;
     add(0, roofTop + .11, z, 1.7, .22, 2.4, 0xb5bac0);
     add(0, roofTop + .23, z, 1.3, .03, 1.9, 0x9fa5ab);
     for (const dz of [-.6, 0, .6]) add(0, roofTop + .25, z + dz, .9, .02, .36, 0x6a7076);
   }
   add(0, roofTop + .03, 0, .45, .06, Lb - 2.4, 0x868b91); // 屋根上の配線ダクト
-  // パンタは全車（連結面寄り）。中間車扱いでも付ける
-  addSingleArm(b, hz - 3.2, roofTop - .02);
+  // パンタ位置は編成データから受け取り、冷房装置との干渉を呼び出し側で避ける。
+  for (const p of panZ) addSingleArm(b, p, roofTop - .02);
   return { shell, face, paint: b.geometry('paint')!, led, led2, head: lit.geometry('l') ?? undefined, tail: tl.geometry('l') ?? undefined, glows };
 }

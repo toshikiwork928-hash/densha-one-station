@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { GameContext } from '../core/context';
 import type { ServiceSpec, TrainKind } from '../route/types';
-import { createTrainSet } from '../world/train-models';
+import { createTrainSet, front7169ForRoute } from '../world/train-models';
 import { destOf, kindsKey } from '../route/service';
 
 export function createVehiclePreview(ctx: GameContext) {
@@ -42,7 +42,7 @@ export function createVehiclePreview(ctx: GameContext) {
   // ジオメトリ・テクスチャは共有、材質は複製。ゲーム側の夜間照明には触らない。
   function model(kind: TrainKind, count: number, units: number[], label?: string, unitKinds?: TrainKind[], dest?: string) {
     const group = new THREE.Group(), owned = new Map<THREE.Material, THREE.Material>();
-    const cars = createTrainSet(kind, count, ctx.renderer, { units, label, unitKinds, dest: dest ?? ctx.route.stations.at(-1)?.name });
+    const cars = createTrainSet(kind, count, ctx.renderer, { units, label, unitKinds, dest: dest ?? ctx.route.stations.at(-1)?.name, nambaFirst: front7169ForRoute(ctx.route.id) });
     const total = cars.reduce((a, c) => a + c.length, 0);
     let z0 = -total / 2;
     cars.forEach(car => {

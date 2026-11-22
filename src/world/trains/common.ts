@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { FONT } from '../../core/config';
-import { basePart, GeoBatch, M, P } from '../batch';
+import { GeoBatch, M, P } from '../batch';
 
 export type V2 = [number, number];
 export type CarKind = 'head' | 'mid' | 'pan';
@@ -66,11 +66,31 @@ export class Sheet {
     return draw;
   }
   /** 窓ガラス（枠つき・発光マスク付き） */
-  glass(u0: number, u1: number, y0: number, y1: number, frame = '#4c5258', rad = .05, tint: [string, string] = ['#3b4a58', '#1b232c']) {
+  glass(u0: number, u1: number, y0: number, y1: number, frame = '#4c5258', rad = .05, tint: [string, string] = ['#3b4a58', '#1b232c'], reflection = true) {
     if (frame) this.rect(u0 - .045 * Math.sign(u1 - u0), u1 + .045 * Math.sign(u1 - u0), y0 - .045, y1 + .045, frame, .5, 0, rad + .02);
     const gg = this.c.createLinearGradient(0, this.Y(y1), 0, this.Y(y0)); gg.addColorStop(0, tint[0]); gg.addColorStop(1, tint[1]);
-    const draw = this.rect(u0, u1, y0, y1, gg as unknown as string, .06, .2, rad);
+    const draw = this.rect(u0, u1, y0, y1, gg as unknown as string, reflection ? .06 : .56, reflection ? .2 : .04, rad);
+    if (reflection && rad > 0 && y1 - y0 < 1.9) {
+      const x0 = Math.min(this.X(u0), this.X(u1)), x1 = Math.max(this.X(u0), this.X(u1));
+      const top = this.Y(y1), bottom = this.Y(y0), h = bottom - top;
+      const g = this.c;
+      g.save(); g.clip();
+      // 窓枠の内側だけに、上空の淡い映り込みと下部の車内の陰を重ねる。
+      const reflection = g.createLinearGradient(x0, top, x1, bottom);
+      reflection.addColorStop(0, 'rgba(156,183,193,.30)');
+      reflection.addColorStop(.56, 'rgba(148,171,175,.17)');
+      reflection.addColorStop(.58, 'rgba(86,114,117,.06)');
+      reflection.addColorStop(1, 'rgba(45,57,54,.05)');
+      g.fillStyle = reflection; g.fillRect(x0, top, x1 - x0, h);
+      g.fillStyle = 'rgba(21,27,27,.18)'; g.fillRect(x0, bottom - .12 * h, x1 - x0, .12 * h);
+      g.restore();
+    }
     this.e.fillStyle = '#fff'; draw(this.e);
+  }
+  /** 運転台のガラスは低反射とし、窓枠の内側を控えめな濃淡で描く。 */
+  cabGlass(u0: number, u1: number, y0: number, y1: number, frame = '#4c5258', rad = .05,
+    tint: [string, string] = ['#354047', '#272e32']) {
+    this.glass(u0, u1, y0, y1, frame, rad, tint, false);
   }
   /** 発光マスクだけを矩形で塗り直す（色は変えない）。fill は CSS 色または emitGrad の戻り値 */
   emit(u0: number, u1: number, y0: number, y1: number, fill: string | CanvasGradient) {
@@ -105,6 +125,26 @@ export class Sheet {
 export function sideSheet(Lb: number, ytop: number, W = 2048, H = 256): Sheet {
   return new Sheet(W, H, z => (z + Lb / 2) / Lb * W, y => (ytop - y) / (ytop - Y0) * H);
 }
+/** 客用扉（閉 / 開）を側面シートに描く。開 = 暗い車内（夜は点灯）と引き込まれた扉の縁 */
+export function paintDoor(s: ReturnType<typeof sideSheet>, zc: number, w: number, y1: number, win: V2, col: string, open: boolean, dbl: boolean, metal = .7) {
+  s.rect(zc - w / 2 - .03, zc + w / 2 + .03, 1.13, y1 + .03, '#868c93', .5, .3);
+  if (open && dbl) {
+    s.glass(zc - w / 2, zc + w / 2, 1.16, y1, '', 0, ['#4a463e', '#23262b']);
+    s.rect(zc - w / 2, zc + w / 2, 1.16, 1.3, '#5b5f66', .6, .1);
+    s.rect(zc - w / 2, zc + w / 2, y1 - .07, y1, '#d9d6c8', .5, 0);
+    for (const sg of [-1, 1]) s.rect(zc + sg * (w / 2 - .06) - .06, zc + sg * (w / 2 - .06) + .06, 1.16, y1, col, .4, metal);
+    s.emit(zc - w / 2, zc + w / 2, 1.16, y1, s.emitGrad(1.3, y1, '#ffffff', '#6a5e48'));
+    s.emit(zc - w / 2, zc + w / 2, 1.16, 1.3, '#000');
+    for (const sg of [-1, 1]) s.emit(zc + sg * (w / 2 - .06) - .06, zc + sg * (w / 2 - .06) + .06, 1.16, y1, '#000');
+    return;
+  }
+  s.rect(zc - w / 2, zc + w / 2, 1.16, y1, col, .4, metal);
+  if (dbl) {
+    s.rect(zc - .012, zc + .012, 1.16, y1, '#5e646b');
+    for (const sg of [-1, 1]) s.glass(zc + sg * w / 4 - .2, zc + sg * w / 4 + .2, win[0], win[1], '#5a6067', .06);
+  } else s.glass(zc - .19, zc + .19, win[0], win[1], '#5a6067', .03);
+}
+
 /** 前面用シート（u = x。正面から見て左 = +X をキャンバス左に） */
 export function faceSheet(hw: number, ytop: number, W = 512, H = 512): Sheet {
   return new Sheet(W, H, x => (hw - x) / (2 * hw) * W, y => (ytop - y) / (ytop - Y0) * H);
@@ -139,21 +179,21 @@ export function fullSection(half: V2[]): V2[] {
   return [...half, ...left];
 }
 
-function ringPoint(p: V2, rg: Ring, ytop: number): V2 {
+function ringPoint(p: V2, rg: Ring, ytop: number, roofDrop = 1): V2 {
   const [x, y] = p, w = Math.min(1, Math.max(0, (y - (ytop - 1)) / 1));
   const xi = Math.sign(x) * Math.max(0, Math.abs(x) - rg.inset);
-  let yi = y - rg.inset * w;
+  let yi = y - rg.inset * w * roofDrop;
   if (rg.clip) yi = Math.min(yi, rg.clip(xi, yi));
   return [xi, yi];
 }
 
 /** 車体外板（インデックス付き・滑らかな法線）。uv: u = z、v = y（側面シートに対応） */
-export function shellGeo(half: V2[], rings: Ring[], ytop: number, Lb: number): THREE.BufferGeometry {
+export function shellGeo(half: V2[], rings: Ring[], ytop: number, Lb: number, roofDrop = 1): THREE.BufferGeometry {
   const sec = fullSection(half), n = sec.length;
   const rs = [...rings].sort((a, b) => a.z - b.z);
   const pos: number[] = [], uv: number[] = [], idx: number[] = [];
   for (const rg of rs) for (const p of sec) {
-    const [x, y] = ringPoint(p, rg, ytop);
+    const [x, y] = ringPoint(p, rg, ytop, roofDrop);
     pos.push(x, y, rg.z); uv.push((rg.z + Lb / 2) / Lb, (y - Y0) / (ytop - Y0));
   }
   // 外板は +X 側（右半分）と -X 側（左半分）を別グループにする（ドアを開ける側だけ材質を替えるため。group 0 = +X、1 = -X）
@@ -170,6 +210,31 @@ export function shellGeo(half: V2[], rings: Ring[], ytop: number, Lb: number): T
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.setIndex(idx); g.computeVertexNormals();
   g.addGroup(0, nR, 0); g.addGroup(nR, idx.length - nR, 1);
+  return g;
+}
+
+/** 丸めた外板の最前列と同じ座標から、前面シートを張る曲面格子を作る。 */
+export function curvedCab(half: V2[], radius: number, top: number, hw: number, zAt: (x: number, y: number) => number, roofDrop = 1) {
+  const rim = half.map(p => ringPoint(p, {z: 0, inset: radius}, top, roofDrop));
+  const rows: V2[] = [rim[0]];
+  for (let i = 1; i < rim.length; i++) {
+    const [x0, y0] = rim[i - 1], [x1, y1] = rim[i];
+    const steps = Math.max(1, Math.ceil((y1 - y0) / .12));
+    for (let j = 1; j <= steps; j++) rows.push([x0 + (x1 - x0) * j / steps, y0 + (y1 - y0) * j / steps]);
+  }
+  const n = 32, pos: number[] = [], uv: number[] = [], idx: number[] = [];
+  for (const [w, y] of rows) for (let i = 0; i <= n; i++) {
+    const x = w * (2 * i / n - 1); pos.push(x, y, zAt(x, y));
+    uv.push((hw - x) / (2 * hw), (y - Y0) / (top - Y0));
+  }
+  for (let j = 1; j < rows.length; j++) for (let i = 0; i < n; i++) {
+    const a = (j - 1) * (n + 1) + i, c = a + n + 1;
+    idx.push(a, c, a + 1, a + 1, c, c + 1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx); g.computeVertexNormals();
   return g;
 }
 
@@ -215,17 +280,18 @@ function paintService(g: CanvasRenderingContext2D, label: string, w: number, h: 
 }
 
 /** 行先表示（LED風）: 種別 + 行先 */
-export function ledTexture(label: string, dest: string, typeFraction = .47): THREE.CanvasTexture {
+export function ledTexture(label: string, dest: string, typeFraction = .47, rollsign = false): THREE.CanvasTexture {
   const [k, g] = cv(512, 128);
   g.fillStyle = '#0b0b0b'; g.fillRect(0, 0, 512, 128);
   const typeWidth = Math.round(512 * typeFraction), destWidth = 512 - typeWidth;
   paintService(g, label, typeWidth, 128);
   g.textAlign = 'center'; g.textBaseline = 'middle';
   g.fillStyle = '#fff'; g.font = `700 92px ${FONT}`; g.fillText(dest, typeWidth + destWidth / 2, 66, destWidth - 20);
-  // ドット感
-  g.fillStyle = 'rgba(0,0,0,.45)';
-  for (let x = 0; x < 512; x += 4) g.fillRect(x, 0, 1, 128);
-  for (let y = 0; y < 128; y += 4) g.fillRect(0, y, 512, 1);
+  if (!rollsign) {
+    g.fillStyle = 'rgba(0,0,0,.45)';
+    for (let x = 0; x < 512; x += 4) g.fillRect(x, 0, 1, 128);
+    for (let y = 0; y < 128; y += 4) g.fillRect(0, y, 512, 1);
+  }
   const t = new THREE.CanvasTexture(k); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 
@@ -290,41 +356,29 @@ export function adder(b: GeoBatch, key = 'paint'): Add {
   return (x, y, z, w, h, d, col, rx = 0, ry = 0, rz = 0) => b.add(key, P.box, M(x, y, z, ry, w, h, d, rx, rz), col);
 }
 
-export function addTaperedSkirt(
-  b: GeoBatch, zf: number,
-  outerTop: number, outerBottom: number,
-  innerTop: number, innerBottom: number,
-  color: number,
-) {
-  for (const sx of [-1, 1]) {
-    const shape = new THREE.Shape([
-      new THREE.Vector2(sx * outerTop, Y0 + .01),
-      new THREE.Vector2(sx * innerTop, Y0 + .01),
-      new THREE.Vector2(sx * innerBottom, .40),
-      new THREE.Vector2(sx * outerBottom, .40),
-    ]);
-    const geo = new THREE.ExtrudeGeometry(shape, {
-      depth: .14, bevelEnabled: false,
-    });
-    b.add('paint', basePart(geo), M(0, 0, zf - .12), color);
-    geo.dispose();
-  }
-  const add = adder(b);
-  add(0, .72, zf - .06, innerTop * 2, .58, .08, 0x22252a);
-  add(0, .40, zf - .05, outerBottom * 2, .14, .14, color);
-  for (const sx of [-1, 1])
-    add(sx * .46, .80, zf - .14, .08, .42, .08, 0x969b9f);
-  for (const y of [.61, .99])
-    add(0, y, zf - .14, 1.00, .08, .08, 0x969b9f);
-  add(0, .83, zf - .43, .36, .22, .08, 0x81868b);
-}
-
-/** 台車・台枠・床下機器 */
-export function addUnderfloor(b: GeoBatch, Lb: number, kind: CarKind, o: { frame: number; equip: number; bogie: number; frontCut?: number }) {
+export function addUnderfloor(b: GeoBatch, Lb: number, kind: CarKind, o: { frame: number; equip: number; bogie: number; frontCut?: number; equipmentDetail?: boolean }) {
   const hz = Lb / 2, add = adder(b), cut = o.frontCut ?? 0;
   add(0, Y0 - .05, cut / 2, 2.6, .12, Lb - cut, o.frame);
   const boxes: V2[] = kind === 'pan' ? [[-3.3, 3.4], [.8, 2.2], [3.6, 1.6]] : kind === 'head' ? [[-2.6, 2.2], [1.2, 3.0]] : [[-3.2, 1.8], [-.4, 2.6], [3.2, 2.2]];
   for (const [z, l] of boxes) add(0, .82, z, 2.2, .42, l, o.equip);
+  if (o.equipmentDetail) {
+    // 機器箱の扉、通風口、取付脚を台車の間に置く。
+    for (const side of [-1, 1]) {
+      const x = side * 1.115;
+      for (const [z, length] of boxes) {
+        for (let dz = -.5 * length + .25; dz < .5 * length; dz += .52) {
+          add(x, .78, z + dz, .04, .39, .47, 0x575554);
+          add(x + side * .028, .88, z + dz, .024, .055, .16, 0x74716b);
+        }
+      }
+      for (const z of [-.67, -.47, -.27, -.07]) add(x, .80, z, .06, .31, .075, 0x696961);
+      for (const z of [-hz + Math.max(1.30, cut + .50), hz - 1.30]) {
+        add(side * 1.22, .80, z - .22, .04, .44, .035, 0x63686a);
+        add(side * 1.22, .80, z + .22, .04, .44, .035, 0x63686a);
+        add(side * 1.22, .59, z, .08, .035, .48, 0x7e8180);
+      }
+    }
+  }
   const bz = hz - 2.6;
   for (const z of [-bz, bz]) {
     add(0, .66, z, 1.9, .26, 1.0, o.bogie);
@@ -332,7 +386,8 @@ export function addUnderfloor(b: GeoBatch, Lb: number, kind: CarKind, o: { frame
       add(sx * .82, .52, z, .16, .32, 2.6, o.bogie);
       for (const dz of [-1.05, 1.05]) {
         b.add('paint', P.cyl, M(sx * .6, .43, z + dz, 0, .86, .12, .86, 0, Math.PI / 2), 0x3c3f44);
-        add(sx * .9, .43, z + dz, .1, .2, .3, 0x1c1e21);
+        add(sx * .9, .43, z + dz, .1, .2, .3, 0x34383a);
+        b.add('paint', P.cyl, M(sx * .97, .43, z + dz, 0, .16, .045, .16, 0, Math.PI / 2), 0x505457);
       }
       add(sx * .9, .62, z, .22, .22, .5, 0x1c1e21); // 空気ばね
     }
@@ -365,21 +420,28 @@ export function addSingleArm(b: GeoBatch, pz: number, roofTop: number) {
   for (const sx of [-1, 1]) add(sx * 1.0, hy - .06, pz + .1, .25, .04, .08, 0x2a2d31, 0, 0, sx * .5);
 }
 
-/** 下枠交差形パンタグラフ（下枠が台枠の中央で交差し、上枠は菱形の上半分と同じ形。南海の 7100系・1000系・9000系・10000系） */
-export function addCrossArm(b: GeoBatch, pz: number, roofTop: number) {
-  const add = adder(b), c = 0x3d4248;
-  add(0, roofTop + .08, pz, 1.4, .1, 1.2, 0x5a5f66);
-  for (const sx of [-.55, .55]) for (const dz of [-.5, .5]) b.add('paint', P.cyl, M(sx, roofTop + .04, pz + dz, 0, .12, .16, .12), 0x9a6b4b);
-  const yb = roofTop + .18, ym = roofTop + .72, yt = roofTop + 1.3;
-  for (const sx of [-.45, .45]) {
-    // 下枠: 台枠の前後の端から反対側の中央へ（交差する）
-    arm(b, sx, yb, pz - .45, sx, ym, pz + .2, .05, c); arm(b, sx, yb, pz + .45, sx, ym, pz - .2, .05, c);
-    // 上枠: 中央の関節から集電舟へ広がる
-    arm(b, sx, ym, pz + .2, sx, yt, pz + .45, .045, c); arm(b, sx, ym, pz - .2, sx, yt, pz - .45, .045, c);
+/** 下枠交差形。台枠の近くで下枠を交差させ、前後の関節から舟支えへ上枠を戻す。 */
+export function addCrossArm(b: GeoBatch, z: number, roof: number) {
+  const add = adder(b);
+  const base = roof + .21, elbow = roof + .80, crown = roof + 1.3;
+  for (const x of [-.46, .46]) {
+    for (const sign of [-1, 1]) {
+      const mount = z - sign * .26, joint = z + sign * .84;
+      b.add('paint', P.cyl, M(x, roof + .09, mount, 0, .14, .20, .14), 0x998a78);
+      const lowerX = x + sign * .028;
+      arm(b, lowerX, base, mount, lowerX, elbow, joint, .053, 0x484d50);
+      arm(b, lowerX, elbow, joint, lowerX, crown, z, .043, 0x515659);
+      b.add('paint', P.cyl, M(lowerX, elbow, joint, 0, .09, .14, .09, 0, Math.PI / 2), 0x64686b);
+    }
+    add(x, base - .04, z, .085, .09, .96, 0x62686b);
+    add(x, crown + .03, z, .06, .08, .28, 0x5a5e60);
   }
-  add(0, ym, pz, .95, .04, .04, c); add(0, yt, pz - .45, 1.1, .04, .04, c); add(0, yt, pz + .45, 1.1, .04, .04, c);
-  add(0, yt + .05, pz, 1.9, .05, .12, 0x2a2d31);
-  for (const sx of [-1, 1]) add(sx * 1.0, yt - .01, pz, .25, .04, .08, 0x2a2d31, 0, 0, sx * .5);
+  for (const sign of [-1, 1]) {
+    add(0, base, z + sign * .26, 1.05, .07, .07, 0x62686b);
+    const shoe = z + sign * .095;
+    add(0, crown + .085, shoe, 1.77, .042, .055, 0x3a3d40);
+    for (const x of [-1, 1]) add(x * .98, crown + .045, shoe, .23, .032, .045, 0x595d60, 0, 0, -x * .38);
+  }
 }
 
 /** 菱形パンタグラフ */
@@ -389,10 +451,11 @@ export function addLozenge(b: GeoBatch, pz: number, roofTop: number) {
   for (const sx of [-.65, .65]) for (const dz of [-.65, .65]) b.add('paint', P.cyl, M(sx, roofTop + .04, pz + dz, 0, .12, .16, .12), 0x9a6b4b);
   const yb = roofTop + .18, ym = roofTop + .75, yt = roofTop + 1.3;
   for (const sx of [-.5, .5]) {
-    arm(b, sx, yb, pz - .7, sx, ym, pz - .05, .05, c); arm(b, sx, ym, pz - .05, sx, yt, pz - .45, .045, c);
-    arm(b, sx, yb, pz + .7, sx, ym, pz + .05, .05, c); arm(b, sx, ym, pz + .05, sx, yt, pz + .45, .045, c);
+    arm(b, sx, yb, pz - .10, sx, ym, pz - .88, .05, c); arm(b, sx, ym, pz - .88, sx, yt, pz - .055, .045, c);
+    arm(b, sx, yb, pz + .10, sx, ym, pz + .88, .05, c); arm(b, sx, ym, pz + .88, sx, yt, pz + .055, .045, c);
   }
-  add(0, ym, pz, 1.05, .04, .04, c); add(0, yt, pz - .45, 1.1, .04, .04, c); add(0, yt, pz + .45, 1.1, .04, .04, c);
+  for (const dz of [-.88, .88]) add(0, ym, pz + dz, 1.05, .04, .04, c);
+  add(0, yt, pz, 1.10, .065, .16, c);
   add(0, yt + .05, pz, 1.9, .05, .12, 0x2a2d31);
   for (const sx of [-1, 1]) add(sx * 1.0, yt - .01, pz, .25, .04, .08, 0x2a2d31, 0, 0, sx * .5);
 }

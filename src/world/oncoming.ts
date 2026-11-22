@@ -1,3 +1,4 @@
+import { front7169ForRoute } from '../route/vehicle-direction';
 // 対向列車。南海本線は oncoming-timetable の時刻付き共通運行を使う。
 // 以下の路線設定による処理は、実ダイヤ未収録のコース・単線交換用。警笛・すれ違いをイベントで通知。
 // 走り抜けるものと、駅（spec.stop）に停車してドアを開け、自列車が同じ駅で停車して少し経つと発車するものがある
@@ -124,7 +125,7 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
   const build = (o: { spec: OncomingSpec; kind: TrainKind }): SetView => {
     const key = keyOf(o);
     const group = new THREE.Group(); group.visible = false; group.name = `oncoming-${o.kind}`; scene.add(group);
-    const list = createTrainSet(o.kind, o.spec.cars, ctx.renderer, { dest: o.spec.dest ?? dest, label: labelOf(o), units: o.spec.units, unitKinds: o.spec.unitKinds });
+    const list = createTrainSet(o.kind, o.spec.cars, ctx.renderer, { nambaFirst: !front7169ForRoute(ctx.route.id), dest: o.spec.dest ?? dest, label: labelOf(o), units: o.spec.units, unitKinds: o.spec.unitKinds });
     for (const c of list) group.add(c.object);
     const v: SetView = { key, group, cars: list, length: list.reduce((a, c) => a + c.length, 0), inUse: false };
     const arr = sets.get(key) ?? []; arr.push(v); sets.set(key, arr);

@@ -174,9 +174,13 @@ function buildUrbanBackdrop(ctx: GameContext, from: number, to: number, at: (s: 
   const dMin = osm ? 340 : 250;
   for (let s = from; s < to; s += 22) for (const side of [-1, 1]) {
     for (let k = 0; k < 3; k++) {
-      const d = dMin + rnd() * (1500 - dMin), p = at(s + rnd() * 20, side * d, 0), t = ctx.track.trackAt(s);
+      const d = dMin + rnd() * (1500 - dMin), sc = s + rnd() * 20, t = ctx.track.trackAt(sc);
+      const p = at(sc, side * d, 0);
       const hh = 18 + rnd() * rnd() * (d < 700 ? 90 : 140), w = 18 + rnd() * 30, dep = 18 + rnd() * 30;
       c.copy(near).lerp(far, Math.min(1, (d - 250) / 1250)).multiplyScalar(.9 + rnd() * .15);
+      // 遠景の基準線は平滑化してあるため、実際の線路から見た建物の中心に戻して水際を確かめる。
+      const dx = p.x - t.x, dz = p.z - t.z;
+      if (T.riverNear(sc + dx * t.rz - dz * t.rx, dx * t.rx + dz * t.rz, Math.hypot(w, dep) / 2)) continue;
       if (T.reliefY(s, side * d) > 1.5) continue; // 周囲の山（route.relief）の中に埋まる遠景ビルは置かない
       city.at(s).add('body', P.boxB, M(p.x, 0, p.z, -t.phi + (rnd() - .5) * .3, w, hh, dep), c.getHex());
     }
@@ -187,6 +191,7 @@ function buildUrbanBackdrop(ctx: GameContext, from: number, to: number, at: (s: 
     for (let d = 68; d < 250; d += 15 + rnd() * 6) {
       if (!T.isCity(s) || rnd() < .12) continue;
       const w = 10 + rnd() * 12, dep = 9 + rnd() * 6, lat = side < 0 ? Math.min(...route.tracks) - d : Math.max(...route.tracks) + d;
+      if (T.riverNear(s, lat, Math.hypot(w, dep) / 2 + 2)) continue;
       if (tramBlocks(route, s - w / 2, s + w / 2, lat - dep / 2, lat + dep / 2)) continue;
       const t = ctx.track.trackAt(s), p = ctx.track.at(s + (rnd() - .5) * 4, lat, 0), hh = 7 + rnd() * rnd() * 30;
       const col = blockCols[Math.floor(rnd() * blockCols.length)];
@@ -235,6 +240,7 @@ export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot
   const put = (model: PreparedModel, s: number, lat: number, yaw: number, k: number, y?: number) => {
     if (noBuildings) return;
     const radius = Math.hypot(model.size.x, model.size.z) * k / 2;
+    if (T.riverNear(s, lat, radius) || water?.(s, lat, radius)) return;
     // 描画専用線も分岐端まで敷地を確保。樹冠の幅と前後方向の張り出しを含む。
     if (thirds.some(t => s > t.from - radius && s < t.to + radius && Math.abs(lat - t.lat(s)) < radius + 2.1)) return;
     if (tramBlocks(route, s - radius, s + radius, lat - radius, lat + radius)) return; // 阪堺線の跨線橋・高師浜線の高架支線の通り道
@@ -284,8 +290,7 @@ export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot
       const big = rnd() < .35;
       const model = pick(big ? M.trees : M.bushes), k = (big ? KIT_SCALE.trees * .8 : KIT_SCALE.bushes) * (.7 + rnd() * .4);
       const tl = latOf(side, 8.6 + rnd() * 1.4);
-      const radius = Math.hypot(model.size.x, model.size.z) * k / 2;
-      if (level(s, tl) && !T.riverNear(s, tl, 4) && !water?.(s, tl, radius)) put(model, s, tl, rnd() * 6, k);
+      if (level(s, tl)) put(model, s, tl, rnd() * 6, k);
     }
   }
   // 街並み側が決めた木（庭木・屋敷林・山林）

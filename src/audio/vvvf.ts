@@ -4,8 +4,9 @@
 import { NOTCH_EB } from '../core/config';
 import { harmonicWave, type AudioCore } from './engine';
 import type { TractionSound } from './settings';
+import { create8300Gear } from './gear';
+import { nankaiInverterProfile, type InverterMode as Mode, type NankaiInverterId } from './nankai-inverters';
 
-interface Mode { until: number; pulses: number } // pulses = 0 は非同期
 const MODES: Mode[] = [
   { until: 25, pulses: 0 },
   { until: 33, pulses: 27 },
@@ -15,8 +16,27 @@ const MODES: Mode[] = [
   { until: 70, pulses: 3 },
   { until: Infinity, pulses: 1 },
 ];
+// 1000系未更新車のコイル録音を参考にした段順。速度と磁励音の強さは試聴用の近似値。
+const GTO_POWER: Mode[] = [
+  { until: 10, pulses: 0 }, { until: 30, pulses: 15 }, { until: 39, pulses: 11 },
+  { until: 49, pulses: 7 }, { until: 59, pulses: 3 }, { until: 70, pulses: 3 },
+  { until: Infinity, pulses: 1 },
+];
+const GTO_REGEN: Mode[] = [{ until: 10, pulses: 21 }, ...GTO_POWER.slice(1)];
 const HZ_PER_KMH = 1.45;
-const GEAR_RATIO = 7; // 歯車かみ合い周波数 = 7 × f
+
+export type InverterSound = TractionSound | 'gto' | NankaiInverterId;
+export interface VvvfTuning {
+  carrier: number;
+  sideband: number;
+  hiss: number;
+  motor: number;
+  hum: number;
+  gear: number;
+  startHz: number;
+  transitionKmh: number;
+}
+const neutralTuning: Partial<VvvfTuning> = {};
 
 export interface Vvvf {
   update(v: number, notch: number): void;
@@ -26,7 +46,9 @@ export interface Vvvf {
   readonly mode: string;
 }
 
-export function createVvvf(core: AudioCore, dest: AudioNode = core.run, getSound: () => TractionSound = () => 'soft'): Vvvf {
+export function createVvvf(core: AudioCore, dest: AudioNode = core.run,
+  getSound: () => InverterSound = () => 'soft',
+  getTuning: () => Partial<VvvfTuning> = () => neutralTuning): Vvvf {
   const { ac } = core;
   const out = ac.createGain(); out.gain.value = 0; // インバータ動作中の音量
   const tone = ac.createBiquadFilter(); tone.type = 'lowpass'; tone.frequency.value = 5200; tone.Q.value = .4;
@@ -41,24 +63,31 @@ export function createVvvf(core: AudioCore, dest: AudioNode = core.run, getSound
   // fc ± 2f の側帯波: キャリアを 2f で振幅変調（キャリア抑圧）
   const mod2f = ac.createOscillator(); mod2f.frequency.value = 1;
   const amSide = ac.createGain(); amSide.gain.value = 0;
-  const sideDepth = ac.createGain(); sideDepth.gain.value = .6;
+  const sideDepth = ac.createGain(); sideDepth.gain.value = 0;
   mod2f.connect(sideDepth).connect(amSide.gain);
-  const carrierDirect = ac.createGain(); carrierDirect.gain.value = .5;
+  const carrierDirect = ac.createGain(); carrierDirect.gain.value = 0;
   carrier.connect(carrierDirect); carrier.connect(amSide);
   // 2fc ± f の成分（弱め）
   const carrier2 = ac.createOscillator(); carrier2.frequency.value = 2000;
   const modF = ac.createOscillator(); modF.frequency.value = 1;
   const am2 = ac.createGain(); am2.gain.value = 0;
-  const am2Depth = ac.createGain(); am2Depth.gain.value = .22;
+  const am2Depth = ac.createGain(); am2Depth.gain.value = 0;
   carrier2.connect(am2); modF.connect(am2Depth).connect(am2.gain);
   const carrierMix = ac.createGain(); carrierMix.gain.value = 1;
+  const octave = ac.createGain(); octave.gain.value = 0;
+  carrier2.connect(octave).connect(carrierMix);
+  // 更新9000系の非同期域では fc ± 2f に加え、その外側の側帯波を重ねる。
+  const mod4f = ac.createOscillator(), outerDepth = ac.createGain();
+  const outerSide = ac.createGain(); outerDepth.gain.value = 0; outerSide.gain.value = 0;
+  mod4f.connect(outerDepth).connect(outerSide.gain);
+  carrier.connect(outerSide).connect(carrierMix);
   carrierDirect.connect(carrierMix); amSide.connect(carrierMix); am2.connect(carrierMix);
   carrierMix.connect(out);
 
   // キャリア周辺のインバータ雑音（シャー）
   const hiss = core.noiseSrc('white');
   const hissBp = ac.createBiquadFilter(); hissBp.type = 'bandpass'; hissBp.Q.value = 3; hissBp.frequency.value = 1000;
-  const hissG = ac.createGain(); hissG.gain.value = .12;
+  const hissG = ac.createGain(); hissG.gain.value = 0;
   hiss.connect(hissBp).connect(hissG).connect(out);
 
   // 主電動機の電磁音（6k±1 次高調波が支配的。1パルスで目立つ）
@@ -71,65 +100,76 @@ export function createVvvf(core: AudioCore, dest: AudioNode = core.run, getSound
   // 低いうなり（基本波・トルク脈動）
   const hum = ac.createOscillator(); hum.type = 'sawtooth'; hum.frequency.value = 1;
   const humLp = ac.createBiquadFilter(); humLp.type = 'lowpass'; humLp.frequency.value = 220;
-  const humG = ac.createGain(); humG.gain.value = .25;
+  const humG = ac.createGain(); humG.gain.value = 0;
   hum.connect(humLp).connect(humG).connect(out);
 
-  // 歯車音（惰行中も鳴る）。正弦＋狭帯域ノイズでざらつき
-  const gearOut = ac.createGain(); gearOut.gain.value = 0;
-  const gearLp = ac.createBiquadFilter(); gearLp.type = 'lowpass'; gearLp.Q.value = .5;
-  gearOut.connect(gearLp).connect(dest);
-  const gear = ac.createOscillator(); gear.setPeriodicWave(harmonicWave(ac, { 1: 1, 2: .35, 3: .08 })); gear.frequency.value = 100;
-  const gearToneG = ac.createGain(); gearToneG.gain.value = .55;
-  gear.connect(gearToneG).connect(gearOut);
-  const gearNoise = core.noiseSrc('white');
-  const gearBp = ac.createBiquadFilter(); gearBp.type = 'bandpass'; gearBp.Q.value = 18; gearBp.frequency.value = 100;
-  const gearNG = ac.createGain(); gearNG.gain.value = 2.2;
-  gearNoise.connect(gearBp).connect(gearNG).connect(gearOut);
+  const gear = create8300Gear(core, dest);
 
-  for (const o of [carrier, mod2f, carrier2, modF, motor, hum, gear]) o.start();
+  for (const o of [carrier, mod2f, carrier2, modF, mod4f, motor, hum]) o.start();
 
-  let modeIdx = 0, active = false, lastSound: TractionSound | null = null;
+  let modeIdx = 0, active = false, lastSound: InverterSound | null = null;
+  let modes = MODES;
   const smooth = (x: number) => { const t = Math.max(0, Math.min(1, x)); return t * t * (3 - 2 * t); };
 
   function update(v: number, notch: number) {
     const now = ac.currentTime, kmh = Math.max(0, v * 3.6);
-    const sound = getSound(), legacy = sound === 'legacy';
+    const sound = getSound(), legacy = sound === 'legacy', gto = sound === 'gto';
+    const nankai = nankaiInverterProfile(sound);
+    const mix = getTuning();
     if (sound !== lastSound) {
-      carrier.setPeriodicWave(legacy ? carrierWave : softCarrierWave);
-      tone.frequency.setTargetAtTime(legacy ? 5200 : 2400, now, .12);
+      carrier.setPeriodicWave(legacy || gto || nankai ? carrierWave : softCarrierWave);
+      tone.frequency.setTargetAtTime(legacy ? 5200 : gto ? 3100 : 2400, now, .12);
       presence.gain.setTargetAtTime(legacy ? 0 : -6, now, .12);
-      carrierDirect.gain.setTargetAtTime(legacy ? .5 : .14, now, .1);
-      sideDepth.gain.setTargetAtTime(legacy ? .6 : .46, now, .1);
-      am2Depth.gain.setTargetAtTime(legacy ? .22 : .065, now, .1);
-      humG.gain.setTargetAtTime(legacy ? .25 : .45, now, .1);
-      gearToneG.gain.setTargetAtTime(legacy ? .55 : .32, now, .1);
-      gearNG.gain.setTargetAtTime(legacy ? 2.2 : 1.6, now, .1);
-      gearLp.frequency.setTargetAtTime(legacy ? ac.sampleRate * .49 : 2200, now, .12);
       lastSound = sound;
     }
+    carrierDirect.gain.setTargetAtTime((legacy ? .5 : gto ? .28 : .14) * (mix.carrier ?? 1), now, .04);
+    sideDepth.gain.setTargetAtTime((legacy ? .6 : gto ? .75 : .46) * (mix.sideband ?? 1), now, .04);
+    am2Depth.gain.setTargetAtTime((legacy ? .22 : gto ? .18 : .065) * (mix.sideband ?? 1), now, .04);
+    humG.gain.setTargetAtTime((legacy ? .25 : gto ? .3 : .45) * (mix.hum ?? 1), now, .04);
     const power = notch > 0, brake = notch < 0 && notch > NOTCH_EB;
     // 回生は 5km/h 付近で失効（電空切替）。力行は停止中から
-    const regenFade = brake ? Math.min(1, Math.max(0, (kmh - 4) / 6)) : 0;
+    const fullElectric = sound === 'nankai-8300' || sound === 'nankai-9000' || sound === 'nankai-8000';
+    const regenFade = brake ? (fullElectric ? smooth(kmh / 2) : Math.min(1, Math.max(0, (kmh - 4) / 6))) : 0;
     const tq = power ? notch / 5 : brake ? Math.min(1, -notch / 7) * regenFade : 0;
     const on = tq > 0.001;
 
     // 出力周波数（すべり: 力行 +、回生 −）
     const slip = power ? 1 + 1.5 * tq : brake ? -1.2 * tq : 0;
-    const f = Math.max(.5, kmh * HZ_PER_KMH + slip);
+    const hzPerKmh = sound === 'nankai-8300' ? HZ_PER_KMH * 1.5 : HZ_PER_KMH;
+    const f = Math.max(.5, kmh * hzPerKmh + slip);
 
     // モード決定（回生側は 2km/h 低めで切替＝ヒステリシス）
-    const hyst = brake ? -2 : 0;
-    let mi = MODES.findIndex(m => kmh < m.until + hyst);
-    if (mi < 0) mi = MODES.length - 1;
+    const hyst = !nankai && brake ? -2 : 0;
+    // GTO風の試聴モデル。起動時の低い搬送波から同期域へ移る速度を耳で合わせる。
+    const nextModes = nankai ? (brake ? nankai.regen : nankai.power) : gto ? (brake ? GTO_REGEN : GTO_POWER) : MODES;
+    const sameModes = nextModes === modes;
+    modes = nextModes;
+    // 1000系の調整量は段全体に適用し、つまみを上げても切替順を保つ。
+    const tuningShift = sound === 'nankai-1000' && !brake ? ((mix.transitionKmh ?? 10) - 10) * hzPerKmh : 0;
+    const position = nankai ? f - tuningShift : kmh;
+    const firstSwitch = gto ? mix.transitionKmh ?? 10 : modes[0].until;
+    const limit = (index: number) => index === 0 ? firstSwitch : modes[index].until;
+    let mi = modes.findIndex((_, i) => position < limit(i) + hyst);
+    if (mi < 0) mi = modes.length - 1;
     // 同じ境界を速度が往復してもモードが毎フレーム切り替わらない。
-    if (!legacy && mi !== modeIdx) {
-      if (mi > modeIdx && kmh < MODES[modeIdx].until + hyst + .8) mi = modeIdx;
-      if (mi < modeIdx && kmh > MODES[modeIdx - 1].until + hyst - .8) mi = modeIdx;
+    const margin = nankai ? .25 : .8;
+    if (sameModes && !legacy && mi !== modeIdx) {
+      if (mi > modeIdx && position < limit(modeIdx) + hyst + margin) mi = modeIdx;
+      if (mi < modeIdx && position > limit(modeIdx - 1) + hyst - margin) mi = modeIdx;
     }
-    const m = MODES[mi];
+    const m = modes[mi];
     let fc: number;
     // 改良音は低い起動キャリアから立ち上げる独自近似。実車の制御値ではない。
-    if (m.pulses === 0) fc = legacy ? 1000 + 200 * Math.min(1, kmh / 25) : 220 + 330 * smooth(kmh / 25);
+    if (nankai && m.pulses === 0) {
+      fc = sound === 'nankai-1000' ? mix.startHz ?? nankai.carrierHz : nankai.carrierHz;
+      if (brake && fullElectric) {
+        if (sound === 'nankai-8000' && kmh < 5) fc = 200;
+        else if (sound !== 'nankai-8000') fc *= .35 + .65 * smooth(kmh / 6);
+      }
+    } else if (gto && m.pulses === 0) {
+      const start = mix.startHz ?? 180;
+      fc = start * (1 + 1.5 * smooth((kmh / firstSwitch - .25) / .75));
+    } else if (m.pulses === 0) fc = legacy ? 1000 + 200 * Math.min(1, kmh / 25) : 220 + 330 * smooth(kmh / 25);
     else fc = m.pulses * f;
 
     const jumped = mi !== modeIdx;
@@ -143,16 +183,22 @@ export function createVvvf(core: AudioCore, dest: AudioNode = core.run, getSound
     setF(carrier2.frequency, Math.max(40, fc * 2));
     setF(hissBp.frequency, Math.max(200, fc));
     setF(mod2f.frequency, 2 * f);
+    setF(mod4f.frequency, 4 * f);
+    outerDepth.gain.setTargetAtTime(sound === 'nankai-9000' && !m.pulses ? .24 * (mix.sideband ?? 1) : 0, now, .04);
+    octave.gain.setTargetAtTime(sound === 'nankai-1000' && !m.pulses ? .65 * (mix.carrier ?? 1) : 0, now, .04);
     setF(modF.frequency, f);
     setF(motor.frequency, f);
     setF(hum.frequency, f);
 
     // 各層の配分: 1パルスはキャリア無し・電動機音主体
-    const carrierLevel = one ? 0 : m.pulses === 3 ? .55 : m.pulses === 5 ? .75 : 1;
+    const wideThree = m.wide || (gto && mi === 5);
+    const progress = wideThree ? (position - limit(mi - 1) - hyst) / (limit(mi) - limit(mi - 1)) : 0;
+    const carrierLevel = one ? 0 : wideThree ? .55 - .34 * smooth(progress)
+      : m.pulses === 3 ? .55 : m.pulses === 5 ? .75 : 1;
     carrierMix.gain.setTargetAtTime(carrierLevel * (legacy ? 1 : .62 + .38 * smooth(kmh / 18)), now, legacy ? .01 : .05);
-    hissG.gain.setTargetAtTime((one ? .02 : .1) * (legacy ? 1 : .6), now, .05);
+    hissG.gain.setTargetAtTime((one ? .02 : .1) * (legacy ? 1 : gto ? .35 : .6) * (mix.hiss ?? 1), now, .05);
     const motorLevel = one ? .55 : m.pulses && m.pulses <= 5 ? .3 : .12 * Math.min(1, kmh / 15);
-    motorG.gain.setTargetAtTime(legacy ? motorLevel : motorLevel + .12 * smooth(kmh / 12), now, .05);
+    motorG.gain.setTargetAtTime((legacy ? motorLevel : motorLevel + .12 * smooth(kmh / 12)) * (mix.motor ?? 1), now, .05);
 
     // 全体音量: トルク依存。高速域（定出力域）では電流が減って少し静かに
     const speedShape = .55 + .45 * Math.min(1, kmh / 30);
@@ -167,16 +213,12 @@ export function createVvvf(core: AudioCore, dest: AudioNode = core.run, getSound
     active = on;
 
     // 歯車音: 速度依存＋トルクで増える
-    const gf = GEAR_RATIO * kmh * HZ_PER_KMH;
-    gear.frequency.setTargetAtTime(Math.max(20, gf), now, .03);
-    gearBp.frequency.setTargetAtTime(Math.max(20, gf), now, .03);
-    const gv = kmh < 3 ? 0 : .018 * Math.min(1, kmh / 60) * (1 + 1.2 * tq);
-    gearOut.gain.setTargetAtTime(gv, now, .08);
+    gear.update(v, notch, mix.gear ?? 1);
   }
 
   return {
     update,
-    silence() { const now = ac.currentTime; out.gain.cancelScheduledValues(now); out.gain.setTargetAtTime(0, now, .05); gearOut.gain.setTargetAtTime(0, now, .05); active = false; },
-    get mode() { const m = MODES[modeIdx]; return m.pulses === 0 ? 'async' : m.pulses + 'P'; },
+    silence() { const now = ac.currentTime; out.gain.cancelScheduledValues(now); out.gain.setTargetAtTime(0, now, .05); gear.silence(); active = false; },
+    get mode() { const m = modes[modeIdx]; return m.wide ? 'wide3P' : m.pulses === 0 ? 'async' : m.pulses + 'P'; },
   };
 }

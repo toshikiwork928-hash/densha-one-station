@@ -7,6 +7,7 @@ import { departureTime } from '../game/state';
 import { destOf, serviceOf, unitsLabel } from '../route/service';
 import { drawMeter } from './meter';
 import { terminalSpeedLimit } from '../game/terminal-ats';
+import { timetablePace } from '../game/timetable-pace';
 
 const fmtHM = (sec: number) => fmtClock(sec);
 
@@ -159,6 +160,8 @@ export function attachHud(ctx: GameContext): void {
     const ahead = route.limits.find(L => L.from > s && L.from - s < 1200 && L.kmh < (cur?.kmh ?? route.lineLimit));
     if (ahead && (!cur || ahead.from < cur.to)) nxt = `<b>この先 ${Math.round(ahead.kmh)}</b> あと ${Math.round(ahead.from - s)}m`;
     else if (cur) nxt = `<b>${Math.round(cur.kmh)} 解除</b>まで ${Math.round(cur.to - s)}m`;
+    const pace = timetablePace(ctx);
+    if (pace != null) nxt = (nxt === '&nbsp;' ? '' : nxt + '<br>') + `定刻の目安 ${Math.round(pace)} km/h`;
     el.nextLimit.innerHTML = nxt;
     // 通過駅が手前にあればそこまでの距離を補助表示
     const p = nextPass();

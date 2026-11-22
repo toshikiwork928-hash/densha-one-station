@@ -19,7 +19,7 @@ const addUnique = <T>(base: T[], ...values: T[]): T[] => [...base, ...values.fil
 const sameUnits = (a: readonly number[], b: readonly number[]) => a.length === b.length && a.every((n, i) => n === b[i]);
 const originalKinds = new WeakMap<ServiceSpec, TrainKind[] | undefined>();
 const formationsFor = (svc: ServiceSpec, kind: TrainKind): number[][] =>
-  kind === 'commuter-1000' ? [[6]] : kind === 'commuter-9000' ? [[4, 4]]
+  kind === 'commuter-7100-restored' ? [[4]] : kind === 'commuter-1000' ? [[6]] : kind === 'commuter-9000' ? [[4, 4]]
     : (svc.formationOptions ?? [svc.units]).filter(u => u.length !== 1 || u[0] !== 6 || svc.id === 'limited');
 
 /** 路線側に書かれた候補へ、空港急行など共通生成される候補を補う。 */
@@ -32,6 +32,7 @@ export function playerVehicleOptions(svc: ServiceSpec): PlayerVehicleOptions {
     formations: [[4, 4]],
   };
   let kinds = [...(svc.kindOptions ?? [svc.kind])];
+  if (kinds.includes('commuter-old')) kinds = addUnique(kinds, 'commuter-7100-restored');
   const formations = formationsFor(svc, svc.kind);
   if (svc.id === 'local') kinds = addUnique(kinds, 'commuter-1000');
   if (svc.id === 'express' || svc.id === 'airport') {
@@ -66,7 +67,7 @@ export function applyPlayerVehicles(route: Route, selections: Partial<Record<Ser
       continue;
     }
     svc.kind = v.kind;
-    const fixed = v.kind === 'commuter-1000' ? [6] : v.kind === 'commuter-9000' ? [4, 4] : undefined;
+    const fixed = v.kind === 'commuter-7100-restored' ? [4] : v.kind === 'commuter-1000' ? [6] : v.kind === 'commuter-9000' ? [4, 4] : undefined;
     const formations = formationsFor(svc, v.kind);
     const units = fixed ?? formations.find(x => v.units ? sameUnits(x, v.units) : carsOf(x) === v.cars)
       ?? formations.find(x => sameUnits(x, svc.units)) ?? formations[0];

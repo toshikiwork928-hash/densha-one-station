@@ -9,12 +9,15 @@ import { through, throughUp } from '../src/route/routes/through';
 import { namba, nambaUp } from '../src/route/routes/namba';
 import { mountain, mountainUp } from '../src/route/routes/mountain';
 import { applyVehicles, applyService, serviceOf } from '../src/route/service';
+import { playerVehicleOptions } from '../src/route/player-vehicles';
 import { createState, resetState, type VehicleSel } from '../src/game/state';
 import { createGame } from '../src/game/loop';
 import { buildTrack } from '../src/route/track';
 import { EventBus } from '../src/core/events';
 import { createTrainEnv, TRAIN_PERF } from '../src/sim/train';
 import { createRng } from '../src/core/rng';
+import { front7169ForRoute } from '../src/route/vehicle-direction';
+import { pantographPositions } from '../src/world/trains/pantograph-layout';
 import type { Route, ServiceId, TrainKind } from '../src/route/types';
 import type { GameContext } from '../src/core/context';
 
@@ -43,6 +46,31 @@ function operation(route: Route) {
   };
 }
 let cases = 0;
+// 車体が反転する最後尾を含め、難波方から見た実装上の配置を検査する。
+const roofCases: [TrainKind, string][] = [
+  ['commuter-old', 'N--N'], ['commuter-old', 'N-'], ['commuter-7100-restored', 'N--N'],
+  ['commuter-new', 'S--N'], ['commuter-new', '-B'], ['commuter-6300', 'N-N--N'],
+  ['commuter-6300', 'N--N'], ['commuter-6300', 'N-'], ['commuter-1000', 'B-B---'],
+  ['commuter-2000', 'B-'], ['commuter-2000', 'B---'], ['commuter-2300', 'SS'],
+  ['commuter-9000', '-B--'], ['commuter-9000', '-B-B--'], ['southern-10000', 'B-B-'],
+  ['southern-12000', 'S--N'], ['limited-30000', 'B-B-'], ['limited', '-B--B-'],
+];
+for (const [kind, layout] of roofCases) for (const nambaFirst of [true, false]) {
+  const observed = Array.from(layout, (_, nambaIndex) => {
+    const i = nambaFirst ? nambaIndex : layout.length - nambaIndex - 1;
+    const z = pantographPositions(kind, layout.length, i, nambaFirst, 19.5);
+    const ends = z.map(p => p * (i === layout.length - 1 ? -1 : 1) * (nambaFirst ? 1 : -1));
+    if (ends.length === 2) { assert.ok(ends[0] * ends[1] < 0); return 'B'; }
+    return !ends.length ? '-' : ends[0] < 0 ? 'N' : 'S';
+  }).join('');
+  assert.equal(observed, layout, kind);
+  cases++;
+}
+assert.equal(front7169ForRoute('shiokaze'), true, '泉大津→堺は難波方7169が先頭');
+assert.equal(front7169ForRoute('shiokaze-up'), false, '堺→泉大津は和歌山市方7170が先頭');
+assert.equal(front7169ForRoute('nankai-through'), true, '岸和田→堺は難波方7169が先頭');
+assert.equal(front7169ForRoute('nankai-through-up'), false, '堺→岸和田は和歌山市方7170が先頭');
+cases += 4;
 const coastal = [shiokaze, shiokazeUp, kishiwada, kishiwadaUp, through, throughUp, namba, nambaUp];
 for (const source of [...coastal, mountain, mountainUp]) {
   for (const spec of source.services ?? []) {
@@ -114,6 +142,28 @@ for (const source of coastal) {
   });
   assert.deepEqual(serviceOf(invalid.route, 'southern')!.units, [4, 4]);
   assert.ok(!serviceOf(invalid.route, 'southern')!.unitKinds!.includes('commuter-old'));
+  cases++;
+}
+// 7169編成の専用回帰: 選択候補、4両固定、保存復元、通常7100系同等性能を確認する。
+for (const source of coastal) {
+  const spec = source.services?.find(s => s.id === 'local' || s.id === 'express');
+  if (!spec || context(source, spec.id).state.sel.service !== spec.id) continue;
+  const options = playerVehicleOptions(spec);
+  assert.ok(options.kinds.includes('commuter-7100-restored'), `${source.id}/${spec.id} 復元塗装を選択可能`);
+  const chosen = context(source, spec.id, { [spec.id]: { kind: 'commuter-7100-restored', units: [6] } });
+  createGame(chosen); const chosenService = serviceOf(chosen.route, spec.id)!;
+  assert.equal(chosenService.kind, 'commuter-7100-restored');
+  assert.deepEqual(chosenService.units, [4], '復元塗装は4両固定');
+  assert.equal(chosenService.cars, 4);
+  assert.equal(chosen.route.trainLength, 80);
+  assert.equal(chosen.trainEnv.perf!.a0, TRAIN_PERF['commuter-old'].a0, '通常7100系と同じ加速度');
+  assert.equal(chosen.trainEnv.perf!.vMax, TRAIN_PERF['commuter-old'].vMax, '通常7100系と同じ最高速度');
+  const saved = JSON.parse(JSON.stringify(chosen.state.sel.vehicles));
+  const restored = context(source, spec.id, saved); createGame(restored); const restoredService = serviceOf(restored.route, spec.id)!;
+  assert.equal(restoredService.kind, 'commuter-7100-restored', '復元塗装の保存復元');
+  assert.deepEqual(restoredService.units, [4]);
+  resetState(restored.state, restored.route);
+  assert.deepEqual(serviceOf(restored.route, spec.id)!.units, [4], '復元塗装のリセット後も4両固定');
   cases++;
 }
 console.log(`追加車両・保存・方向別併結・既存運行 ${cases} ケース合格`);

@@ -46,7 +46,7 @@ const approachSigns = (stopS: number): Sign[] => [
   { kind: 'stopMarker', s: stopS - 20, cars: 4 }, { kind: 'stopMarker', s: stopS, cars: 6 }, { kind: 'stopMarker', s: stopS, cars: 8 },
 ];
 
-/** 曲線制限（ゲーム用）。半径 R の円弧は 3.8√R km/h（カント＋カント不足量 170mm 相当）を 5 の倍数に切り下げ、線区最高速度（普通 90）に満たないものだけ置く。
+/** 曲線制限（ゲーム用）。半径 R の円弧は 3.8√R km/h（カント＋カント不足量 170mm 相当）を 5 の倍数に切り下げ、本線の上限 110km/h 未満を登録する。
  *  south.json の円弧は実際の曲線ではない（概形）ので、実際の制限速度とは一致しない */
 const TRAIN_LEN = 120;
 const curveKmh = (R: number) => Math.floor(3.8 * Math.sqrt(R) / 5) * 5;
@@ -55,7 +55,7 @@ const limits: SpeedLimit[] = (() => {
   let s = 0;
   for (const g of MW_SEGMENTS) {
     const len = g.type === 'straight' ? g.length : g.radius * g.angle;
-    if (g.type === 'arc' && curveKmh(g.radius) < 90) out.push({ from: Math.round(s), to: Math.round(s + len) + TRAIN_LEN, kmh: curveKmh(g.radius), label: '曲線制限' });
+    if (g.type === 'arc' && curveKmh(g.radius) < 110) out.push({ from: Math.round(s), to: Math.round(s + len) + TRAIN_LEN, kmh: curveKmh(g.radius), label: '曲線制限' });
     s += len;
   }
   // 和歌山市〜和歌山港（和歌山港線）の最高速度は不明。ゲーム用の仮値 80km/h（和歌山市のホームの先から終端まで）
@@ -119,11 +119,18 @@ export const misakiWakayamako: Route = {
   scenery: { cityZones: [{ from: 11700, to: 13300 }] },
   // 対向列車は実ダイヤの時刻付き共通運行（data/oncoming-timetable.json）。和歌山港線（単線）内の対向列車は出さない（scripts/oncoming-meets.ts が和歌山市より先の点を落とす）
   oncoming: [], signals, crossings,
-  // トンネル3本は south.json の OSM のトンネル（第一孝子越隧道・第二貴志隧道・第三貴志隧道に数が一致、どれがどれかは未確認）。橋は紀ノ川橋梁（推定）と小さな橋1つ。
+  // 河岸の位置は沿線の水面データに合わせる。短い桁の長さはゲーム用の概形。
   // 最後の south.json の橋（32645〜32868、223m）は和歌山港のホーム（32820〜）と重なるため、川の橋でなく築堤・高架の取り付きと判断して viaduct にした（実際は不明）
   structures: [
-    ...MW_STRUCTURES.filter(x => !(x.kind === 'bridge' && x.from === 14925)),
-    { kind: 'viaduct', from: 14925, to: 15365 },
+    ...MW_STRUCTURES.filter(x => x.kind === 'tunnel' || x.from === 10873),
+    { kind: 'bridge', from: 1760, to: 1777 },   // 棟合川
+    { kind: 'bridge', from: 1990, to: 2010 },   // 大川
+    { kind: 'bridge', from: 3401, to: 3425 },   // 柳池川
+    { kind: 'bridge', from: 4248, to: 4278 },   // 大川
+    { kind: 'bridge', from: 4634, to: 4659 },   // 大川
+    { kind: 'bridge', from: 12817, to: 12915 }, // 市堀川
+    { kind: 'bridge', from: 13720, to: 13828 },
+    { kind: 'viaduct', from: 14850, to: 15365 },
   ],
   relief: MW_RELIEF, // 周囲の山（国土地理院の標高）
   // みさき公園〜和歌山大学前は、ほぼ山あいで建物がほとんど無い（ユーザー指摘）。線路際まで山を広げ、OSM に無い所へ家を補わない。駅の前後 250m は除く

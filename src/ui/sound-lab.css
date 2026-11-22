@@ -1,0 +1,39 @@
+:root { color-scheme: dark; font-family: "Yu Gothic UI", Meiryo, sans-serif; color: #edf2ef; background: #14201f; accent-color: #83d6bb; }
+* { box-sizing: border-box; }
+a { color: #a2dec2; }
+body { margin: 0; }
+main { max-width: 780px; margin: auto; padding: clamp(14px, 4vw, 40px); }
+h1, h2, p { margin: 0; }
+h1 { font-size: clamp(1.5rem, 5vw, 2rem); letter-spacing: .04em; }
+h2 { font-size: 1.08rem; }
+header, .section-title, .transport, .actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+header, .section-title { justify-content: space-between; }
+header { padding-bottom: 20px; }
+section { padding: 18px 0; border-top: 1px solid #3d514c; }
+button, select { font: inherit; border: 1px solid #53685f; color: inherit; background: #23332e; border-radius: 6px; padding: 7px 12px; }
+button { cursor: pointer; }
+button:disabled { opacity: .55; cursor: wait; }
+button:hover:not(:disabled), select:hover { border-color: #a1c6b5; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #b4efcf; outline-offset: 3px; }
+button.primary, button[aria-pressed="true"] { background: #a2dec2; color: #10271d; border-color: #a2dec2; }
+.transport, .actions { margin-top: 10px; }
+.fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 134px), 1fr)); gap: 8px; margin-top: 8px; }
+.field { display: grid; gap: 4px; color: #c0cec6; font-size: .85rem; }
+select { min-width: 0; width: 100%; color: #edf2ef; }
+.speed { display: flex; justify-content: space-between; align-items: baseline; margin-top: 16px; }
+input[type=range] { display: block; width: 100%; height: 25px; margin: 0; }
+output { font-variant-numeric: tabular-nums; }
+#state, p, .percent { color: #becdc4; font-size: .85rem; }
+#layers { margin-top: 6px; }
+.layer { display: grid; grid-template-columns: minmax(7em,1fr) minmax(80px,1.3fr) 3em auto auto; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid #33463e; }
+.layer button, #clear-solo { font-size: .8rem; padding: 5px 9px; }
+.percent { text-align: right; font-variant-numeric: tabular-nums; }
+section p { margin-top: 8px; }
+[hidden] { display: none !important; }
+@media (max-width: 460px) {
+  header { align-items: start; }
+  header .field { width: 100%; }
+  .layer { grid-template-columns: 1fr auto auto auto; }
+  .layer input { grid-column: 1/-1; grid-row: 2; }
+  .layer .percent { min-width: 3em; }
+}

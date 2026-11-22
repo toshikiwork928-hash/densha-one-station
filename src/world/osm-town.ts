@@ -47,10 +47,18 @@ export interface OsmData {
 export type WaterMask = (s: number, lat: number, margin?: number) => boolean;
 
 export function waterMaskOf(data: OsmData | null): WaterMask | null {
-  const areas = data?.areas.filter(a => a[0] === 'water')
-    .map(a => (a[1] as number[]).slice()) ?? [];
+  const areas = data?.areas.filter(a => a[0] === 'water').map(a => {
+    const points = a[1] as number[];
+    let s0 = Infinity, s1 = -Infinity, l0 = Infinity, l1 = -Infinity;
+    for (let i = 0; i < points.length; i += 2) {
+      s0 = Math.min(s0, points[i]); s1 = Math.max(s1, points[i]);
+      l0 = Math.min(l0, points[i + 1]); l1 = Math.max(l1, points[i + 1]);
+    }
+    return { points, s0, s1, l0, l1 };
+  }) ?? [];
   if (!areas.length) return null;
-  return (s, lat, margin = 0) => areas.some(p => {
+  return (s, lat, margin = 0) => areas.some(({ points: p, s0, s1, l0, l1 }) => {
+    if (s < s0 - margin || s > s1 + margin || lat < l0 - margin || lat > l1 + margin) return false;
     let inside = false, near = false;
     for (let i = 0, j = p.length - 2; i < p.length; j = i, i += 2) {
       const dx = p[j] - p[i], dy = p[j + 1] - p[i + 1];
@@ -71,7 +79,6 @@ const DATASETS: { id: string; base: Route; load: () => Promise<OsmData>; /** 水
   { id: 'sakai-izumiotsu', base: shiokaze, load: async () => (await import('../data/osm/sakai-izumiotsu.json')).default as unknown as OsmData },
   { id: 'izumiotsu-kishiwada', base: kishiwada, load: async () => (await import('../data/osm/izumiotsu-kishiwada.json')).default as unknown as OsmData },
   { id: 'kishiwada-izumisano', base: izumisano, load: async () => (await import('../data/osm/kishiwada-izumisano.json')).default as unknown as OsmData },
-  // みさき公園〜和歌山港: OSM の水面データが無いので、紀ノ川橋梁の下の水面を手で作ったデータ（建物・道路は無い。街並みは手続き生成）
   { id: 'misaki-wakayamako', base: misakiWakayamako, load: async () => (await import('../data/osm/misaki-wakayamako.json')).default as unknown as OsmData },
   { id: 'izumisano-misaki', base: izumisanoMisaki, load: async () => (await import('../data/osm/izumisano-misaki.json')).default as unknown as OsmData },
 ];
@@ -475,8 +482,31 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
     return { type: x[0] as string, pts, s0, s1, l0, l1 };
   });
   const inArea = (ps: number, pl: number, types?: Set<string>) => polys.some(q => (!types || types.has(q.type)) && ps >= q.s0 && ps <= q.s1 && pl >= q.l0 && pl <= q.l1 && inPolyF(q.pts, ps, pl));
-  const WATER = new Set(['water']);
   const NOFILL = new Set(['water', 'park', 'wood', 'grass', 'pitch', 'school', 'grave', 'shrine', 'lot']);
+  const waterPolys = polys.filter(q => q.type === 'water');
+  // 建物・樹木の中心だけでなく、足元の外接矩形が水面に入る場合も除外する。
+  // OSM の川は細長い面が多く、中心や四隅だけの判定では面を横切る建物を取りこぼす。
+  const waterFootprint = (s: number, l: number, hs: number, hl: number) => {
+    const s0 = s - hs, s1 = s + hs, l0 = l - hl, l1 = l + hl;
+    const cross = (ax: number, ay: number, bx: number, by: number, cx: number, cy: number, dx: number, dy: number) => {
+      if (Math.max(ax, bx) < Math.min(cx, dx) || Math.min(ax, bx) > Math.max(cx, dx) || Math.max(ay, by) < Math.min(cy, dy) || Math.min(ay, by) > Math.max(cy, dy)) return false;
+      const ab = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax), ad = (bx - ax) * (dy - ay) - (by - ay) * (dx - ax);
+      const cd = (dx - cx) * (ay - cy) - (dy - cy) * (ax - cx), cb = (dx - cx) * (by - cy) - (dy - cy) * (bx - cx);
+      return ab * ad <= 0 && cd * cb <= 0;
+    };
+    return waterPolys.some(q => {
+      if (s1 < q.s0 || s0 > q.s1 || l1 < q.l0 || l0 > q.l1) return false;
+      if (inPolyF(q.pts, s, l) || inPolyF(q.pts, s0, l0) || inPolyF(q.pts, s0, l1) || inPolyF(q.pts, s1, l0) || inPolyF(q.pts, s1, l1)) return true;
+      // 水面の頂点が矩形内にある場合に加え、矩形の辺を水面の辺が貫く場合も拾う。
+      for (let i = 0; i < q.pts.length; i += 2) if (q.pts[i] >= s0 && q.pts[i] <= s1 && q.pts[i + 1] >= l0 && q.pts[i + 1] <= l1) return true;
+      for (let i = 0, j = q.pts.length - 2; i < q.pts.length; j = i, i += 2) {
+        const ax = q.pts[j], ay = q.pts[j + 1], bx = q.pts[i], by = q.pts[i + 1];
+        if (cross(ax, ay, bx, by, s0, l0, s1, l0) || cross(ax, ay, bx, by, s1, l0, s1, l1) ||
+            cross(ax, ay, bx, by, s1, l1, s0, l1) || cross(ax, ay, bx, by, s0, l1, s0, l0)) return true;
+      }
+      return false;
+    });
+  };
 
   // ================= 建物 =================
   const roadNear0 = buildRoadIndex(data), onRoad = buildRoadSegIndex(data);
@@ -502,7 +532,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
     if (nearLine(s - hs, s + hs, lat - hl, lat + hl)) return false;
     if (inReserved(s - half, s + half, lat - half, lat + half)) return false; // 専用モジュールの敷地（駅ビル・車庫・商業施設）
     if (blocked(s - half, s + half, lat - half, lat + half, g)) return false;
-    if (nearRiver(s, lat, hs, hl) || inArea(s, lat, WATER)) return false; // 川・池の上
+    if (nearRiver(s, lat, hs, hl) || waterFootprint(s, lat, hs, hl)) return false; // 川・池の上
     if (underNear(s, lat, Math.max(hs, hl) + 2)) return false; // 線路をくぐる道路の掘り下げ
     if (half < 12 && roadNear0(s, lat)) return false; // 写し方のずれで道路に載った小さな建物
     // 外形が道路の帯（描く幅）に多くかかる建物（写し方のずれ・外接長方形の張り出し・細長い長屋が道路にかかる）。小さな建物は 15%、大きな建物は 30% を超えたら置かない
@@ -556,7 +586,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
     for (const q of polys) {
       if (q.type !== 'lot' || nCar > 2500) continue;
       for (let s = q.s0 + 3; s < q.s1 - 2; s += 2.8) for (let l = q.l0 + 4; l < q.l1 - 3; l += 6.5) {
-        if (crnd() < .38 || !inPolyF(q.pts, s, l) || gap(s, l) < 8 || gap(s, l) > 180 || inReserved(s - 2, s + 2, l - 3, l + 3) || nearLine(s - 2, s + 2, l - 3, l + 3) || roadNear0(s, l) || underNear(s, l, 3)) continue;
+        if (crnd() < .38 || !inPolyF(q.pts, s, l) || gap(s, l) < 8 || gap(s, l) > 180 || inReserved(s - 2, s + 2, l - 3, l + 3) || nearLine(s - 2, s + 2, l - 3, l + 3) || waterFootprint(s, l, .9, 2.2) || roadNear0(s, l) || underNear(s, l, 3)) continue;
         const p = track.at(s, l, 0), t = track.trackAt(s), b = K.chunks.at(s); b.parent = null;
         const col = CAR[Math.floor(crnd() * CAR.length)], yaw = -t.phi; // 長さ（局所 x）を線路に直角に
         b.add('body', P.boxB, M(p.x, ground(s) + .15, p.z, yaw, 4.3, .8, 1.7), col);
@@ -888,7 +918,6 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
   let nT = 0;
   const TREE_MAX = Math.min(TREE_CAP, Math.round((S1 - S0) / 1000 * TREE_PER_KM));
   const roadNear = buildRoadIndex(data);
-  const waters = data.areas.filter(a => a[0] === 'water').map(a => a[1] as number[]);
   const reservedAt = (s: number, l: number) => reserved.some(z => s > z.from && s < z.to && l > z.lat0 && l < z.lat1);
   // 森を先に（浜寺公園の松林など）、次に社寺・公園・墓地
   const order: Record<string, number> = { wood: 0, shrine: 1, park: 2, grave: 3 };
@@ -902,7 +931,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
     for (let s = s0 + sp / 2; s < s1; s += sp) for (let l = l0 + sp / 2; l < l1; l += sp) {
       if (nT >= TREE_MAX) break;
       const ss = s + (rnd() - .5) * sp * .8, ll = l + (rnd() - .5) * sp * .8;
-      if (!inPoly(pts, ss, ll) || gap(ss, ll) < 9 || roadNear(ss, ll) || reservedAt(ss, ll) || waters.some(w => inPoly(w, ss, ll)) || T.riverNear(clampS(ss), ll, 3) || underHill(ss, ll) || inSea(ss, ll, 4) || underNear(ss, ll, 3)) continue;
+      if (!inPoly(pts, ss, ll) || gap(ss, ll) < 9 || roadNear(ss, ll) || reservedAt(ss, ll) || waterFootprint(ss, ll, 2, 2) || T.riverNear(clampS(ss), ll, 3) || underHill(ss, ll) || inSea(ss, ll, 4) || underNear(ss, ll, 3)) continue;
       if (type === 'park' && rnd() < (big ? .15 : .35)) continue; // 公園は広場を残す
       const [rs, rl] = toReal(ss, ll);
       trees.push({ s: rs, lat: rl, y: ground(ss) + T.reliefY(ss, ll), k: type === 'wood' || type === 'shrine' || big ? 1.05 + rnd() * .5 : .8 + rnd() * .4 });
@@ -941,7 +970,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
         const ss = s0 + (s1 - s0) * u / L, ll = l0 + (l1 - l0) * u / L, ns = -(l1 - l0) / L, nl = (s1 - s0) / L;
         for (const side of [-1, 1]) {
           const ts = ss + ns * side * (w / 2 + 1.2), tl = ll + nl * side * (w / 2 + 1.2);
-          if (gap(ts, tl) < 40 || underHill(ts, tl) || inSea(ts, tl, 4) || rnd() < .3 || T.riverNear(clampS(ts), tl, 4) || underNear(ts, tl, 3)) continue;
+          if (gap(ts, tl) < 40 || underHill(ts, tl) || inSea(ts, tl, 4) || rnd() < .3 || waterFootprint(ts, tl, 2, 2) || T.riverNear(clampS(ts), tl, 4) || underNear(ts, tl, 3)) continue;
           const [rs, rl] = toReal(ts, tl);
           trees.push({ s: rs, lat: rl, y: ground(ts) + T.reliefY(ts, tl), k: .7 + rnd() * .25 }); nT++;
         }

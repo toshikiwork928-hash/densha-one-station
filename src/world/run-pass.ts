@@ -1,3 +1,4 @@
+import { front7169ForRoute } from '../route/vehicle-direction';
 // 複々線の走行中の追い越し（ServiceSpec.runPasses、時間帯のパターン）。描画のみで、信号・時刻には関わらない。
 //   自列車が普通: from 駅を出たあと（from = to なら to 駅に止まっている間に）、隣の急行線を後続の優等列車が追い抜いていく
 //   自列車が優等（同じ格）: from 駅に止まっている普通が自列車の手前で発車し、隣の緩行線で追い抜かれる（from = to なら to 駅に止まっている）
@@ -22,7 +23,7 @@ export function createRunPasses(ctx: GameContext): void {
   const done = new Set<string>();
   const pa = new THREE.Vector3(), pb = new THREE.Vector3();
   const make = (pass: RunPass, svc: ServiceSpec, mode: Actor['mode'], head: number, v: number, stage: Actor['stage']): Actor => {
-    const cars = createTrainSet(svc.kind, svc.cars, ctx.renderer, { dest: destOf(route, svc), label: svc.name, units: svc.units, unitKinds: svc.unitKinds });
+    const cars = createTrainSet(svc.kind, svc.cars, ctx.renderer, { nambaFirst: front7169ForRoute(route.id), dest: destOf(route, svc), label: svc.name, units: svc.units, unitKinds: svc.unitKinds });
     const group = new THREE.Group(); group.name = 'overtake-runpass';
     for (const c of cars) group.add(c.object);
     scene.add(group);

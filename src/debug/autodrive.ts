@@ -3,6 +3,7 @@
 import type { GameContext } from '../core/context';
 import type { ServiceId } from '../route/types';
 import { terminalSpeedLimit } from '../game/terminal-ats';
+import { timetablePace } from '../game/timetable-pace';
 
 export function attachAutodrive(ctx: GameContext, advance: (sec: number, dt?: number, hook?: () => boolean | void) => void): void {
   const st = ctx.state, route = ctx.route, track = ctx.track;
@@ -38,6 +39,8 @@ export function attachAutodrive(ctx: GameContext, advance: (sec: number, dt?: nu
     // 空気ブレーキの立ち上がり・制限曲線の下降を見越す。
     // ATS の非常制動閾値以内でも速度超過減点は発生するため、全路線で余裕を持つ。
     vAllow = Math.max(0, vAllow - .6);
+    const pace = timetablePace(ctx);
+    if (pace != null) vAllow = Math.min(vAllow, pace / 3.6);
     const v = tr.v;
     const predicted = v + Math.max(0, tr.acc - 9.81 * track.gradeAt(tr.s) / 1000) * .9;
     ctx.actions.setNotch(predicted > vAllow ? -Math.min(8, Math.max(1, Math.ceil((predicted - vAllow) * 6 + 3))) : v > vAllow - .8 ? 0 : 5);

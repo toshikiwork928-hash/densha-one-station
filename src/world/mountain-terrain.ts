@@ -190,7 +190,9 @@ export function makeMountainTerrain(route: Route, track: Track): MountainTerrain
       dep = Math.max(dep, hb * smooth(1 - Math.max(Math.abs(s - c) - hl * .6, 0) / (hl * .9 + 40)));
     }
     dep += (Math.min(dep, 7) - dep) * tw;
-    dep += (6.5 - dep) * f;
+    // 平地の大河では、桁高6mの上路トラスの下に橋脚と水面の間隔を残す。
+    const lowlandDepth = 6.5 + 5.5 * smooth((wide - 50) / 80);
+    dep += (lowlandDepth - dep) * f;
     depArr[k] = dep;
     half[k] = Math.max(9 + 21 * f, wide);
     bw[k] = bridgeW(s);
@@ -330,7 +332,7 @@ export function makeMountainTerrain(route: Route, track: Track): MountainTerrain
     cutDepth: () => 0,
     underpasses: null,
     reliefY: () => 0,
-    riverNear: () => false,
+    riverNear: (s, lat, margin = 0) => Math.abs(lat - riverLat(s)) <= lerpTab(halfS, s) + 2.5 + margin,
     low: (s, m = .3) => self.groundY(s) < -m,
     riverAreaKeys: new Set<string>(),
     riverSpans: () => [],

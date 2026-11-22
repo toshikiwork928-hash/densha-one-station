@@ -29,41 +29,41 @@ export interface Running {
   silence(): void;
 }
 
-export function createRunning(core: AudioCore, getRoute: () => Route): Running {
+type TrackRoute = Pick<Route, 'segments' | 'structures'>;
+export function createRunning(core: AudioCore, getRoute: () => TrackRoute): Running {
   const { ac } = core;
-  const dest = core.run;
-
   // 転動音（低域のゴー）
   const roll = core.noiseSrc('brown');
   const rollLp = ac.createBiquadFilter(); rollLp.type = 'lowpass'; rollLp.frequency.value = 200; rollLp.Q.value = .7;
   const rollPk = ac.createBiquadFilter(); rollPk.type = 'peaking'; rollPk.frequency.value = 70; rollPk.gain.value = 6; rollPk.Q.value = 1;
   const rollG = ac.createGain(); rollG.gain.value = 0;
-  roll.connect(rollLp).connect(rollPk).connect(rollG).connect(dest);
+  roll.connect(rollLp).connect(rollPk).connect(rollG).connect(core.layers.roll);
   // レール面のザー（中高域）
   const rail = core.noiseSrc('pink');
   const railBp = ac.createBiquadFilter(); railBp.type = 'bandpass'; railBp.frequency.value = 900; railBp.Q.value = .6;
   const railG = ac.createGain(); railG.gain.value = 0;
-  rail.connect(railBp).connect(railG).connect(dest);
+  rail.connect(railBp).connect(railG).connect(core.layers.rail);
   // 風切り（速度の2乗）
   const wind = core.noiseSrc('pink');
   const windBp = ac.createBiquadFilter(); windBp.type = 'bandpass'; windBp.frequency.value = 600; windBp.Q.value = .5;
   const windG = ac.createGain(); windG.gain.value = 0;
-  wind.connect(windBp).connect(windG).connect(dest);
+  wind.connect(windBp).connect(windG).connect(core.layers.wind);
   // 橋梁・高架の空洞音
   const hollow = core.noiseSrc('brown');
   const hollowBp = ac.createBiquadFilter(); hollowBp.type = 'bandpass'; hollowBp.frequency.value = 95; hollowBp.Q.value = 2.5;
   const hollowG = ac.createGain(); hollowG.gain.value = 0;
-  hollow.connect(hollowBp).connect(hollowG).connect(dest);
-  // フランジ音（急曲線のキーー）
-  const sq1 = ac.createOscillator(); sq1.frequency.value = 3150;
-  const sq2 = ac.createOscillator(); sq2.frequency.value = 4720;
+  hollow.connect(hollowBp).connect(hollowG).connect(core.layers.bridge);
+  // 曲線のきしみは低めの金属音を主体にし、高い成分を薄く重ねる。
+  const squealHz = 780;
+  const sq1 = ac.createOscillator(); sq1.frequency.value = squealHz;
+  const sq2 = ac.createOscillator(); sq2.frequency.value = 1170;
   const sqG = ac.createGain(); sqG.gain.value = 0;
-  const sq2G = ac.createGain(); sq2G.gain.value = .5;
-  sq1.connect(sqG); sq2.connect(sq2G).connect(sqG); sqG.connect(dest);
+  const sq2G = ac.createGain(); sq2G.gain.value = .16;
+  sq1.connect(sqG); sq2.connect(sq2G).connect(sqG); sqG.connect(core.layers.flange);
   sq1.start(); sq2.start();
 
   // 曲線半径・構造物の参照表（路線が差し替わったら作り直す）
-  let cached: Route | null = null, curves: { from: number; to: number; r: number }[] = [], structs: NonNullable<Route['structures']> = [];
+  let cached: TrackRoute | null = null, curves: { from: number; to: number; r: number }[] = [], structs: NonNullable<Route['structures']> = [];
   const tables = () => {
     const route = getRoute();
     if (route === cached) return;
@@ -109,8 +109,8 @@ export function createRunning(core: AudioCore, getRoute: () => Route): Running {
     const target = r < 700 && kmh > 8 ? Math.min(1, (700 - r) / 400) * Math.min(1, (kmh - 8) / 25) : 0;
     squealLevel += (target - squealLevel) * .05;
     const flutter = target > 0 ? (Math.random() < .08 ? Math.random() : .35 + .3 * Math.sin(now * 3.1) * Math.sin(now * 1.7)) : 0;
-    sqG.gain.setTargetAtTime(.012 * squealLevel * Math.max(0, flutter), now, .06);
-    sq1.frequency.setTargetAtTime(3150 + 120 * Math.sin(now * .9), now, .2);
+    sqG.gain.setTargetAtTime(.005 * squealLevel * Math.max(0, flutter), now, .06);
+    sq1.frequency.setTargetAtTime(squealHz + 28 * Math.sin(now * .9), now, .2);
   }
 
   /** ガタン1発: 低い打撃＋金属的なカチ */
@@ -118,9 +118,9 @@ export function createRunning(core: AudioCore, getRoute: () => Route): Running {
     const o = ac.createOscillator(), g = ac.createGain();
     o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(55, t + .07);
     g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol * .9, t + .003); g.gain.exponentialRampToValueAtTime(.0001, t + .11);
-    o.connect(g).connect(dest); o.start(t); o.stop(t + .14);
-    core.burst(dest, { when: t, dur: .05 + .02 * Math.random(), vol: vol * .55, f: 1100 + kmh * 12, q: 1.1 });
-    core.burst(dest, { when: t, dur: .09, vol: vol * .5, f: 320, q: .9, kind: 'brown' });
+    o.connect(g).connect(core.layers.joint); o.start(t); o.stop(t + .14);
+    core.burst(core.layers.joint, { when: t, dur: .05 + .02 * Math.random(), vol: vol * .55, f: 1100 + kmh * 12, q: 1.1 });
+    core.burst(core.layers.joint, { when: t, dur: .09, vol: vol * .5, f: 320, q: .9, kind: 'brown' });
   }
 
   function joint(v: number, s: number, jointS: number) {

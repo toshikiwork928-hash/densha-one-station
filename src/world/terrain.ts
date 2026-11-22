@@ -42,6 +42,7 @@ export interface Terrain {
   riverSpans(): [number, number][];
   /** 川の溝の lat の範囲（OSM の水面。無ければ null） */
   riverLatRange(): [number, number] | null;
+  narrowRiverSpans?(): [number, number][];
   /** 地面が低い所か（川の溝など。建物・道路・木を置かない判定）。m [m] を超えて低いとき true。
    *  既定は地面の高さ 0 を基準に -m より低い所。groundFollowsTrack のコースは線路の高さに沿う地面を基準に、橋の下の溝が m より深い所 */
   low(s: number, m?: number): boolean;
@@ -68,6 +69,8 @@ export function getTerrain(ctx: GameContext): Terrain {
 function makeTerrain(route: Route, track: Track): Terrain {
   const structs = route.structures ?? [];
   const tunnels = structs.filter(s => s.kind === 'tunnel'), bridges = structs.filter(s => s.kind === 'bridge');
+  // 高架下の河川も対象にする。橋だけに限定すると、連続高架区間の水面で線路が直置きに見える。
+  const riverStructures = structs.filter(s => s.kind === 'bridge' || s.kind === 'viaduct');
   const trackY = (s: number) => track.trackAt(s).y;
   const tunnelW = (s: number) => {
     let w = 0;
@@ -77,9 +80,9 @@ function makeTerrain(route: Route, track: Track): Terrain {
     }
     return w;
   };
-  const riverDip = (s: number) => {
+  const riverDip = (s: number, spans = bridges) => {
     let d = 0;
-    for (const b of bridges) {
+    for (const b of spans) {
       const c = (b.from + b.to) / 2, half = (b.to - b.from) / 2;
       d = Math.max(d, 6 * smooth((half * .85 - Math.abs(s - c)) / (half * .4)));
     }
@@ -108,13 +111,18 @@ function makeTerrain(route: Route, track: Track): Terrain {
   // OSM の水面に沿った溝。沿線データはコース読み込み後に使える（loadOsmFor）ので、最初に使えるようになった時に作って持ち続ける
   //（releaseOsmData の後も使う）。読み込み前に呼ばれた時は溝なしを返し、確定しない
   let river: RiverField | null | undefined;
+  let unmappedBridges = bridges;
   const getRiver = (): RiverField | null => {
-    if (river === undefined && osmReady(route)) river = makeRiverField(osmFor(route), bridges);
+    if (river === undefined && osmReady(route)) {
+      river = makeRiverField(osmFor(route), riverStructures, route.tracks);
+      unmappedBridges = bridges.filter(span => !river?.crossedSpans.has(span.from));
+    }
     return river ?? null;
   };
   /** 橋の下の溝（まっすぐ）: 線路の帯とその両側 6m は橋の範囲の溝のまま、そこから 16m で消える */
   const stubDepth = (s: number, lat: number) => {
-    const d = riverDip(s);
+    getRiver();
+    const d = riverDip(s, unmappedBridges);
     if (d <= 0) return 0;
     const [lo, hi] = trackSpan(route, s, 30), out = lat < lo ? lo - lat : lat > hi ? lat - hi : 0;
     return d * (1 - smooth((out - 6) / 16));
@@ -198,6 +206,7 @@ function makeTerrain(route: Route, track: Track): Terrain {
       return out;
     },
     riverLatRange: () => getRiver()?.lat ?? null,
+    narrowRiverSpans: () => getRiver()?.narrowCrossings ?? [],
     structureAt: (s, m = 0) => structs.find(t => s >= t.from - m && s <= t.to + m),
     riverAt: (s) => {
       for (const b of bridges) {
@@ -258,28 +267,23 @@ export function gridAlong(track: Track, s0: number, s1: number, step: number, co
  * 地面が水面より高い所は地面が面を隠すので、岸の線は地面の形（溝）で決まる
  */
 export function waterAlong(track: Track, s0: number, s1: number, step: number, cols: (s: number) => [number, number][],
-  level: number, mat: THREE.Material, wetMask?: (s: number, lat: number) => boolean): THREE.Mesh | null {
+  levelAt: (s: number) => number, mat: THREE.Material, wetMask: (s: number, lat: number) => boolean): THREE.Mesh | null {
   const n = Math.max(2, Math.ceil((s1 - s0) / step) + 1);
-  const rows: { x: number; z: number; r: [number, number][] }[] = [];
-  for (let i = 0; i < n; i++) { const s = Math.min(s0 + i * step, s1), t = track.trackAt(s); rows.push({ x: t.x, z: t.z, r: cols(s) }); }
+  const rows = Array.from({ length: n }, (_, i) => {
+    const s = Math.min(s0 + i * step, s1), t = track.trackAt(s), level = levelAt(s), r = cols(s);
+    // 岸では地表が水面を隠す。道路の掘割だけが水準より低い頂点には水面を張らない。
+    const wet = r.map(([lat, y]) => y >= level ? 0 : wetMask(s, lat) ? 1 : -1);
+    return { ...t, level, r, wet };
+  });
   const m = rows[0].r.length, pos: number[] = [], idx: number[] = [];
-  const rxz = (i: number) => { const t = track.trackAt(Math.min(s0 + i * step, s1)); return [t.rx, t.rz]; };
   for (let i = 0; i < n - 1; i++) {
-    const [rx0, rz0] = rxz(i), [rx1, rz1] = rxz(i + 1);
-    for (let j = 1; j < m - 2; j++) { // 両端の列（遠方の縁）は水にしない
-      const sa = Math.min(s0 + i * step, s1);
-      const sb = Math.min(s0 + (i + 1) * step, s1);
-      if (wetMask && (
-        !wetMask(sa, rows[i].r[j][0]) ||
-        !wetMask(sa, rows[i].r[j + 1][0]) ||
-        !wetMask(sb, rows[i + 1].r[j][0]) ||
-        !wetMask(sb, rows[i + 1].r[j + 1][0])
-      )) continue;
-      const lo = Math.min(rows[i].r[j][1], rows[i].r[j + 1][1], rows[i + 1].r[j][1], rows[i + 1].r[j + 1][1]);
-      if (lo >= level) continue;
-      const A = rows[i], B = rows[i + 1], k = pos.length / 3;
-      pos.push(A.x + rx0 * A.r[j][0], level, A.z + rz0 * A.r[j][0], A.x + rx0 * A.r[j + 1][0], level, A.z + rz0 * A.r[j + 1][0],
-        B.x + rx1 * B.r[j][0], level, B.z + rz1 * B.r[j][0], B.x + rx1 * B.r[j + 1][0], level, B.z + rz1 * B.r[j + 1][0]);
+    const A = rows[i], B = rows[i + 1];
+    for (let j = 1; j < m - 2; j++) {
+      const a = A.wet[j], b = A.wet[j + 1], c = B.wet[j], d = B.wet[j + 1];
+      if (Math.min(a, b, c, d) < 0 || Math.max(a, b, c, d) === 0) continue;
+      const k = pos.length / 3;
+      pos.push(A.x + A.rx * A.r[j][0], A.level, A.z + A.rz * A.r[j][0], A.x + A.rx * A.r[j + 1][0], A.level, A.z + A.rz * A.r[j + 1][0],
+        B.x + B.rx * B.r[j][0], B.level, B.z + B.rz * B.r[j][0], B.x + B.rx * B.r[j + 1][0], B.level, B.z + B.rz * B.r[j + 1][0]);
       // 頂点 k = (i, j), k+1 = (i, j+1), k+2 = (i+1, j), k+3 = (i+1, j+1)。上向きの面にそろえる
       const ux = pos[(k + 2) * 3] - pos[k * 3], uz = pos[(k + 2) * 3 + 2] - pos[k * 3 + 2], vx = pos[(k + 1) * 3] - pos[k * 3], vz = pos[(k + 1) * 3 + 2] - pos[k * 3 + 2];
       if (uz * vx - ux * vz >= 0) idx.push(k, k + 2, k + 1, k + 1, k + 2, k + 3); else idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2);
@@ -333,6 +337,7 @@ export function buildTerrain(ctx: GameContext): Terrain {
   };
   const denseLat = denseLatOf(null);
   const unders = T.underpasses?.list ?? [];
+  const narrow = T.narrowRiverSpans?.() ?? [];
   const mud = new THREE.Color(0x6f6a55);
   const denseCols = (rowDip: number[], lats = denseLat) => (s: number): [number, number][] => {
     const k = T.curvature(s), R = Math.abs(k) > 1e-5 ? 1 / Math.abs(k) : 1e9;
@@ -350,16 +355,15 @@ export function buildTerrain(ctx: GameContext): Terrain {
   const river = new THREE.MeshPhongMaterial({ color: 0x3c6577, shininess: 90, specular: 0x8899aa });
   /** 区間 [a, b] を、川の範囲の内側（細かい格子）と外側（従来の格子）に分けて作る */
   const buildGround = (a: number, b: number) => {
-    const pieces: [number, number, boolean, number][] = [];
+    const pieces: [number, number, boolean][] = [];
     let at = a;
     for (const [x0, x1] of spans) {
       if (x1 <= at || x0 >= b) continue;
-      if (x0 > at) pieces.push([at, x0, false, RIVER_WATER]);
-      // 水面の高さ: 地面が線路の高さに沿うコースは、川の範囲の中央の地面（橋の前後の地面）より 3.6m 低い。川は1本の平らな水面にするので、区間を分けても同じ高さ
-      pieces.push([Math.max(at, x0), Math.min(b, x1), true, follow ? T.dryY((x0 + x1) / 2) + RIVER_WATER : RIVER_WATER]); at = Math.min(b, x1);
+      if (x0 > at) pieces.push([at, x0, false]);
+      pieces.push([Math.max(at, x0), Math.min(b, x1), true]); at = Math.min(b, x1);
     }
-    if (at < b) pieces.push([at, b, false, RIVER_WATER]);
-    for (const [p0, p1, dense, waterY] of pieces) {
+    if (at < b) pieces.push([at, b, false]);
+    for (const [p0, p1, dense] of pieces) {
       if (p1 - p0 < .5) continue;
       if (!dense) {
         const g = gridAlong(track, p0, p1, 10, cols, groundMat, (q, j, out) => {
@@ -382,14 +386,15 @@ export function buildTerrain(ctx: GameContext): Terrain {
         if (b - a < .5) continue;
         const lats = fine ? denseLatOf(fine) : denseLat;
         const dip: number[] = [], rows = denseCols(dip, lats);
-        const g = gridAlong(track, a, b, fine ? 1 : 5, rows, groundMat, (q, j, out) => {
+        const step = fine ? 1 : narrow.some(([from, to]) => from < b && to > a) ? 2 : 5;
+        const g = gridAlong(track, a, b, step, rows, groundMat, (q, j, out) => {
           const h = hash(Math.floor(q / 30), Math.round(lats[j] / 4)), l = lats[j];
           out.copy(town && j >= 1 && j <= lats.length - 2 ? townC : gc).multiplyScalar(.85 + h * .22);
           if (l >= -6 && l <= 10) out.lerp(dirt, .35);
           out.lerp(mud, Math.min(1, dip[j] / 3) * .85 * (T.cutDepth(q, l) > 0 ? 0 : 1)); // 岸の斜面は土の色（くぐる道路の掘り下げは除く）
         });
         g.name = 'ground'; scene.add(g);
-        const w = waterAlong(track, a, b, fine ? 1 : 5, denseCols([], lats), waterY, river, (s, lat) => T.riverNear(s, lat));
+        const w = waterAlong(track, a, b, step, denseCols([], lats), s => T.dryY(s) + RIVER_WATER, river, (s, lat) => T.riverNear(s, lat));
         if (w) { w.name = 'river'; w.userData.noShadow = true; scene.add(w); }
       }
     }

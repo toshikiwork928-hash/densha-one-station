@@ -422,6 +422,7 @@ export function buildTown(ctx: GameContext): TownResult {
     if (towerNear(sd, a, b)) return false;
     if (tramBlocks(route, a - 1, b + 1, latOf(sd, d - 1), latOf(sd, d + 23))) return false; // 阪堺線・高師浜線の高架の通り道
     for (let s = a; s <= b; s += 3) {
+      if (T.riverNear(s, latOf(sd, d + 11), 12)) return false;
       if (!flatOk(s) || !levelAt(s, latOf(sd, d)) || !levelAt(s, latOf(sd, d + 14))) return false;
       if (T.nearCrossing(s, 4) || tunnelNear(s, 80) || T.low(s)) return false;
       if (d < stationDepth(s) && (platSide(sd, s, 25) || thirdNear(sd, s, 25))) return false;
@@ -444,6 +445,7 @@ export function buildTown(ctx: GameContext): TownResult {
 
   // 低ポリの木（山林・屋敷林・河畔林。素材の木より軽い）: 針葉樹（杉）と広葉樹
   const ptree = (s: number, lat: number, y: number, k: number, conifer = rnd() < .55) => {
+    if (T.riverNear(s, lat, 2 * k)) return;
     const t = track.trackAt(s), b = chunks.at(s); b.parent = null;
     const x = t.x + t.rx * lat, z = t.z + t.rz * lat, h = (conifer ? 11 : 8) * k * (.85 + rnd() * .3);
     b.add('body', TRUNK, M(x, y + h * .2, z, 0, .4 * k, h * .4, .4 * k), 0x5a4636);
@@ -498,6 +500,7 @@ export function buildTown(ctx: GameContext): TownResult {
   if (osm) for (const sd of [-1, 1]) for (let s = S0; s < S1; s += 6) {
     if (T.structureAt(s, 10) || T.nearStation(s, 15) || T.nearCrossing(s, 3)) continue;
     const lat = fenceLat(sd, s, 3.8);
+    if (T.riverNear(s, lat, 3)) continue;
     if (tramBlocks(route, s - 3, s + 3, lat - .3, lat + .3, true) || towerNear(sd, s - 3, s + 3)) continue;
     const t = track.trackAt(s), g = T.terrainY(s, lat), b = chunks.at(s); b.parent = null;
     b.add('body', P.box, M(t.x + t.rx * lat, g + .75, t.z + t.rz * lat, -t.phi, .08, 1.5, .08), 0x5f7a66);
@@ -510,6 +513,7 @@ export function buildTown(ctx: GameContext): TownResult {
     for (let s = S0; s < S1; s += 40) {
       const e = Math.min(S1, s + 40);
       if (!roadOk(s) || !roadOk(e)) continue;
+      if (T.riverNear((s + e) / 2, (la + lb) / 2, Math.hypot(e - s, lb - la) / 2)) continue;
       if (tramBlocks(route, s, e, la, lb, true)) continue;
       const b = chunks.at(s); b.parent = null;
       strip(b, s, e, Math.min(la, lb), Math.max(la, lb), .02, 0x55575c);
@@ -546,6 +550,7 @@ export function buildTown(ctx: GameContext): TownResult {
     // 線路の柵（駅・踏切・構造物以外）
     for (let s = S0; s < S1; s += 6) {
       const lat = fenceLat(sd, s, 7.8);
+      if (T.riverNear(s, lat, 3)) continue;
       if (T.structureAt(s, 10) || T.nearStation(s, 15) || T.nearCrossing(s, 3) || !levelAt(s, lat) || tramBlocks(route, s - 3, s + 3, lat - .3, lat + .3, true)) continue;
       const t = track.trackAt(s), g = T.terrainY(s, lat), b = chunks.at(s); b.parent = null;
       b.add('body', P.box, M(t.x + t.rx * lat, g + .75, t.z + t.rz * lat, -t.phi, .08, 1.5, .08), 0x5f7a66);

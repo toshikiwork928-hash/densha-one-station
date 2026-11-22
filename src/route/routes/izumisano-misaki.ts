@@ -44,7 +44,7 @@ function sliceSegments(from: number, to: number, prepend: number): Segment[] {
 }
 const segments = sliceSegments(0, END - START, START);
 
-/** 曲線の速度制限（ゲーム用）。半径 R の円弧は 3.8√R km/h（5km/h刻みに切り下げ）。線区最高速度（普通 90）に満たないものだけ置く。
+/** 曲線の速度制限（ゲーム用）。半径 R の円弧は 3.8√R km/h（5km/h刻みに切り下げ）。本線の上限 110km/h 未満を登録する。
  *  south.json の円弧は実際の曲線ではない（概形）ので、実際の制限速度とは一致しない（みさき公園〜和歌山港コースと同じ式） */
 function curveLimits(): SpeedLimit[] {
   const out: SpeedLimit[] = [];
@@ -53,7 +53,7 @@ function curveLimits(): SpeedLimit[] {
     const len = g.type === 'straight' ? g.length : g.radius * g.angle;
     if (g.type === 'arc') {
       const kmh = Math.floor(3.8 * Math.sqrt(g.radius) / 5) * 5;
-      if (kmh < 90) out.push({ from: Math.round(s), to: Math.round(s + len) + 120, kmh, label: '曲線制限' });
+      if (kmh < 110) out.push({ from: Math.round(s), to: Math.round(s + len) + 120, kmh, label: '曲線制限' });
     }
     s += len;
   }
@@ -208,10 +208,10 @@ export const izumisanoMisaki: Route = {
   // 水面は OSM の川の線（waterway）を、橋の長さの半分の川幅で膨らませたもの（src/data/osm/izumisano-misaki.json。川幅はゲーム用の概形）
   structures: [
     { kind: 'viaduct', from: -400, to: VIADUCT_END },
-    { kind: 'bridge', from: 4189, to: 4302 },   // 樫井川
+    { kind: 'bridge', from: 4240, to: 4352 },   // 樫井川
     { kind: 'bridge', from: 8148, to: 8306 },   // 男里川
-    { kind: 'bridge', from: 12917, to: 12944 }, // 茶屋川
-    { kind: 'bridge', from: 16727, to: 16760 }, // 番川
+    { kind: 'bridge', from: 12886, to: 12914 }, // 茶屋川
+    { kind: 'bridge', from: 16720, to: 16754 }, // 番川
   ],
   extraTracks: [...EXTRA, ...STATION_EXTRA],
   // 周囲の山（国土地理院の標高。south.json の relief。営業キロ + START が s）
@@ -248,7 +248,7 @@ izumisanoMisakiUp.stations[LAST - OZAKI].loopTrack = '4番線';
 // みさき公園（上りの始発）: 上り本線(T3)の3番線から発車する（普通・サザンとも）
 setMisakiParkUp(izumisanoMisakiUp, 0);
 
-// 尾崎の緩急接続（平日の実ダイヤ。docs/south-timetable-research.md 5章）: 普通が尾崎の待避線に入り、本線に停車する優等列車が先に発車してから発車する。
+// 代表列車の待避は real-diagram.json から適用する。以下は実列車データがない場合の時間帯別の設定。
 // 優等列車は尾崎に停車するので通過待ちでなく待ち合わせ。下りは朝・夜が急行、日中・夕がサザン。上りは朝が急行、日中・夜がサザン（夕は普通のうち待つのが3割弱なので入れない）。
 // 既存コース（泉大津〜岸和田・岸和田〜泉佐野など）の待避・待ち合わせとは別（このコースだけ）
 const OZAKI_WAITS_DOWN: Partial<Record<TimeOfDay, ['尾崎', 'express' | 'southern'][]>> = {
