@@ -16,6 +16,7 @@ import { applyService, destOf, sameClass, selectableServices } from '../src/rout
 import { buildTrack } from '../src/route/track';
 import { loopZone, loopShape, maxStopLength, profileLat, trackLines } from '../src/route/service';
 import { coastalThirdTracks } from '../src/world/coastal-stations';
+import { loadOsmFor, osmFor, waterMaskOf } from '../src/world/osm-town';
 import type { Route, ServiceId, TimeOfDay } from '../src/route/types';
 import { realTrainFor, realWaitsOf } from '../src/route/real-diagram';
 import { createState, departureTime, stagesOf, type VehicleSel } from '../src/game/state';
@@ -421,6 +422,27 @@ for (const route of [shiokaze, shiokazeUp]) {
   const suwa = route.stations.find(s => s.name === '諏訪ノ森')!, opp = { from: suwa.platform.from + suwa.platformOpp!, to: suwa.platform.to + suwa.platformOpp! };
   const gap = route.crossings!.filter(c => c.s > Math.min(suwa.platform.to, opp.to) && c.s < Math.max(suwa.platform.from, opp.from));
   assert.ok(opp.from > suwa.platform.to + 20 && gap.length === 1, `${route.id}: 諏訪ノ森の上下ホームは踏切を挟んで離れる`);
+}
+// 石津川橋梁: OSM の水面が上下・通しコースでも各走行線を横断し、橋桁とトラスの内側に収まる。
+// 両端の地面を水面にしないことで、河岸まで水面が伸びる／橋が河岸を外す回帰も検出する。
+for (const route of [shiokaze, shiokazeUp, through, throughUp]) {
+  await loadOsmFor(route);
+  const data = osmFor(route)!;
+  const water = waterMaskOf(data)!;
+  const truss = route.coastalLandmarks!.find(l => l.label === '石津川橋梁')!;
+  const bridge = route.structures!.find(st => st.kind === 'bridge' && st.from < truss.s && st.to > truss.s)!;
+  assert.ok(truss.s - truss.length! / 2 >= bridge.from && truss.s + truss.length! / 2 <= bridge.to, `${route.id}: 石津川トラスは橋桁内`);
+  for (const lat of route.tracks) {
+    const wet = Array.from({ length: Math.round((bridge.to - bridge.from) * 4) + 1 }, (_, i) => bridge.from + i / 4)
+      .filter(s => water(s, lat));
+    assert.ok(wet.length > 0, `${route.id}: 線路 ${lat} の下に石津川の水面がある`);
+    const from = Math.min(...wet), to = Math.max(...wet);
+    assert.ok(from > bridge.from + 5 && to < bridge.to - 5, `${route.id}: 線路 ${lat} の石津川両岸が橋桁内にある (${from}〜${to})`);
+    assert.ok(from >= truss.s - truss.length! / 2 && to <= truss.s + truss.length! / 2, `${route.id}: 線路 ${lat} の水面両端がトラス内にある (${from}〜${to})`);
+    assert.ok(Math.abs((from + to) / 2 - truss.s) <= 3, `${route.id}: 線路 ${lat} の水面中心とトラス中心が3m以内 (${(from + to) / 2} / ${truss.s})`);
+    assert.equal(water(bridge.from, lat), false, `${route.id}: 線路 ${lat} の手前は河岸`);
+    assert.equal(water(bridge.to, lat), false, `${route.id}: 線路 ${lat} の先は河岸`);
+  }
 }
 // 石津川〜湊は直線、湊は島式。
 for (const route of [shiokaze, shiokazeUp, through, throughUp]) {

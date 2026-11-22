@@ -144,10 +144,14 @@ export const shiokaze: Route = {
   oncoming: shiftOpp([...stopScenes(stations, STOP_SCENES)], SUWA, OPP_SHIFT), signals,
   // 地上駅の周辺だけ踏切。高架区間に踏切を作らない。諏訪ノ森は上下ホームの間の踏切。
   crossings: [
-    { id: 'north-matsubara-south', s: 1840, roadWidth: 6 },
-    { id: 'north-matsubara-north', s: 2250, roadWidth: 6 },
-    { id: 'park-south', s: 6040, roadWidth: 7 },
-    { id: 'suwanomori', s: 6710, roadWidth: 6 },
+    // OSM の道路と南海本線の共有点（2026-11-22 の --scan）。高架・駅構内の交点は除外。
+    { id: 'north-matsubara-south', s: 1711, roadWidth: 5 },
+    { id: 'north-matsubara-north', s: 2382, roadWidth: 8 },
+    // 浜寺公園の分岐器の外と、諏訪ノ森の千鳥配置のホームの外で渡る。
+    { id: 'park-south', s: 5990, roadWidth: 5 },
+    { id: 'hamadera-road', s: 6275, roadWidth: 8 },
+    { id: 'suwa-south', s: 6455, roadWidth: 5 },
+    { id: 'suwanomori', s: 6710, roadWidth: 5 },
   ],
   structures: [
     { kind: 'viaduct', from: -400, to: 1610 },
@@ -156,10 +160,9 @@ export const shiokaze: Route = {
     { kind: 'bridge', from: 7255, to: 7360 },   // 石津川。OSM の水面が本線を横切る 7275〜7340m に合わせる
     { kind: 'viaduct', from: 7360, to: 11200 },
   ],
-  // 区間内での概形配置。実測距離/橋長ではない。羽衣の南側へ高師浜線の高架分岐を描く。
+  // OSM の道路橋は sakai-izumiotsu.json の highways（s=2009〜2436）で描く。
+  // 道路橋を専用目印で重ねると、同じ橋が二重になるため road-overpass は置かない。
   coastalLandmarks: [
-    { kind: 'road-overpass', s: 1720, length: 155, side: -1, label: '湾岸バイパス' },
-    { kind: 'road-overpass', s: 2440, length: 155, side: 1, label: '臨海連絡道路' },
     { kind: 'tram-overpass', s: 6310, length: 864, label: '阪堺電軌' },
     { kind: 'steel-bridge', s: 7307, length: 90, label: '石津川橋梁' },
     // 羽衣の3番線（高師浜線）。s = 島式ホームの泉大津側の端。3線並行のまま約300m高架を進み、のち海側（西）へ離れる（配線略図 011_03）。

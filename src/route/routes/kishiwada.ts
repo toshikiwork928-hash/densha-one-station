@@ -152,8 +152,7 @@ export const kishiwada: Route = {
     { kind: 'viaduct', from: 4890, to: 6400 },
   ],
   coastalLandmarks: [
-    // 忠岡〜春木で府道が線路の上を越える
-    { kind: 'road-overpass', s: 2737, length: 100, side: 1, label: '府道跨線橋' },
+    // 忠岡〜春木の府道跨線橋は、OSM の高架道路に含まれる。
     // 泉大津駅前の2棟並びのタワーマンション（1995年竣工・36階）。駅中心から岸和田側へ約 135m、内陸（下りの左）に 70m・140m。
     // 堺〜泉大津（shiokaze.ts）にも同じ物理位置で置く（world/izumiotsu-towers.ts の共通関数）
     { kind: 'twin-tower', s: 110 + 135, side: -1, direction: 1, label: '泉大津駅前タワー' },

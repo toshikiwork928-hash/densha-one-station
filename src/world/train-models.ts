@@ -363,7 +363,7 @@ function makeCar(kit: KindKit, kind: CarKind, panZ: readonly number[], role: Rol
   if (g.led) body.add(new THREE.Mesh(g.led, lit ? frontDisplay(led) : blankLed));
   if (g.led2) body.add(new THREE.Mesh(g.led2, lit && led2 ? frontDisplay(led2) : blankLed));
   addSideDisplays(body, trainKind, label, dest);
-  addSideLettering(body, trainKind, lbOf(trainKind), kind === 'head', panZ.length > 0);
+  if (kind === 'head') addSideLettering(body, trainKind, lbOf(trainKind), panZ.length > 0);
   if (kind === 'head') {
     // 前: 前照灯点灯（尾灯は付けない）、後: 尾灯点灯・前照灯は消灯色
     if (role === 'front' && g.head) body.add(new THREE.Mesh(g.head, shared.headOn));

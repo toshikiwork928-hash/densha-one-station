@@ -65,6 +65,9 @@ const crossings = [
   { id: 'kaizuka-north', s: 2031, roadWidth: 7 },
   { id: 'kaizuka-residential', s: 2226, roadWidth: 5 },
   { id: 'kaizuka-approach', s: 2349, roadWidth: 5 },
+  // OSM の railway=level_crossing（2026-11-22 取得）。貝塚駅南側の地上区間。
+  { id: 'kaizuka-south-1', s: 2864, roadWidth: 5 },
+  { id: 'kaizuka-south-2', s: 2928, roadWidth: 5 },
   { id: 'nishikinohama-south', s: 4740, roadWidth: 5 },
   { id: 'tsuruhara-south', s: 5563, roadWidth: 5 },
   { id: 'iharanosato-north', s: 5763, roadWidth: 5 },

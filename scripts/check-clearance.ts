@@ -73,7 +73,7 @@ async function build(ctx: GameContext): Promise<void> {
   buildEndBlock(ctx);
   const town = buildTown(ctx);
   buildSignals(ctx);
-  buildCrossings(ctx, fakeOncoming);
+  buildCrossings(ctx, fakeOncoming, town.approaches);
   // 堺〜難波の専用景観（電車を除く）
   // 車両モデルのモジュールは読込時に canvas を使うので、DOM スタブの後に動的に読む
   const nctx = (await import('../src/world/namba-frame')).nambaFrame(ctx);

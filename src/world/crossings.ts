@@ -1,6 +1,6 @@
 // 踏切（route.crossings）: 道路・遮断機・警報灯・踏切警標。自列車/対向列車の接近で鳴動し crossing イベントを出す
 import * as THREE from 'three';
-import { trackSpan } from '../route/service';
+import { crossingSpans, type RoadApproaches } from './crossing-roads';
 import type { GameContext } from '../core/context';
 import { GeoBatch, M, P, basePart, onLight } from './batch';
 import { glowTexture } from './emu';
@@ -74,7 +74,7 @@ function buildCar(color: number): THREE.Group {
   return g;
 }
 
-export function buildCrossings(ctx: GameContext, oncoming: OncomingSystem): void {
+export function buildCrossings(ctx: GameContext, oncoming: OncomingSystem, approaches: RoadApproaches): void {
   const { scene, track, route, events } = ctx, T = getTerrain(ctx);
   const list = route.crossings ?? [];
   if (!list.length) return;
@@ -82,10 +82,10 @@ export function buildCrossings(ctx: GameContext, oncoming: OncomingSystem): void
   const lineMat = new THREE.MeshLambertMaterial({ color: 0xeeeeee });
   const rts: CrossingRt[] = [];
 
-  for (const c of list) {
+  for (const { c, lo: L0, hi: L1 } of crossingSpans(ctx)) {
     const w = c.roadWidth ?? 6, g = T.groundY(c.s);
     // 踏切がまたぐ線路の範囲（本線と、並んで走る追加の線路。羽倉崎の車庫への線など）
-    const [L0, L1] = trackSpan(route, c.s, 30);
+    const [leftRoad, rightRoad] = approaches.get(c.id) ?? [false, false];
     const sideLat = [L0 - 3.6, L1 + 3.6];
     // 路面（線路上はレール面まで持ち上げる）
     // 周囲の山（route.relief）がある所は、道路も山の斜面に沿わせる（山あいの踏切で道路が空中や地中に伸びない）
@@ -93,7 +93,9 @@ export function buildCrossings(ctx: GameContext, oncoming: OncomingSystem): void
       const roadY = T.groundY(s) + .03, railY = T.trackY(s) + .36;
       const at = (l: number): [number, number] => [l, roadY + T.reliefY(s, l)];
       if (c.foot) return [[L0 - 12, roadY], [L0 - 2.6, railY], [L1 + 2.6, railY], [L1 + 12, roadY]]; // 歩行者専用: 線路の脇までの短い通路
-      return [at(-160), at(-80), at(-40), at(-20), [L0 - 6.5, roadY], [L0 - 2.6, railY], [L1 + 2.6, railY], [L1 + 6.5, roadY], at(20), at(40), at(80), at(164)];
+      const left = leftRoad ? [L0 - 9] : [-160, -80, -40, Math.min(-20, L0 - 10)];
+      const right = rightRoad ? [L1 + 9] : [Math.max(20, L1 + 10), 40, 80, 164];
+      return [...left.map(at), [L0 - 6.5, roadY], [L0 - 2.6, railY], [L1 + 2.6, railY], [L1 + 6.5, roadY], ...right.map(at)];
     };
     scene.add(gridAlong(track, c.s - w / 2, c.s + w / 2, 1, prof, roadMat));
     // 踏切板（ゴム）
@@ -106,6 +108,7 @@ export function buildCrossings(ctx: GameContext, oncoming: OncomingSystem): void
     }
     for (const side of [-1, 1]) for (let l = -150; l < 154; l += 2) {
       if (c.foot) break; // 歩行者専用の踏切には道路の外側線を描かない
+      if ((leftRoad && l < L0 - 8) || (rightRoad && l > L1 + 8)) continue;
       if (l > L0 - 3 && l < L1 + 3) continue;
       const p = track.at(c.s + side * (w / 2 - .25), l, 0);
       lines.add('l', P.box, M(p.x, g + .045, p.z, -t.phi, 1.9, .02, .12), 0xffffff);

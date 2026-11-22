@@ -63,7 +63,7 @@ export function buildWorld(ctx: GameContext): World {
   const water = waterMaskOf(osmFor(ctx.route));
   buildSignals(ctx); // [A] 閉そく信号機（rng 不使用）
   const oncoming = createOncoming(ctx);
-  buildCrossings(ctx, oncoming);
+  buildCrossings(ctx, oncoming, town.approaches);
   buildCuttings(ctx);
   // 堺〜なんば専用（上り 'namba' と下り 'namba-up'。座標は上りのもの、world/namba-frame.ts）。ctx.rng を消費しない（他の路線の生成順に影響しない）
   const nctx = nambaFrame(ctx);

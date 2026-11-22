@@ -14,10 +14,11 @@ import { getTerrain, hash } from './terrain';
 import { isMountain } from './mountain-terrain';
 import { buildMountainScenery } from './mountain-scenery';
 import { buildOsmTown, osmSceneryFor } from './osm-town';
+import type { RoadApproaches } from './crossing-roads';
 
 /** 木を置く位置（素材読込後に scenery.ts が配置） */
 export interface TreeSpot { s: number; lat: number; y: number; k: number; small?: boolean }
-export interface TownResult { trees: TreeSpot[] }
+export interface TownResult { trees: TreeSpot[]; approaches: RoadApproaches }
 
 const WALLS = [0xe9e2cf, 0xf0efe9, 0xd9c9a8, 0xcfcfca, 0xb39673, 0xbfc6cc, 0xe3d3bb, 0xd8d0c4, 0xa7aeb3, 0xeee6d6];
 const ROOFS = [0x3c3f45, 0x4a5561, 0x5e4436, 0x3b4c62, 0x8e5a42, 0x46564a, 0x555555, 0x6b6e73];
@@ -349,7 +350,7 @@ export function buildTown(ctx: GameContext): TownResult {
   const { track, route, scene } = ctx, T = getTerrain(ctx);
   const rnd = createRng(20240917);
   const atlas = buildAtlas();
-  const chunks = new ChunkedBatch(300, new Set(['sign']));
+  const chunks = new ChunkedBatch(300, new Set(['sign', 'wireMesh']));
   const shadowChunks = new ChunkedBatch(300, new Set(['shadow']));
   // 建物の接地影。地面に貼るだけなので低画質でも足元の浮きを抑えられる。
   const shadowCanvas = document.createElement('canvas'); shadowCanvas.width = shadowCanvas.height = 64;
@@ -381,11 +382,25 @@ export function buildTown(ctx: GameContext): TownResult {
   /** 建物の占有区間（田畑との重なり防止） */
   const occ: { sd: number; a: number; b: number; d: number }[] = [];
 
+  // 菱形金網は一枚の模様を繰り返し、網目から沿線が見えるようにする。
+  const meshTile = document.createElement('canvas');
+  meshTile.width = meshTile.height = 32;
+  const pen = meshTile.getContext('2d')!;
+  pen.strokeStyle = '#ffffff'; pen.lineWidth = 3.5;
+  pen.beginPath();
+  pen.moveTo(0, 0); pen.lineTo(32, 32);
+  pen.moveTo(32, 0); pen.lineTo(0, 32);
+  pen.stroke();
+  const meshMap = new THREE.CanvasTexture(meshTile);
+  meshMap.wrapS = meshMap.wrapT = THREE.RepeatWrapping;
+  meshMap.repeat.set(40, 9);
+
   const mats: Record<string, THREE.Material> = {
     body: new THREE.MeshLambertMaterial({ vertexColors: true }),
     lit: new THREE.MeshBasicMaterial({ vertexColors: true, color: 0x3a434c }),
     sign: new THREE.MeshLambertMaterial({ map: atlas.tex, emissiveMap: atlas.tex, emissive: 0xffffff, emissiveIntensity: .05 }),
     road: new THREE.MeshLambertMaterial({ vertexColors: true }),
+    wireMesh: new THREE.MeshLambertMaterial({ map: meshMap, vertexColors: true, alphaTest: .35, side: THREE.DoubleSide }),
     fence: new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: .38, depthWrite: false, side: THREE.DoubleSide }),
   };
 
@@ -489,22 +504,33 @@ export function buildTown(ctx: GameContext): TownResult {
   // OpenStreetMap の沿線データがあるコースは、建物・道路・緑地をデータから作る（osm-town.ts）
   const osmDetail = new ChunkedBatch(300, new Set(['sign']));
   const osm = osmSceneryFor(route);
+  let approaches: RoadApproaches = new Map();
   if (osm) {
-    buildOsmTown(ctx, osm, {
+    approaches = buildOsmTown(ctx, osm, {
       detail: osmDetail, chunks, shadowChunks, kit: (b, r) => new Kit(b, r, atlas),
       house: (k, w, d) => house(k as Kit, w, d), apartment: (k, w, d) => apartment(k as Kit, w, d),
       mansion: (k, w, d, f) => mansion(k as Kit, w, d, f), shop: (k, w, d) => shop(k as Kit, w, d),
-    }, trees);
+    }, trees).approaches;
   }
-  // OSM のコース: 線路外側の柵。駅・踏切・構造物付近を除き、副線の外側へ置く。
-  if (osm) for (const sd of [-1, 1]) for (let s = S0; s < S1; s += 6) {
-    if (T.structureAt(s, 10) || T.nearStation(s, 15) || T.nearCrossing(s, 3)) continue;
-    const lat = fenceLat(sd, s, 3.8);
-    if (T.riverNear(s, lat, 3)) continue;
-    if (tramBlocks(route, s - 3, s + 3, lat - .3, lat + .3, true) || towerNear(sd, s - 3, s + 3)) continue;
-    const t = track.trackAt(s), g = T.terrainY(s, lat), b = chunks.at(s); b.parent = null;
-    b.add('body', P.box, M(t.x + t.rx * lat, g + .75, t.z + t.rz * lat, -t.phi, .08, 1.5, .08), 0x5f7a66);
-    b.add('fence', P.box, M(t.x + t.rx * lat, g + .95, t.z + t.rz * lat, -t.phi, .03, 1.0, 6), 0x7f9a86);
+  // 線路境界の金網と上桟。パネルの両端で地表を取り、坂でも支柱の足元を地面に合わせる。
+  for (const sd of [-1, 1]) for (let from = S0; from + 6 <= S1; from += 6) {
+    const to = from + 6, s = from + 3, lat = fenceLat(sd, s, osm ? 3.8 : 7.8);
+    if (T.structureAt(s, 3) || T.nearStation(s, 5) || T.nearCrossing(s, 5)) continue;
+    if (sd > 0 && route.stations.some(st => st.platformOpp && s >= st.platform.from + st.platformOpp - 5 && s <= st.platform.to + st.platformOpp + 5)) continue;
+    if (towerNear(sd, from, to) || tramBlocks(route, from, to, lat - .3, lat + .3, true)) continue;
+    if (T.riverNear(s, lat, 3) || !levelAt(s, lat) || [from, s, to].some(q => T.cutDepth(q, lat) > .1)) continue;
+    const p = track.trackAt(from), q = track.trackAt(to);
+    const x0 = p.x + p.rx * lat, z0 = p.z + p.rz * lat, y0 = T.terrainY(from, lat);
+    const x1 = q.x + q.rx * lat, z1 = q.z + q.rz * lat, y1 = T.terrainY(to, lat);
+    const dx = x1 - x0, dz = z1 - z0, dy = y1 - y0;
+    const yaw = Math.atan2(-dz, dx), tilt = Math.atan2(dy, Math.hypot(dx, dz));
+    const len = Math.hypot(dx, dy, dz), x = (x0 + x1) / 2, y = (y0 + y1) / 2, z = (z0 + z1) / 2;
+    const b = chunks.at(s); b.parent = null;
+    b.add('wireMesh', P.plane, M(x, y + .83, z, yaw, len, 1.38, 1, 0, tilt), 0x7e9388);
+    b.add('body', P.box, M(x, y + 1.54, z, yaw, len, .065, .065, 0, tilt), 0x697c73);
+    for (const t of [0, .5]) {
+      b.add('body', P.box, M(x0 + dx * t, y0 + dy * t + .8, z0 + dz * t, yaw, .085, 1.6, .085), 0x63766d);
+    }
   }
   for (const sd of osm ? [] : [-1, 1]) {
     // ---- 線路沿いの道路・電柱・電線・柵 ----
@@ -547,16 +573,6 @@ export function buildTown(ctx: GameContext): TownResult {
       }
       prev = pts; prevS = s;
     }
-    // 線路の柵（駅・踏切・構造物以外）
-    for (let s = S0; s < S1; s += 6) {
-      const lat = fenceLat(sd, s, 7.8);
-      if (T.riverNear(s, lat, 3)) continue;
-      if (T.structureAt(s, 10) || T.nearStation(s, 15) || T.nearCrossing(s, 3) || !levelAt(s, lat) || tramBlocks(route, s - 3, s + 3, lat - .3, lat + .3, true)) continue;
-      const t = track.trackAt(s), g = T.terrainY(s, lat), b = chunks.at(s); b.parent = null;
-      b.add('body', P.box, M(t.x + t.rx * lat, g + .75, t.z + t.rz * lat, -t.phi, .08, 1.5, .08), 0x5f7a66);
-      b.add('fence', P.box, M(t.x + t.rx * lat, g + .95, t.z + t.rz * lat, -t.phi, .03, 1.0, 6), 0x7f9a86);
-    }
-
     // ---- 建物列 ----
     const rows = [17.5, 33, 49];
     rows.forEach((d0, ri) => {
@@ -678,5 +694,5 @@ export function buildTown(ctx: GameContext): TownResult {
     (mats.lit as THREE.MeshBasicMaterial).color.copy(day).lerp(night, f);
     (mats.sign as THREE.MeshLambertMaterial).emissiveIntensity = .05 + f * .85;
   });
-  return { trees };
+  return { trees, approaches };
 }

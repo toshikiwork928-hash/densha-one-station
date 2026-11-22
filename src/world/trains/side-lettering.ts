@@ -23,7 +23,7 @@ function ink(text: string, color: string, italic: boolean) {
 }
 
 // 左右で別々に文字面を外へ向け、車体側面の文字を正しい向きに保つ。
-export function addSideLettering(body: THREE.Group, kind: TrainKind, length: number, head: boolean, hasPan: boolean) {
+export function addSideLettering(body: THREE.Group, kind: TrainKind, length: number, hasPan: boolean) {
   const mark = (text: string, color: string, z: number, y: number, width: number, height: number,
     halfWidth: number, italic = false) => {
     for (const side of [-1, 1]) {
@@ -35,18 +35,16 @@ export function addSideLettering(body: THREE.Group, kind: TrainKind, length: num
     }
   };
   if (kind === 'southern-12000') {
-    if (head) {
-      mark('SOUTHERN', '#f4b92e', -.035, 1.45, 2.75, .39, 1.45);
-      mark('Premium', '#fafbfa', .062, 1.40, 1.05, .23, 1.45, true);
-      mark('NANKAI', '#305996', .39, 2.45, 1.33, .29, 1.45, true);
-    } else mark('NANKAI', '#f1f2ea', .26, 1.47, .95, .21, 1.45, true);
+    mark('SOUTHERN', '#f4b92e', -.035, 1.45, 2.75, .39, 1.45);
+    mark('Premium', '#fafbfa', .062, 1.40, 1.05, .23, 1.45, true);
+    mark('NANKAI', '#305996', .39, 2.45, 1.33, .29, 1.45, true);
   } else if (kind === 'southern-10000') {
-    mark('NANKAI', '#e2e4de', -.221, head ? 1.57 : 1.76, head ? 1.08 : .90, head ? .29 : .19, 1.45, true);
+    mark('NANKAI', '#e2e4de', -.221, 1.57, 1.08, .29, 1.45, true);
   } else if (kind === 'commuter-1000') {
-    mark('NANKAI', '#283f73', -.287, head ? 1.51 : 1.78, .94, .21, 1.45, true);
+    mark('NANKAI', '#283f73', -.287, 1.51, .94, .21, 1.45, true);
   } else if (kind === 'commuter-2000') {
     mark('NANKAI', '#253b77', -.167, 1.595, .94, .205, 1.4, true);
-    if (head) mark(hasPan ? '2039' : '2189', '#293d75', 0, 1.422, .60, .14, 1.4);
+    mark(hasPan ? '2039' : '2189', '#293d75', 0, 1.422, .60, .14, 1.4);
   } else if (kind === 'commuter-new' || kind === 'commuter-old' || kind === 'commuter-6300' || kind === 'commuter-9000') {
     const z = kind === 'commuter-new' ? -.278 : -.245;
     const y = kind === 'commuter-new' ? 1.65 : kind === 'commuter-9000' ? 1.61 : 1.54;
@@ -55,7 +53,7 @@ export function addSideLettering(body: THREE.Group, kind: TrainKind, length: num
     mark('NANKAI', '#533d46', -.13, 1.40, .91, .21, 1.37, true);
   } else if (kind === 'limited-30000') {
     mark('NANKAI', '#eee7dc', -.22, 1.50, .91, .21, 1.40, true);
-  } else if (kind === 'limited' && head) {
+  } else if (kind === 'limited') {
     mark('rapi:t', '#ced4d8', .38, 2.58, .75, .22, 1.42);
   }
 }
