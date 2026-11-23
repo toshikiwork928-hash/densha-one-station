@@ -142,7 +142,7 @@ export function attachOverlay(ctx: GameContext): void {
     const svcs = menu.services.map(v => `<button data-service="${v.id}" aria-pressed="${v.id === service}" class="svc-${v.id} ${v.id === service ? 'on' : ''}">${v.name}</button>`).join('');
     const wait = svc?.waits?.filter(w => w.station > stage.from && w.station < stage.to)
       .map(w => { const p = serviceOf(route, w.passedBy); return `<b>${route.stations[w.station].name}で${p?.name ?? ''}の${p?.stops.includes(w.station) ? '待ち合わせ' : '通過待ち'}</b>（出発信号が進行になってから発車）`; }).join('、') ?? '';
-    const stages = stagesOf(route).map(s => `<button data-stage="${s.id}" class="${s.id === stage.id ? 'on' : ''}">${s.id === 'all' ? '全線通し' : s.label}${s.id === 'all' ? `<small>${route.stations[s.from].name} → ${route.stations[s.to].name}</small>` : ''}</button>`).join('');
+    const stages = stagesOf(route).map(s => `<button data-stage="${s.id}" class="${s.id === stage.id ? 'on' : ''}">${s.label}${s.label === '全線通し' ? `<small>${route.stations[s.from].name} → ${route.stations[s.to].name}</small>` : ''}</button>`).join('');
     const modes = (Object.keys(MODE_LABEL) as GameMode[]).map(m => `<button data-mode="${m}" class="${m === st.sel.mode ? 'on' : ''}">${MODE_LABEL[m]}<small>${MODE_DESC[m]}</small></button>`).join('');
     overlay.classList.remove('hidden', 'landing');
     card.innerHTML = `
@@ -259,13 +259,13 @@ export function attachOverlay(ctx: GameContext): void {
     const rows: string[] = [];
     for (const v of svcs) for (const sg of stagesOfService(v.id)) {
       const b = getBest(route.id, sg.id, st.sel.mode, v.id);
-      rows.push(`<tr><td><span class="svcBadge svc-${v.id}">${v.name}</span></td><td>${sg.id === 'all' ? '全線通し' : sg.label}</td><td>${b ? `${b.total}点 ${b.rank}` : '-'}</td></tr>`);
+      rows.push(`<tr><td><span class="svcBadge svc-${v.id}">${v.name}</span></td><td>${sg.label}</td><td>${b ? `${b.total}点 ${b.rank}` : '-'}</td></tr>`);
     }
     const hist = getHistory(route.id).slice(0, 20).map(h => {
       const v = svcs.find(x => x.id === h.service), d = new Date(h.at);
       const when = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
       const sg = stagesOfService(h.service).find(x => x.id === h.stageId);
-      return `<tr><td>${when}</td><td>${v ? `<span class="svcBadge svc-${v.id}">${v.name}</span>` : ''} ${h.cars ?? ''}${h.cars ? '両' : ''}</td><td>${sg ? (sg.id === 'all' ? '全線' : sg.label) : h.stageId}</td><td>${h.result === 'overrun' ? '失格' : `${h.total}点 ${h.rank}`}</td></tr>`;
+      return `<tr><td>${when}</td><td>${v ? `<span class="svcBadge svc-${v.id}">${v.name}</span>` : ''} ${h.cars ?? ''}${h.cars ? '両' : ''}</td><td>${sg?.label ?? h.stageId}</td><td>${h.result === 'overrun' ? '失格' : `${h.total}点 ${h.rank}`}</td></tr>`;
     }).join('');
     return `<div class="selLbl">自己ベスト（${MODE_LABEL[st.sel.mode]}モード）</div>
       <table class="res rec">${rows.join('')}</table>
@@ -278,18 +278,7 @@ export function attachOverlay(ctx: GameContext): void {
   function stagesOfService(id: string | undefined) {
     const v = route.services?.find(x => x.id === id);
     if (!v) return stagesOf(route);
-    const idx = v.stops, list = [];
-    for (let k = 0; k < idx.length - 1; k++) list.push({ id: `${idx[k]}-${idx[k + 1]}`, label: `${route.stations[idx[k]].name} → ${route.stations[idx[k + 1]].name}` });
-    if (idx.length > 2) {
-      const goals = (route.partialGoals ?? []).filter(g => g.services.includes(v.id) && idx.includes(g.from) && idx.includes(g.to) && g.from < g.to);
-      const whole = goals.find(g => g.asAll), a = whole?.from ?? idx[0], b = whole?.to ?? idx[idx.length - 1];
-      for (const g of goals) {
-        if (!g.asAll && !(g.from === a && g.to === b))
-          list.push({ id: `${g.from}-${g.to}`, label: `${route.stations[g.from].name} → ${route.stations[g.to].name}` });
-      }
-      list.push({ id: 'all', label: '全線通し' });
-    }
-    return list;
+    return stagesOf({ ...route, activeServiceId: v.id, stations: route.stations.map((st, i) => ({ ...st, pass: !v.stops.includes(i) })) }, false);
   }
 
   function showResult(r: GameResult) {
@@ -314,7 +303,7 @@ export function attachOverlay(ctx: GameContext): void {
     const svcName = route.services ? `${serviceOf(route, r.service)?.name ?? ''}・` : '';
     overlay.classList.remove('hidden');
     card.innerHTML = `
-    <h1>${r.kind === 'overrun' ? '失格' : `${sta.name} 到着`}<small>${svcName}${stage.id === 'all' ? '全線通し' : stage.label}・${MODE_LABEL[r.mode]}モード</small></h1>
+    <h1>${r.kind === 'overrun' ? '失格' : `${sta.name} 到着`}<small>${svcName}${stage.label}・${MODE_LABEL[r.mode]}モード</small></h1>
     <div class="rank ${r.rank}">${r.rank}</div>${note}
     <table class="res">
       <tr><td>停止位置誤差</td><td>${errTxt}</td></tr>

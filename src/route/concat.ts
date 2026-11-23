@@ -2,7 +2,7 @@
 // a の終着駅のホーム泉大津側の端と b の始発駅のホームの端をそろえ、b の位置を offset だけずらす。
 // 線形は a を境目の駅の手前（ホームの端、直線）で切り、そこから b の線形を続ける（どちらも境目の駅は直線なので方位はつながる）。
 import { profileLat, sameClass, seaSideOf } from './service';
-import type { LatProfile, Route, ServiceSpec, Sign, Station } from './types';
+import type { ExtraTrack, LatProfile, Route, ServiceSpec, Sign, Station } from './types';
 
 const segLen = (r: Route) => r.segments.reduce((a, g) => a + (g.type === 'straight' ? g.length : g.radius * g.angle), 0);
 
@@ -41,7 +41,9 @@ export function concatRoutes(a: Route, b: Route, opt: ConcatOptions): Route {
   // b の座標 + off = 通しの座標
   const off = joinA.platform.from - joinB.platform.from;
   if (Math.abs((joinA.platform.to - joinA.platform.from) - (joinB.platform.to - joinB.platform.from)) > 1e-6) throw new Error('concat: 境目の駅のホーム長が違う');
-  if (Math.abs(elevationAt(a, joinA.platform.from) - elevationAt(b, joinB.platform.from)) > 1e-6) throw new Error('concat: 境目の駅の高さが違う');
+  // 地面が線路に沿う区間は、それぞれの始点を基準にした相対標高を使う。
+  // 結合後は a の標高から両区間の勾配を連続して積分する。
+  if (!(a.groundFollowsTrack && b.groundFollowsTrack) && Math.abs(elevationAt(a, joinA.platform.from) - elevationAt(b, joinB.platform.from)) > 1e-6) throw new Error('concat: 境目の駅の高さが違う');
   if (seaSideOf(a) !== seaSideOf(b)) throw new Error('concat: 海の側が違う');
   const sh = (s: number) => s + off;
   const ib = (i: number) => i + na - 1; // b の駅 index → 通し
@@ -84,6 +86,40 @@ export function concatRoutes(a: Route, b: Route, opt: ConcatOptions): Route {
   const total = sh(segLen(b));
   const clipZones = (z: { from: number; to: number }[], lo: number, hi: number) =>
     z.map(q => ({ from: Math.max(q.from, lo), to: Math.min(q.to, hi) })).filter(q => q.from < q.to);
+  const joinedZones = <T extends { from: number; to: number }>(left: T[] = [], right: T[] = []): T[] => [
+    ...left.filter(z => z.from < joinS).map(z => ({ ...z, to: Math.min(z.to, joinS) })),
+    ...right.filter(z => z.to > joinB.platform.from).map(z => ({ ...z, from: Math.max(joinS, sh(z.from)), to: sh(z.to) })),
+  ];
+  // 接続駅の同じ線路が両区間にある場合は、左右の分岐と車止めを一本の線路にまとめる。
+  const extraTracks: ExtraTrack[] = (a.extraTracks ?? []).filter(x => x.from < joinS).map(x => ({
+    ...x, to: Math.min(x.to, joinS), bumpers: x.bumpers?.filter(q => q <= joinS),
+  }));
+  for (const x of b.extraTracks ?? []) {
+    if (x.to <= joinB.platform.from) continue;
+    const next = { ...x, from: Math.max(joinS, sh(x.from)), to: sh(x.to),
+      lat: x.lat.map(([q, l]): [number, number] => [sh(q), l]), bumpers: x.bumpers?.map(sh).filter(q => q >= joinS) };
+    const prev = extraTracks.find(p => p.id === next.id && p.to === joinS && next.from === joinS);
+    if (!prev) extraTracks.push(next);
+    else {
+      prev.lat = joinProfile(prev.lat, x.lat, 0)!;
+      prev.to = next.to;
+      prev.bumpers = [...(prev.bumpers ?? []), ...(next.bumpers ?? [])];
+    }
+  }
+  // 南側の2区間は同じ標高格子を切り出している。重複する行を接続駅で一度だけ採用する。
+  let relief = a.relief;
+  if (b.relief) {
+    const right = { ...b.relief, s0: sh(b.relief.s0) };
+    if (!relief) relief = right;
+    else {
+      const cut = Math.ceil((joinS - relief.s0) / relief.step);
+      const next = Math.round((relief.s0 + cut * relief.step - right.s0) / right.step);
+      if (right.step !== relief.step || next < 0 || next >= right.rows.length || cut > relief.rows.length ||
+          Math.abs(relief.s0 + cut * relief.step - right.s0 - next * right.step) > .01 ||
+          relief.lats.length !== right.lats.length || relief.lats.some((lat, i) => lat !== right.lats[i])) throw new Error('concat: 標高格子の境界が一致しません');
+      relief = { ...relief, rows: [...relief.rows.slice(0, cut), ...right.rows.slice(next)] };
+    }
+  }
   return {
     ...a,
     id: opt.id, name: opt.name,
@@ -106,11 +142,13 @@ export function concatRoutes(a: Route, b: Route, opt: ConcatOptions): Route {
     ...(b.counterLanes ? { counterLanes: [...(a.counterLanes ?? []), ...b.counterLanes.map(lane => ({
       ...lane, station: ib(lane.station), profile: lane.profile.map(([q, lat]): [number, number] => [sh(q), lat]),
     }))] } : {}),
-    ...(a.extraTracks || b.extraTracks ? { extraTracks: [
-      ...(a.extraTracks ?? []).filter(x => x.from < joinS).map(x => ({ ...x, to: Math.min(x.to, joinS) })),
-      ...(b.extraTracks ?? []).filter(x => x.to > joinB.platform.from).map(x => ({ ...x, lat: x.lat.map(([q, l]) => [sh(q), l] as [number, number]), from: Math.max(joinS, sh(x.from)), to: sh(x.to), ...(x.bumpers ? { bumpers: x.bumpers.map(sh) } : {}) })),
-    ] } : {}),
-    ...(a.reserved || b.reserved ? { reserved: [...(a.reserved ?? []), ...(b.reserved ?? []).map(z => ({ ...z, from: sh(z.from), to: sh(z.to) }))] } : {}),
+    ...(extraTracks.length ? { extraTracks } : {}),
+    relief,
+    reliefNear: joinedZones(a.reliefNear, b.reliefNear),
+    noInfill: joinedZones(a.noInfill, b.noInfill),
+    cuttings: joinedZones(a.cuttings, b.cuttings),
+    hiddenTracks: joinedZones(a.hiddenTracks, b.hiddenTracks),
+    reserved: joinedZones(a.reserved, b.reserved),
     ...(a.deckJoin || b.deckJoin ? { deckJoin: [...(a.deckJoin ?? []), ...(b.deckJoin ?? []).map(z => ({ from: sh(z.from), to: sh(z.to) }))] } : {}),
     prevName: a.prevName, nextName: b.nextName,
     signs: stations.slice(1).flatMap(st => opt.signs(st.stopS)),
@@ -136,7 +174,8 @@ export function concatRoutes(a: Route, b: Route, opt: ConcatOptions): Route {
     ],
     structures: [
       ...(a.structures ?? []).map(st => ({ ...st, to: Math.min(st.to, joinS) })).filter(st => st.from < st.to),
-      ...(b.structures ?? []).map(st => ({ ...st, from: Math.max(sh(st.from), joinS), to: sh(st.to), ...(st.piers ? { piers: st.piers.map(sh) } : {}) })).filter(st => st.from < st.to),
+      ...(b.structures ?? []).map(st => ({ ...st, from: Math.max(sh(st.from), joinS), to: sh(st.to), ...(st.piers ? { piers: st.piers.map(sh) } : {}),
+        ...(st.kind === 'viaduct' && a.viaductHeight !== b.viaductHeight ? { drop: st.drop ?? b.viaductHeight ?? 9 } : {}) })).filter(st => st.from < st.to),
     ],
     // 境目の駅のタワー（共通ランドマーク）は a の側のものだけ残す
     coastalLandmarks: [

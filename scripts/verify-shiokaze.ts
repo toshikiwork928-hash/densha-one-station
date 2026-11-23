@@ -70,6 +70,62 @@ function context(source: Route, service: ServiceId, vehicles: VehicleSel = {}, t
     assetsReady: true, envState: { timeOfDay: 'noon', weather: 'clear', intensity: 0 }, light: { night: 0, tunnel: 0 }, cameraMode: 'cab', actions: null! };
 }
 
+// 泉佐野以南では、同じ列車でも和歌山市で乗務を始めたり終えたりできる。
+// メニューに現れる全区間で、実列車の行先・停車順・終着照査を運転開始から終了まで検査する。
+function verifySouthThrough(): void {
+  let count = 0;
+  for (const id of ['izumisano-wakayamako', 'izumisano-wakayamako-up']) {
+    const source = ROUTES[id], up = id.endsWith('-up');
+    assert.ok(source, id);
+    for (const tod of ['morning', 'noon', 'evening', 'night'] as const) {
+      const menu = { ...structuredClone(source), timeOfDay: tod };
+      const services = selectableServices(menu).map(v => v.id);
+      assert.deepEqual(services, tod === 'noon' ? ['local', 'southern'] : ['local', 'express', 'southern']);
+      for (const service of services) {
+        applyService(menu, service);
+        const stages = stagesOf(menu);
+        const city = menu.stations.findIndex(s => s.name === '和歌山市'), last = menu.stations.length - 1;
+        const port = up ? tod === 'night' && service !== 'local' : tod === 'evening' && service === 'southern';
+        const expectedStages = [up ? [city, last] : [0, city]];
+        if (port) expectedStages.push([0, last]);
+        assert.deepEqual(stages.map(s => [s.from, s.to]).sort(), expectedStages.sort(), [id, tod, service].join('/'));
+        for (const stage of stages) {
+          const tag = [id, tod, service, stage.id].join('/');
+          const ctx = context(source, service, {}, tod);
+          ctx.envState.timeOfDay = tod;
+          const game = createGame(ctx);
+          const train = realTrainFor(ctx.route, service, stage.from, stage.to);
+          assert.ok(train?.no, tag);
+          const arrivals: string[] = [];
+          ctx.events.on('arrive', ({ station }) => arrivals.push(station.name));
+          attachAutodrive(ctx, (sec, dt = 1 / 30, hook) => {
+            for (let q = 0; q < sec && !hook?.(); q += dt) game.update(dt);
+          });
+          const result = (globalThis as any).window.__qa.run(service, stage.id, 4500);
+          const v = ctx.route.services!.find(x => x.id === service)!;
+          assert.equal(ctx.state.state, 'result', tag);
+          assert.deepEqual([ctx.state.fromIndex, ctx.state.endIndex], [stage.from, stage.to], tag);
+          assert.equal(v.destination, train.to, tag);
+          assert.equal(train.to, up ? 'なんば' : port ? '和歌山港' : '和歌山市', tag);
+          assert.equal(ctx.route.startClock + departureTime(ctx.route, stage.from),
+            train.start + (train.dep[ctx.route.stations[stage.from].name] ?? 0), tag);
+          assert.deepEqual(arrivals, v.stops.filter(i => i > stage.from && i <= stage.to).map(i => ctx.route.stations[i].name), tag);
+          for (let i = stage.from + 1; i <= stage.to; i++) {
+            const st = ctx.route.stations[i];
+            const terminal = !up && st.name === train.to;
+            assert.equal(terminalSpeedLimit(ctx.route, i, st.stopS - 50), terminal ? 15 : Infinity, tag + '/' + st.name);
+          }
+          assert.equal(result.penalties.atsBrake, 0, tag);
+          assert.equal(result.overspeed, 0, tag);
+          count++;
+        }
+      }
+    }
+  }
+  console.log(`泉佐野〜和歌山市・和歌山港の上下4時間帯で全${count}運行が完走`);
+}
+verifySouthThrough();
+
 const airportCourses = Object.values(ROUTES).filter(route => route.stations.at(-1)?.name === '関西空港');
 assert.deepEqual(airportCourses.map(r => r.stations[0].name).sort(), ['なんば', '岸和田', '泉佐野'].sort());
 for (const source of airportCourses) {
@@ -879,6 +935,11 @@ if (routeOnly) process.exit(0);
         assert.equal(ctx.route.timeOfDay, tod);
         const observed = new Set<number>();
         const arrivals: string[] = [];
+        const morningAirport = route.id === 'airport-namba-up' && tod === 'morning' && service === 'airport';
+        if (morningAirport) ctx.events.on('arrive', ({ station }) => {
+          const delay = ctx.state.t - station.scheduledArrival;
+          assert.ok(delay <= 35, `朝の空港急行が${station.name}に${Math.round(delay)}秒遅れ`);
+        });
         if (expandedCourses.includes(route)) ctx.events.on('arrive', ({ station }) => arrivals.push(station.name));
         if (route.id === 'izumisano-misaki' && service === 'express') {
           let arrival = NaN;
@@ -895,6 +956,11 @@ if (routeOnly) process.exit(0);
             if (hook?.()) break; game.update(dt);
             const o = ctx.state.overtake;
             if (o?.localStopped && !o.cleared) observed.add(o.station);
+            if (morningAirport && ctx.state.state === 'run' && ctx.state.train.v < .3) {
+              const i = ctx.state.nextSignal;
+              assert.ok(ctx.state.signals[i] !== 'R' || ctx.route.signals![i].s - ctx.state.train.s > 35,
+                `朝の空港急行が停止信号の手前で停車 s=${Math.round(ctx.state.train.s)}`);
+            }
           }
         });
         const result = (globalThis as any).window.__qa.run(service, 'all', 4000);

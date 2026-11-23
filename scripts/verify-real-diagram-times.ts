@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { ROUTES } from '../src/route';
-import { applyRealDiagram, realTrainFor } from '../src/route/real-diagram';
+import { applyRealDiagram, realDayOf, realTrainFor } from '../src/route/real-diagram';
 
 const down = ROUTES['misaki-wakayamako'];
 assert(down, 'misaki-wakayamako route is missing');
@@ -24,5 +24,28 @@ assert.equal(upSouthern.no, '0606');
 assert.equal(upSouthern.dep['和歌山市'], 420);
 assert.equal(upSouthern.arrAt?.['和歌山市'], 300, '064号は和歌山市に21:30着');
 assert.equal(southern.arrAt?.['和歌山大学前'], undefined, '発車時刻だけの駅では到着を推定する');
+
+// 分割コースの境界でも同じ列車が走り、みさき公園の発車時刻を引き継ぐ。
+const through = ROUTES['izumisano-wakayamako'];
+const throughUp = ROUTES['izumisano-wakayamako-up'];
+for (const [route, first, second] of [
+  [through, ROUTES['izumisano-misaki'], down],
+  [throughUp, up, ROUTES['izumisano-misaki-up']],
+]) {
+  for (const tod of ['morning', 'noon', 'evening', 'night'] as const) {
+    const trains = realDayOf(route, tod)!.trains;
+    const entries = realDayOf(first, tod)!.trains, exits = realDayOf(second, tod)!.trains;
+    assert.deepEqual(trains.map(t => t.no), entries.map(t => t.no));
+    for (const train of trains) {
+      const entry = entries.find(t => t.no === train.no)!;
+      const exit = exits.find(t => t.no === train.no)!;
+      assert.equal(train.from, entry.from);
+      assert.equal(train.end, exit.end);
+      assert.equal(train.start, entry.start);
+      assert.equal(train.start + train.dep['みさき公園'], exit.start);
+      assert.equal(train.start + train.arr, exit.start + exit.arr);
+    }
+  }
+}
 
 console.log('real diagram connection times: OK');

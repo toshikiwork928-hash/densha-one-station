@@ -9,9 +9,11 @@ import { customPlatformSide, islandOffset, loopShape, loopZone, profileLat, serv
 import { createTrainSet, type TrainCar } from './train-models';
 import { TERMINAL_CHECKPOINTS } from '../game/terminal-ats';
 import { placeCar } from './emu';
+import { coastalThirdTracks } from './coastal-stations';
+import { hashSeed } from '../route/oncoming-stops';
 
 export interface TimedPoint { s: number; depart: number; stop: boolean; station: number | null }
-export interface TimedTrain { id: string; code: string; points: TimedPoint[] }
+export interface TimedTrain { id: string; code: string; dest?: string; points: TimedPoint[] }
 interface Point extends TimedPoint { arrive: number }
 interface Segment { a: Point; b: Point; speed: number; accelerate: number; brake: number }
 export interface Motion { head: number; v: number; station: number | null; stopped: boolean }
@@ -106,22 +108,39 @@ export function sameLaneAhead(laneAt: (o: CounterTrain, s: number) => number, a:
 }
 
 export function createCounterTraffic(route: Route, tod: TimeOfDay, consist: (code: string, ordinal: number, playerTowardNamba: boolean) => Consist, player?: ServiceId) {
-  const playerTowardNamba = serviceOf(route, 'local')?.destination === 'なんば';
+  const playerTowardNamba = route.lineId === 'airport' ? route.stations[0].name === '関西空港' : serviceOf(route, 'local')?.destination === 'なんば';
   const main = route.oncoming.find(o => !o.stop && !o.follow && o.lat !== route.oncomingLocal?.lat)?.lat ?? 4;
-  const nth: Record<string, number> = {};
   const plans = makeCounterPlans(route, tod);
   const isShiokaze = route.id === 'shiokaze';
   const trains: CounterTrain[] = plans.map(plan => {
-    const spec = consist(plan.code, nth[plan.code] = (nth[plan.code] ?? -1) + 1, playerTowardNamba);
+    // 同じ列車番号には、選んだ区間や時間帯によらず同じ編成を割り当てる。
+    const spec = consist(plan.code, hashSeed(plan.id), playerTowardNamba);
+    if (plan.dest) spec.dest = plan.dest;
     const local = plan.code === 'L', lat = local && route.oncomingLocal ? route.oncomingLocal.lat : main;
     const paths: Path[] = [];
     for (const p of plan.points) {
       if (!p.stop || p.station == null) continue;
       const sta = route.stations[p.station];
+      if (local && sta.layout === 'hamadera') {
+        const zone = coastalThirdTracks(route, sta).find(line => line.main === main)?.counterZone;
+        if (zone) { paths.push({ zone, station: p.station }); continue; }
+      }
       let extra: string | undefined;
       if (local && sta.name === '堺') extra = playerTowardNamba ? 'sakai-1' : 'sakai-3';
       if (sta.name === '泉佐野') {
-        // 空港急行は外側線（下りは T1、上りは T4）、なんば方面の自列車と向かい合う下りの普通も T1。本線系統は本線のまま
+        // 空港発の通しコースでは外側線が基準線。本線に残る列車だけ内側の追加線を通る。
+        if (route.lineId === 'airport') {
+          const usesAirportLine = plan.points.some(q => q.station != null && route.stations[q.station].name === 'りんくうタウン');
+          if (!usesAirportLine) {
+            const inner = route.extraTracks?.find(x => x.id === (playerTowardNamba ? 'izumisano-t1' : 'main-up'));
+            if (inner) {
+              const profile: LatProfile = [[inner.from, profileLat(inner.lat, inner.from)],
+                ...inner.lat.filter(([s]) => s > inner.from && s < inner.to), [inner.to, profileLat(inner.lat, inner.to)]];
+              paths.push({ profile, station: p.station });
+            }
+          }
+          continue;
+        }
         if (plan.code === 'A') extra = playerTowardNamba ? 'izumisano-t1' : 'izumisano-t4';
         else if (local && playerTowardNamba) extra = 'izumisano-t1';
       }
@@ -148,6 +167,22 @@ export function createCounterTraffic(route: Route, tod: TimeOfDay, consist: (cod
     }, 0);
     return { id: plan.id, code: plan.code, head: Infinity, v: 0, length, delay: 0, active: false, finished: false, stopped: false, station: null, spec, lat, paths, plan };
   });
+  // 対向列車は s の小さい方へ走る。緩行線が急行線に合流する箇所では、
+  // 先着列車の最後尾が合流点から1閉そく離れるまで、別線からの後続を分岐器手前で待たせる。
+  const mainProfile = route.trackProfiles?.[String(main)];
+  const localProfile = route.oncomingLocal && route.trackProfiles?.[String(route.oncomingLocal.lat)];
+  const merges: { exit: number; hold: number }[] = [];
+  if (mainProfile && localProfile) {
+    const knots = [...new Set([...mainProfile, ...localProfile].map(([s]) => s))].sort((a, b) => a - b);
+    const stationPaths = trains.flatMap(train => train.paths.flatMap(path => path.profile ? [path.profile] : []));
+    const apart = (s: number) => Math.abs(profileLat(mainProfile, s) - profileLat(localProfile, s)) >= 3.4;
+    for (let i = 1; i < knots.length; i++) {
+      const exit = knots[i - 1], start = knots[i];
+      // 駅構内の分岐器は番線別の進路で保護する。同じ分岐器を二重に抑止しない。
+      if (stationPaths.some(p => p[0][0] <= exit && p.at(-1)![0] >= start)) continue;
+      if (apart(start) && !apart(exit)) merges.push({ exit, hold: start + COUNTER_BLOCK_GAP });
+    }
+  }
   const laneAt = (o: CounterTrain, s: number) => {
     for (const path of o.paths) {
       if (path.profile && path.station === route.stations.length - 1 && route.stations[path.station].name === '堺' && s > path.profile.at(-1)![0]) {
@@ -180,6 +215,11 @@ export function createCounterTraffic(route: Route, tod: TimeOfDay, consist: (cod
   const floorOf = (o: CounterTrain) => {
     let floor = -Infinity;
     for (const q of trains) if (q !== o && q.active) {
+      if (q.lat !== o.lat && q.head <= o.head) for (const m of merges) {
+        if (q.head < m.hold && q.head + q.length + COUNTER_BLOCK_GAP > m.exit && o.head >= m.exit) {
+          floor = Math.max(floor, m.hold);
+        }
+      }
       if (q.head <= o.head && (conflict(o, q) || (isShiokaze && o.code === 'L' && q.code === 'L'))) {
         floor = Math.max(floor, q.head + q.length + COUNTER_BLOCK_GAP);
       }

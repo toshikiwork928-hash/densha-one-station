@@ -71,7 +71,7 @@ export function rushStopScenes(stations: Station[], base: OncomingSpec[]): Oncom
 export type OncomingMode = 'stop' | 'run' | 'off';
 
 /** 文字列 → 32bit シード（FNV-1a）。決定的な乱数用（ctx.rng とは独立） */
-function hashSeed(s: string): number {
+export function hashSeed(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
   return h >>> 0;
@@ -226,29 +226,53 @@ export function runClasses(items: OncomingPlanItem[], modes: OncomingMode[], sha
   return out;
 }
 
-/** すれ違う編成の車両・両数・種別表示。格ごとに順に回す（k = その格の何本目）。towardWakayama = 対向列車が和歌山方面へ向かう */
-export function runConsist(cls: TrainClass, k: number, tod: TimeOfDay, towardWakayama: boolean): Pick<OncomingSpec, 'kind' | 'cars' | 'units' | 'unitKinds' | 'label'> & { id: ServiceId } {
-  type C = Pick<OncomingSpec, 'kind' | 'cars' | 'units' | 'unitKinds' | 'label'> & { id: ServiceId };
-  const local: C[] = [
-    { id: 'local', kind: 'commuter-new', cars: 4, units: [4], label: '普通' },
-    { id: 'local', kind: 'commuter-old', cars: 6, units: [4, 2], label: '普通' },
-    { id: 'local', kind: 'commuter-1000', cars: 6, units: [6], label: '普通' },
-  ];
-  const airport: C[] = [
-    { id: 'airport', kind: 'commuter-new', cars: 8, units: [4, 4], label: '空港急行' },
-    { id: 'airport', kind: 'commuter-old', cars: 8, units: [4, 4], label: '空港急行' },
-  ];
-  // ラッシュ時は急行（6・8両）と空港急行を交互に
-  const kyuko: C[] = tod === 'noon' ? airport : [
-    { id: 'express', kind: 'commuter-old', cars: 6, units: [4, 2], label: '急行' }, airport[0],
-    { id: 'express', kind: 'commuter-1000', cars: 6, units: [6], label: '急行' }, airport[1],
-    { id: 'express', kind: 'commuter-old', cars: 8, units: [4, 4], label: '急行' },
-  ];
+type CounterConsist = Pick<OncomingSpec, 'kind' | 'cars' | 'units' | 'unitKinds' | 'label'> & { id: ServiceId };
+
+// 2026年11月22日の組成表を参考に、モデルのある系列で組める一般車を両数別に配分する。
+// 4両は8300系。6両は1000系を主体に、8両には7100系と9000系も入れる。
+const sixCarSeries = [
+  'commuter-1000', 'commuter-new', 'commuter-1000', 'commuter-1000', 'commuter-new',
+  'commuter-old', 'commuter-1000', 'commuter-1000', 'commuter-new', 'commuter-1000',
+  'commuter-1000', 'commuter-1000', 'commuter-1000',
+] as const;
+const eightCarSeries = [
+  'commuter-new', 'commuter-old', 'commuter-new', 'commuter-new', 'commuter-9000',
+  'commuter-new', 'commuter-old', 'commuter-new', 'commuter-9000', 'commuter-new',
+] as const;
+
+function commuterConsist(id: 'airport' | 'express' | 'local', k: number, label: string): CounterConsist {
+  if (id === 'local' && k % 3 !== 2) return { id, label, kind: 'commuter-new', cars: 4, units: [4] };
+  if (id === 'local' || k % 2 === 0) {
+    const ordinal = Math.floor(k / (id === 'local' ? 3 : 2));
+    const kind = sixCarSeries[ordinal % sixCarSeries.length];
+    return { id, label, kind, cars: 6, units: kind === 'commuter-1000' ? [6] : [4, 2] };
+  }
+  const ordinal = Math.floor(k / 2);
+  const slot = ordinal % eightCarSeries.length;
+  const kind = eightCarSeries[slot];
+  const units = kind === 'commuter-new' || slot === 1 ? [4, 2, 2] : [4, 4];
+  return { id, label, kind, units, cars: 8 };
+}
+
+/** 時刻表の種別を保ち、一般車の系列だけを配分する。 */
+export function scheduledConsist(code: string, k: number, towardWakayama: boolean): CounterConsist {
+  if (code === 'L') return commuterConsist('local', k, '普通');
+  if (code === 'A') return commuterConsist('airport', k, '空港急行');
+  if (code.startsWith('E')) return commuterConsist('express', k, code.slice(1));
+  if (code === 'S') return runConsist('tokkyu', 1, 'evening', towardWakayama);
+  return { id: 'limited', kind: 'limited', cars: 6, units: [6], label: code === 'Ra' ? '特急ラピートα' : '特急ラピートβ' };
+}
+
+export function runConsist(cls: TrainClass, k: number, tod: TimeOfDay, towardWakayama: boolean): CounterConsist {
+  if (cls === 'local') return commuterConsist('local', k, '普通');
+  if (cls === 'kyuko') {
+    const airport = tod === 'noon' || k % 2 === 1;
+    return commuterConsist(airport ? 'airport' : 'express', k, airport ? '空港急行' : '急行');
+  }
   // サザンは和歌山方の 4両が 10000系（座席指定車）
   const sk: TrainKind[] = towardWakayama ? ['southern-10000', 'commuter-old'] : ['commuter-old', 'southern-10000'];
-  const southern: C = { id: 'southern', kind: sk[0], cars: 8, units: [4, 4], label: '特急サザン', unitKinds: sk };
-  const rapit = (a: boolean): C => ({ id: 'limited', kind: 'limited', cars: 6, units: [6], label: a ? '特急ラピートα' : '特急ラピートβ' });
-  const tokkyu: C[] = tokkyuOrder(tod, towardWakayama).map(id => id === 'southern' ? southern : rapit(id === 'rapitA'));
-  const list = cls === 'local' ? local : cls === 'kyuko' ? kyuko : tokkyu;
-  return list[k % list.length];
+  const southern: CounterConsist = { id: 'southern', kind: sk[0], cars: 8, units: [4, 4], label: '特急サザン', unitKinds: sk };
+  const rapit = (a: boolean): CounterConsist => ({ id: 'limited', kind: 'limited', cars: 6, units: [6], label: a ? '特急ラピートα' : '特急ラピートβ' });
+  const tokkyu: CounterConsist[] = tokkyuOrder(tod, towardWakayama).map(id => id === 'southern' ? southern : rapit(id === 'rapitA'));
+  return tokkyu[k % tokkyu.length];
 }

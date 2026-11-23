@@ -1,23 +1,43 @@
-// 下りの座標で書いた専用景観（泉佐野〜みさき公園の空港線・JR・羽倉崎検車区）を、上りでも同じ物理位置に描くための写し。
-// 下り（id）ではそのまま、上り（id + '-up'）では s' = 全長 − s、lat' = 線路の左右の和 − lat を写した ctx を返す。進行方向・右向きも反転する。
-// world/namba-frame.ts と同じ考え方（そちらは路線データを堺〜なんば固定で渡す）。route は実際のコースのまま渡す（景観側は route.id だけを見る）。
+// 区間ごとの専用景観を、運転コースの駅位置と進行方向に合わせる。
 import type { GameContext } from '../core/context';
 import type { Track } from '../route/track';
+import type { Route } from '../route/types';
 import { totalLength } from '../route/reverse';
+import { sectionFrame } from './section-frame';
 
-/** 専用景観に渡す ctx（下りの座標）。対象のコース以外は null */
-export function downFrame(ctx: GameContext, id: string): GameContext | null {
-  if (ctx.route.id === id) return ctx;
-  if (ctx.route.id !== id + '-up') return null;
-  const L = totalLength(ctx.route), C = Math.min(...ctx.route.tracks) + Math.max(...ctx.route.tracks), real = ctx.track;
+export function downFrame(ctx: GameContext, base: Route): GameContext | null {
+  if (ctx.route.id === base.id) return ctx;
+  const frame = sectionFrame(base, ctx.route);
+  if (!frame) return null;
+  const length = totalLength(base), real = ctx.track;
+  const { rev, mapS, mapL } = frame;
+  const sign = rev ? -1 : 1;
   const track: Track = {
-    trackAt(s) { const t = real.trackAt(L - s); return { ...t, x: t.x + t.rx * C, z: t.z + t.rz * C, phi: t.phi + Math.PI, rx: -t.rx, rz: -t.rz }; },
-    at: (s, lat, y) => real.at(L - s, C - lat, y),
-    gradeAt: s => -real.gradeAt(L - s),
-    limitAt: s => real.limitAt(L - s),
-    length: real.length,
-    pathLat: s => C - real.pathLat(L - s),
-    pathAt: (s, lat, y) => real.pathAt(L - s, -lat, y),
+    trackAt(s) {
+      const t = real.trackAt(mapS(s)), lat = mapL(0);
+      return { ...t, x: t.x + t.rx * lat, z: t.z + t.rz * lat,
+        phi: t.phi + (rev ? Math.PI : 0), rx: sign * t.rx, rz: sign * t.rz };
+    },
+    at: (s, lat, y) => real.at(mapS(s), mapL(lat), y),
+    gradeAt: s => sign * real.gradeAt(mapS(s)),
+    limitAt: s => real.limitAt(mapS(s)),
+    length,
+    pathLat: s => mapL(real.pathLat(mapS(s))),
+    pathAt: (s, lat, y) => real.pathAt(mapS(s), sign * lat, y),
   };
-  return { ...ctx, track };
+  // 列車の位置も区間固有の距離に戻す。区間外では境界からの距離を保つ。
+  const start = mapS(0), end = mapS(length);
+  const unmap = (s: number) => {
+    if (sign * (s - start) <= 0) return sign * (s - start);
+    if (sign * (s - end) >= 0) return length + sign * (s - end);
+    let lo = 0, hi = length;
+    for (let i = 0; i < 32; i++) {
+      const mid = (lo + hi) / 2;
+      if (sign * (s - mapS(mid)) > 0) lo = mid; else hi = mid;
+    }
+    return (lo + hi) / 2;
+  };
+  const train = new Proxy(ctx.state.train, { get: (t, k) => k === 's' ? unmap(t.s) : Reflect.get(t, k) });
+  const state = new Proxy(ctx.state, { get: (st, k) => k === 'train' ? train : Reflect.get(st, k) });
+  return { ...ctx, route: base, track, state };
 }

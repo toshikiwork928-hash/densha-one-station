@@ -19,7 +19,7 @@ const newRouteOnly = [...args].find(a => a.startsWith('--new-route-only='))?.sli
 const CACHE = 'node_modules/.cache/unyohub';
 const API = 'https://unyohub.2pd.jp/api';
 type TimedPoint = { s: number; depart: number; stop: boolean; station: number | null };
-type TimedTrain = { id: string; code: string; points: TimedPoint[] };
+type TimedTrain = { id: string; code: string; points: TimedPoint[]; dest?: string };
 
 async function post(name: string, body: string): Promise<any> {
   const file = `${CACHE}/${name}.json`;
@@ -53,7 +53,7 @@ interface Pt { km: number; t: number; stop: boolean }
 async function main() {
   const ri = await post('railroad_info', 'railroad_id=nankai&last_modified_timestamp=0');
   const ttAll = await post('timetable', 'railroad_id=nankai&diagram_revision=2024-12-21&timetable_id=weekday&last_modified_timestamp=0');
-  const tt = ttAll.honsen, wakayamako = ttAll.wakayamakosen;
+  const tt = ttAll.honsen, wakayamako = ttAll.wakayamakosen, kukosen = ttAll.kukosen;
   const NAMES: string[] = ri.lines.honsen.stations.map((s: { station_name: string }) => s.station_name);
   const N = NAMES.length;
   const nameOf = (s: string) => s === 'なんば' ? '難波' : s;
@@ -81,6 +81,9 @@ async function main() {
     return out;
   };
   const OUT = trains('outbound_trains'), IN = trains('inbound_trains');
+  // 営業キロは常に難波から南へ増える。reverseRoute したコースでも、空港線3駅の値を固定する。
+  const airportKm: Record<string, number> = { ...KM, 'りんくうタウン': KM['泉佐野'] + 1.9, '関西空港': KM['泉佐野'] + 8.8 };
+  const AIRPORT = new Set(['airport', 'airport-up', 'airport-through', 'airport-through-up', 'airport-namba', 'airport-namba-up']);
   const posAt = (pts: Pt[], t: number): { km: number; stopped: boolean } | null => {
     if (t < pts[0].t - DWELL || t > pts.at(-1)!.t) return null;
     for (let i = 0; i < pts.length; i++) {
@@ -117,9 +120,9 @@ async function main() {
         }
       }
     };
-    // 泉佐野以南の4コース（泉佐野〜みさき公園、みさき公園〜和歌山港。上り下り）は、コースの駅の営業キロ（stopS の差）を KMS に持つ。
+    // 泉佐野以南の各コースは、コースの駅の営業キロ（stopS の差）を KMS に持つ。
     // 既存コースの距離 KM は変えない（泉佐野以南の駅を KM に入れると、既存コースの区間外の点の位置が変わり、収録済みのデータが変わる）。
-    const SOUTH = new Set(['izumisano-misaki', 'izumisano-misaki-up', 'misaki-wakayamako', 'misaki-wakayamako-up']);
+    const SOUTH = new Set(['izumisano-misaki', 'izumisano-misaki-up', 'misaki-wakayamako', 'misaki-wakayamako-up', 'izumisano-wakayamako', 'izumisano-wakayamako-up']);
     const KMS: Record<string, number> = { ...KM };
     for (const [id, anchor] of [['izumisano-misaki', '泉佐野'], ['misaki-wakayamako', 'みさき公園']] as const) {
       const r = ROUTES[id], s0 = r.stations[0].stopS;
@@ -127,12 +130,17 @@ async function main() {
       for (const s of r.stations) KMS[nameOf(s.name)] ??= KMS[anchor] + (s.stopS - s0) / 1000;
     }
     fillKm(KM); fillKm(KMS);
-    const routes: Record<string, Record<TimeOfDay, TimedTrain[]>> = {};
+    const existing = newRouteOnly && existsSync('src/data/oncoming-timetable.json')
+      ? JSON.parse(readFileSync('src/data/oncoming-timetable.json', 'utf8')) as { routes?: Record<string, Record<TimeOfDay, TimedTrain[]>> }
+      : undefined;
+    const routes: Record<string, Record<TimeOfDay, TimedTrain[]>> = newRouteOnly
+      ? structuredClone(existing?.routes ?? {})
+      : {};
     const revision = '2024-12-21';
     // 和歌山港線（Hub では別の線 wakayamakosen）。本線から直通する列車は、列車番号で本線の列車の前後につなぐ。線内だけの列車（普通）は単独の列車にする
     type TPt = { km: number; t: number; stop: boolean; name: string };
     const kinds = (dir: 'inbound_trains' | 'outbound_trains', K: Record<string, number>) => {
-      const out: { id: string; code: string; pts: TPt[] }[] = [];
+      const out: { id: string; code: string; dest?: string; pts: TPt[] }[] = [];
       const wk: Record<string, any[]> = wakayamako?.[dir] ?? {};
       const wkUsed = new Set<string>();
       for (const [id, arr] of Object.entries<any[]>(tt[dir])) for (const tr of arr) {
@@ -166,6 +174,46 @@ async function main() {
       }
       return out;
     };
+    // 空港コースの対向列車は、本線の全種別を新今宮から泉佐野まで収録する。
+    // 空港線へ直通する列車だけ、同じ列車番号のままりんくうタウン・関西空港へ続ける。
+    const airportTrains = (dir: 'inbound_trains' | 'outbound_trains', K: Record<string, number>, route: Route) => {
+      const down = dir === 'outbound_trains';
+      const mainNames = down ? apiNames : [...apiNames].reverse();
+      const branchNames = down ? ['泉佐野', 'りんくうタウン', '関西空港'] : ['関西空港', 'りんくうタウン', '泉佐野'];
+      const routeNames = new Set(route.stations.map(s => nameOf(s.name)));
+      routeNames.delete('難波');
+      type Entry = { train_type: string; departure_times: (string | null)[]; previous_trains?: Link[]; next_trains?: Link[] };
+      type Link = { line_id: string; train_number: string; starting_station: string };
+      const records = (entry: Entry, names: string[]) => entry.departure_times.flatMap((v, i) => {
+        const t = tsec(v), name = names[i];
+        return t == null ? [] : [{ km: K[name], t, stop: !String(v).startsWith('|'), name }];
+      });
+      const linked = new Set<string>();
+      const out: { id: string; code: string; dest: string; pts: TPt[] }[] = [];
+      for (const [id, rows] of Object.entries<Entry[]>(tt[dir])) for (const entry of rows) {
+        const code = kindOf(entry.train_type);
+        if (!code) continue;
+        const main = records(entry, mainNames);
+        const link = (down ? entry.next_trains : entry.previous_trains)?.find(x => x.line_id === 'kukosen' && x.train_number === id);
+        const branch = link ? kukosen[dir][id]?.[0] as Entry | undefined : undefined;
+        if (branch) linked.add(id);
+        const extra = branch ? records(branch, branchNames) : [];
+        // 接続駅の時刻には、先へ進む路線の発車時刻を採る。
+        const trip = down ? [...main.filter(p => !branch || p.name !== '泉佐野'), ...extra]
+          : [...extra.filter(p => p.name !== '泉佐野'), ...main];
+        const pts = trip.filter(p => routeNames.has(p.name));
+        if (pts.length < 2) continue;
+        let dest = trip.at(-1)!.name;
+        if (entry.next_trains?.some(x => x.line_id === 'wakayamakosen')) dest = '和歌山港';
+        out.push({ id, code, dest: dest === '難波' ? 'なんば' : dest, pts });
+      }
+      for (const [id, rows] of Object.entries<Entry[]>(kukosen[dir])) for (const entry of rows) {
+        if (linked.has(id)) continue;
+        const code = kindOf(entry.train_type), pts = records(entry, branchNames).filter(p => routeNames.has(p.name));
+        if (code && pts.length >= 2) out.push({ id, code, dest: branchNames[2], pts });
+      }
+      return out;
+    };
     const OUT_L = kinds('outbound_trains', KM), IN_L = kinds('inbound_trains', KM);
     const OUT_S = kinds('outbound_trains', KMS), IN_S = kinds('inbound_trains', KMS);
     const timeOfDays: TimeOfDay[] = ['morning', 'noon', 'evening', 'night'];
@@ -178,14 +226,19 @@ async function main() {
       };
     };
     for (const [id, r0] of Object.entries(ROUTES)) {
-      const south = SOUTH.has(id), K = south ? KMS : KM, OUT = south ? OUT_S : OUT_L, IN = south ? IN_S : IN_L;
-      if (r0.lineId !== 'shiokaze' || r0.singleTrack || !r0.stations.every(s => K[nameOf(s.name)] != null)) continue;
+      if (newRouteOnly && id !== newRouteOnly) continue;
+      const airport = AIRPORT.has(id), south = SOUTH.has(id), K = airport ? airportKm : south ? KMS : KM;
+      const OUT = airport ? airportTrains('outbound_trains', K, r0) : south ? OUT_S : OUT_L;
+      const IN = airport ? airportTrains('inbound_trains', K, r0) : south ? IN_S : IN_L;
+      if ((r0.lineId !== 'shiokaze' && !airport) || r0.singleTrack || !r0.stations.every(s => K[nameOf(s.name)] != null)) continue;
       routes[id] = { morning: [], noon: [], evening: [], night: [] };
       const firstKm = K[nameOf(r0.stations[0].name)]!, lastKm = K[nameOf(r0.stations.at(-1)!.name)]!;
       const oncoming = firstKm < lastKm ? IN : OUT;
+      // 岸和田〜なんばの通しコースも6番線を上下で使う。新今宮までは上下線が分かれている。
+      const sharedNambaPlatform = id === 'kishiwada-namba' || id === 'namba-kishiwada-up';
       /** 和歌山港線は単線で、このコースでは上下の線が重なる（s 12870〜14790）。そこへ対向列車を出すと自列車の線と重なるので、
-       *  みさき公園〜和歌山港のコースでは和歌山市より先（和歌山港線内）の点を落とし、線内だけの列車は出さない */
-      const clipKm = id.startsWith('misaki-wakayamako') ? K['和歌山市'] : undefined;
+       *  和歌山港発着のコースでは和歌山市より先（和歌山港線内）の点を落とし、線内だけの列車は出さない */
+      const clipKm = south && r0.stations.some(s => s.name === '和歌山港') ? K['和歌山市'] : undefined;
       for (const tod of timeOfDays) {
         const r = structuredClone(r0); r.timeOfDay = tod;
         let courseMax = 0;
@@ -203,7 +256,7 @@ async function main() {
         const toS = timetableSOf(r, K), routeMin = Math.min(r.extent.from, r.extent.to), routeMax = Math.max(r.extent.from, r.extent.to);
         const result: TimedTrain[] = [];
         for (const tr of oncoming) {
-          const points0 = tr.pts.filter(p => clipKm == null || p.km <= clipKm + 1e-9).map(p => ({ s: Math.round(toS(p.km)), depart: p.t, stop: p.stop, station: r.stations.findIndex(s => nameOf(s.name) === p.name) })).map(p => ({ ...p, station: p.station < 0 ? null : p.station }));
+          const points0 = tr.pts.filter(p => (!sharedNambaPlatform || p.km >= K['新今宮']) && (clipKm == null || p.km <= clipKm + 1e-9)).map(p => ({ s: Math.round(toS(p.km)), depart: p.t, stop: p.stop, station: r.stations.findIndex(s => nameOf(s.name) === p.name) })).map(p => ({ ...p, station: p.station < 0 ? null : p.station }));
           points0.sort((a, b) => a.depart - b.depart || b.s - a.s);
           const points: TimedPoint[] = [];
           for (const p of points0) {
@@ -228,7 +281,7 @@ async function main() {
             const crossing = points.findIndex((p, i) => points[i + 1] && p.s >= routeMax && points[i + 1].s <= routeMin);
             if (crossing >= 0) { from = crossing; to = crossing + 1; }
           }
-          result.push({ id: tr.id, code: tr.code, points: points.slice(from, to + 1) });
+          result.push({ id: tr.id, code: tr.code, ...(tr.dest ? { dest: tr.dest } : {}), points: points.slice(from, to + 1) });
         }
         result.sort((a, b) => (a.points.find(p => p.s >= routeMin)?.depart ?? a.points[0].depart) - (b.points.find(p => p.s >= routeMin)?.depart ?? b.points[0].depart) || a.id.localeCompare(b.id));
         routes[id][tod] = result;

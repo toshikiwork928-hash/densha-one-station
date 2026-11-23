@@ -9,6 +9,7 @@ import { getTerrain } from './terrain';
 import { trackSpan } from '../route/service';
 import { addHallArchitecture, architectureOf, hallBounds } from './station-architecture';
 import { buildMisakiParkStation, isMisakiPark } from './misaki-park';
+import { buildSakaiConcourse } from './sakai-station';
 
 export function buildCustomStation(ctx: GameContext, sta: Station, prev: string, next: string): void {
   const T = getTerrain(ctx), list = sta.customPlatforms ?? [];
@@ -31,6 +32,7 @@ export function buildCustomStation(ctx: GameContext, sta: Station, prev: string,
   }
   // みさき公園: 盛土の下の地下道・駅舎2か所・ホームの階段/エスカレーター/エレベーター（world/misaki-park.ts）
   if (isMisakiPark(sta)) { buildMisakiParkStation(ctx, sta); return; }
+  if (sta.name === '堺') { buildSakaiConcourse(ctx, sta, dy); return; }
   const arch = architectureOf(sta.name);
   if (arch?.kind === 'hall') {
     const t = ctx.track.trackAt(sc), b = new GeoBatch();

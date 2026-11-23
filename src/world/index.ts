@@ -32,6 +32,8 @@ import { createRunPasses } from './run-pass';
 import { buildWakayamashi } from './wakayamashi';
 import { buildWakayamashiTrains } from './wakayamashi-trains';
 import { buildWakayamadaigakumae } from './wakayamadaigakumae';
+import { izumisano } from '../route/routes/izumisano';
+import { izumisanoMisaki } from '../route/routes/izumisano-misaki';
 import { downFrame } from './down-frame';
 import { buildIzumisanoAirport } from './izumisano-airport';
 import { buildHagurazakiDepot, buildHagurazakiDepotTrains } from './hagurazaki-depot';
@@ -88,10 +90,10 @@ export function buildWorld(ctx: GameContext): World {
   // みさき公園〜和歌山港の和歌山大学前駅の周辺（橋上駅舎・駅ビル・イオンモールへのデッキ・西口・マンション・斜面。同じく下りの座標）。ctx.rng を消費しない
   buildWakayamadaigakumae(ctx);
   // 岸和田〜泉佐野専用: 水間鉄道の貝塚駅（見た目だけ。座標は下りのもの）。ctx.rng を消費しない
-  const kctx = downFrame(ctx, 'izumisano');
+  const kctx = [izumisano.id, izumisano.id + '-up'].includes(ctx.route.id) ? downFrame(ctx, izumisano) : null;
   if (kctx) buildMizuma(kctx);
-  // 泉佐野〜みさき公園専用（下り 'izumisano-misaki' と上り '-up'。座標は下りのもの、world/down-frame.ts）。ctx.rng を消費しない
-  const sctx = downFrame(ctx, 'izumisano-misaki');
+  // 泉佐野からみさき公園までの施設は、この区間を含むコースで共通の座標を使う。
+  const sctx = downFrame(ctx, izumisanoMisaki);
   if (sctx) {
     buildIzumisanoAirport(sctx); // 南海空港線の分岐の高架と、その上を通る JR 関西空港線の橋
     buildHagurazakiDepot(sctx); // 羽倉崎検車区

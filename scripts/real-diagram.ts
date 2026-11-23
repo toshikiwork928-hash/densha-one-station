@@ -15,7 +15,7 @@ import type { ServiceId, TimeOfDay } from '../src/route/types';
 
 const CACHE = 'node_modules/.cache/unyohub', OUT = 'src/data/real-diagram.json';
 const TODS: TimeOfDay[] = ['morning', 'noon', 'evening', 'night'];
-const SOUTH_COURSES = ['namba', 'namba-up', 'shiokaze', 'shiokaze-up', 'kishiwada', 'kishiwada-up', 'nankai-through', 'nankai-through-up', 'izumisano', 'izumisano-up', 'izumisano-misaki', 'izumisano-misaki-up', 'misaki-wakayamako', 'misaki-wakayamako-up', 'namba-kishiwada-up', 'kishiwada-namba', 'sakai-izumisano-up', 'izumisano-sakai'];
+const SOUTH_COURSES = ['namba', 'namba-up', 'shiokaze', 'shiokaze-up', 'kishiwada', 'kishiwada-up', 'nankai-through', 'nankai-through-up', 'izumisano', 'izumisano-up', 'izumisano-misaki', 'izumisano-misaki-up', 'misaki-wakayamako', 'misaki-wakayamako-up', 'izumisano-wakayamako', 'izumisano-wakayamako-up', 'namba-kishiwada-up', 'kishiwada-namba', 'sakai-izumisano-up', 'izumisano-sakai'];
 
 const tt = JSON.parse(readFileSync(`${CACHE}/timetable.json`, 'utf8')), ri = JSON.parse(readFileSync(`${CACHE}/railroad_info.json`, 'utf8'));
 /** 本線の駅（なんば方から）と和歌山港 */

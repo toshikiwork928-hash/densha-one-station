@@ -314,7 +314,8 @@ export interface Route {
     /** 橋梁: 上下線が別々の単線橋（線路ごとの床版・主桁・橋脚） */ split?: boolean;
     /** 橋梁: 橋脚の位置 s（未指定は 45m ごと） */ piers?: number[];
     /** 橋梁: 線路ごとの橋脚の材質（route.tracks の順。split のとき） */ pierStyle?: ('brick' | 'concrete')[];
-    /** 橋梁（groundFollowsTrack のコース）: 橋の下の地面を線路面より下げる量 [m]（両端 120m でならす）。水面もこの分だけ下がり、桁と水面の間が空く */ drop?: number }[];
+    /** この橋の塗色・桁の形式。指定を省くと路線の bridgeStyle を使う。 */ bridgeStyle?: Route['bridgeStyle'];
+    /** 橋・高架の地面を線路面より下げる量 [m]。両端 120m でならす。 */ drop?: number }[];
   /** route.tracks の線の横位置の変化（キー = tracks の値の文字列。値は絶対の横位置）。複々線で対向線が外へずれる・駅で線路が開く */
   trackProfiles?: Record<string, LatProfile>;
   /** この範囲では追加の線路をすべて本線と一続きの床版・架線柱の範囲に含める（頭端駅の扇状の構内） */

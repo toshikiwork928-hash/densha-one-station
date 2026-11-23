@@ -1,9 +1,11 @@
-// 堺または岸和田で既存区間をつなぎ、両区間の停車駅・待避・走行時間を通し運転に引き継ぐ。
+// 接続駅で既存区間をつなぎ、両区間の停車駅・待避・走行時間を通し運転に引き継ぐ。
 import { waitDwell } from '../../game/overtake';
 import { concatRoutes } from '../concat';
 import { realWaitsOf } from '../real-diagram';
 import type { Route, ServiceSpec, Sign, TimeOfDay } from '../types';
 import { izumisano, izumisanoUp } from './izumisano';
+import { izumisanoMisaki, izumisanoMisakiUp } from './izumisano-misaki';
+import { misakiWakayamako, misakiWakayamakoUp } from './misaki-wakayamako';
 import { namba, nambaUp } from './namba';
 import { through, throughUp } from './through';
 
@@ -71,3 +73,33 @@ export const nambaKishiwada = longCourse(nambaUp, throughUp, 'namba-kishiwada-up
 export const kishiwadaNamba = longCourse(through, namba, 'kishiwada-namba');
 export const sakaiIzumisano = longCourse(throughUp, izumisano, 'sakai-izumisano-up');
 export const izumisanoSakai = longCourse(izumisanoUp, through, 'izumisano-sakai');
+
+function southCourse(up: boolean): Route {
+  // 内陸の孝子越えでは海の向きを省略している。通しでは泉佐野側と同じ大阪湾の向きを使う。
+  const north = up ? izumisanoMisakiUp : izumisanoMisaki;
+  const south = { ...(up ? misakiWakayamakoUp : misakiWakayamako), seaSide: north.seaSide };
+  south.structures = south.structures?.map(st => st.kind === 'bridge' ? { ...st, bridgeStyle: south.bridgeStyle } : st);
+  const route = longCourse(up ? south : north, up ? north : south, up ? 'izumisano-wakayamako-up' : 'izumisano-wakayamako');
+  const city = route.stations.findIndex(st => st.name === '和歌山市');
+  const from = up ? city : 0, to = up ? route.stations.length - 1 : city;
+  route.partialGoals = [
+    { from, to, services: ['local'], asAll: true },
+    { from, to, services: ['express', 'southern'] },
+  ];
+  route.destinationApproach = up ? undefined : south.destinationApproach;
+  route.bridgeStyle = north.bridgeStyle;
+  route.coastalScenery = south.coastalScenery;
+  route.counterSameTrack = north.counterSameTrack;
+  route.wakayamaDest = north.wakayamaDest;
+  route.precedingHeadway = south.precedingHeadway;
+  for (const v of route.services!) {
+    const dest = south.services!.find(s => s.id === v.id)!;
+    v.destination = dest.destination;
+    v.destinationKana = dest.destinationKana;
+    v.destinationByEnd = dest.destinationByEnd;
+  }
+  return route;
+}
+
+export const izumisanoWakayamako = southCourse(false);
+export const izumisanoWakayamakoUp = southCourse(true);

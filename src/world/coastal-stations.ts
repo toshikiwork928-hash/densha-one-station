@@ -5,13 +5,14 @@ import { GeoBatch, M, P, onLight } from './batch';
 import { canvasTex } from './canvas-tex';
 import { cullByDistance } from './cull';
 import { getTerrain } from './terrain';
-import { loopShape, loopZone, seaSideOf } from '../route/service';
+import { loopShape, loopZone, seaSideOf, type LoopZone } from '../route/service';
 import { BUMPER_D, DIVERGE_D, hagoromoSpec } from './hagoromo-branch';
 import { addPlatformWall, architectureOf } from './station-architecture';
 
 /** 浜寺公園の物理的な副線（両方向で同じ2本）。泉大津方面は島式ホームを挟む外側線、堺方面は本線の外側に寄り添う待避線でホームはその外側。 */
 export interface CoastalThird {
   main: number; outer: number; from: number; to: number; lat(s: number): number;
+  counterZone?: LoopZone;
   /** 外側（outer の向き）に張り出すホーム・架線柱までの距離（線路中心から） */
   reach: number;
   /** true = 泉大津方面（本線との間が島式ホーム）、false = 堺方面（ホームは待避線の外側） */
@@ -43,7 +44,8 @@ export function coastalThirdTracks(route: Route, sta: Station): CoastalThird[] {
   };
   const make = (main: number, outer: number, own: boolean, island: boolean, reach: number): CoastalThird => {
     const z = zone(own);
-    return { main, outer, from: z.inFrom, to: z.outTo, lat: s => main + (outer - main) * loopShape(z, s), reach, island };
+    return { main, outer, from: z.inFrom, to: z.outTo, lat: s => main + (outer - main) * loopShape(z, s), reach, island,
+      counterZone: { ...z, lat: main - outer } };
   };
   // 下り（堺方面）で自線は lo、上りで自線は lo（進行方向左）。物理配置は両方向で鏡像。
   const izumiMain = reverse ? lo : hi, sakaiMain = reverse ? hi : lo;

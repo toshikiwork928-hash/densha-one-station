@@ -10,6 +10,7 @@ import { BAND_CULL, isMountain } from './mountain-terrain';
 import { cullByDistance } from './cull';
 import { buildMountainSpan, buildRockSheds } from './mountain-structures';
 import { hagoromoDeckEdge, hagoromoParapetGap } from './hagoromo-branch';
+import { sakaiAccessOpenings } from './sakai-station';
 
 const concrete = new THREE.MeshLambertMaterial({ color: 0xc4c0b6, side: THREE.DoubleSide });
 
@@ -77,6 +78,15 @@ export function buildStructures(ctx: GameContext): void {
   const lamps: THREE.Matrix4[] = [];
   const MT = isMountain(T) ? T : null;
   const bounds = coastalDeckBounds(ctx);
+  const sakai = route.stations.find(st => st.name === '堺');
+  const accessHoles = sakai ? (sakai.customPlatforms ?? []).flatMap(p => {
+    if (p.kind !== 'island') return [];
+    const { from, to } = sakai.platform;
+    return sakaiAccessOpenings(route, to - from).map(o => {
+      const s = (from + to) / 2 - o.z, x = p.lat + o.x;
+      return { start: s - o.depth / 2, end: s + o.depth / 2, left: x - o.width / 2, right: x + o.width / 2 };
+    });
+  }) : [];
 
   for (const st of list) {
     if (st.kind === 'tunnel') {
@@ -115,8 +125,25 @@ export function buildStructures(ctx: GameContext): void {
       for (const [di, bounds] of decks.entries()) {
       // 床版・地覆・高欄
       const [L0, L1] = bounds((st.from + st.to) / 2);
-      scene.add(extrudeFn(track, s => { const [a, b] = bounds(s); return [[a, .02], [a, -1.1], [b, -1.1], [b, .02]]; }, st.from, st.to, 2, concrete));
-      scene.add(extrudeFn(track, s => { const [a, b] = bounds(s); return [[a + .25, .02], [b - .25, .02]]; }, st.from, st.to, 2, concrete));
+      // 堺の3階ホームの階段と昇降路は、ホーム直下の高架床版も貫く。
+      const holes = accessHoles.filter(h => h.start < st.to && h.end > st.from);
+      if (!holes.length) {
+        scene.add(extrudeFn(track, s => { const [a, b] = bounds(s); return [[a, .02], [a, -1.1], [b, -1.1], [b, .02]]; }, st.from, st.to, 2, concrete));
+        scene.add(extrudeFn(track, s => { const [a, b] = bounds(s); return [[a + .25, .02], [b - .25, .02]]; }, st.from, st.to, 2, concrete));
+      }
+      const breaks = [...new Set([st.from, st.to, ...holes.flatMap(h =>
+        [Math.max(st.from, h.start), Math.min(st.to, h.end)])])].sort((a,b) => a-b);
+      for (let i = 1; holes.length && i < breaks.length; i++) {
+        const start = breaks[i-1], end = breaks[i], mid = (start + end) / 2;
+        const open = holes.filter(h => h.start < mid && h.end > mid).sort((a,b) => a.left - b.left);
+        for (let j = 0; j <= open.length; j++) {
+          scene.add(extrudeFn(track, s => {
+            const [lo, hi] = bounds(s);
+            const left = j ? open[j-1].right : lo, right = j < open.length ? open[j].left : hi;
+            return [[left, .02], [left, -1.1], [right, -1.1], [right, .02], [left, .02]];
+          }, start, end, 2, concrete));
+        }
+      }
       const wallH = bridge || st.open ? .55 : 1.15;
       const gap = hagoromoParapetGap(route);
       for (const side of [-1, 1]) {
@@ -147,8 +174,9 @@ export function buildStructures(ctx: GameContext): void {
       }
       if (bridge) {
         // 鋼桁（主桁）と手すり
-        const steel = new THREE.MeshLambertMaterial({ color: route.bridgeStyle?.color ?? 0x5f7488, side: THREE.DoubleSide });
-        if (route.bridgeStyle?.throughGirder) {
+        const style = st.bridgeStyle ?? route.bridgeStyle;
+        const steel = new THREE.MeshLambertMaterial({ color: style?.color ?? 0x5f7488, side: THREE.DoubleSide });
+        if (style?.throughGirder) {
           // 下路プレートガーダー: 床版の両縁に高さ 2m の主桁（トラス区間は除く）。上端にフランジ、外面に補剛材
           const trusses = (route.coastalLandmarks ?? []).filter(l => l.kind === 'steel-bridge').map(l => [l.s - (l.length ?? 170) / 2, l.s + (l.length ?? 170) / 2]);
           const spans: [number, number][] = [], sb = new GeoBatch();

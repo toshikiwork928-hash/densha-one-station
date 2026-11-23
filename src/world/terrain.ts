@@ -96,7 +96,7 @@ function makeTerrain(route: Route, track: Track): Terrain {
   const viaducts = structs.filter(s => s.kind === 'viaduct'), viaductH = route.viaductHeight ?? 9;
   const viaductDrop = (s: number) => {
     let d = 0;
-    for (const v of viaducts) d = Math.max(d, viaductH * smooth((s - v.from) / 120) * smooth((v.to - s) / 120));
+    for (const v of viaducts) d = Math.max(d, (v.drop ?? viaductH) * smooth((s - v.from) / 120) * smooth((v.to - s) / 120));
     return d;
   };
   // 橋の下の地面を下げる（drop を持つ橋。紀ノ川橋梁）: 橋の中では両端 120m でならして、桁と水面の間を空ける

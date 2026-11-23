@@ -2,9 +2,9 @@
 import { START_CLOCK } from '../src/core/config';
 import { createMeet, planMeet } from '../src/game/meet';
 import { ROUTES } from '../src/route';
-import { runConsist } from '../src/route/oncoming-stops';
+import { hashSeed, scheduledConsist } from '../src/route/oncoming-stops';
 import { sakuragaoka } from '../src/route/routes/sakuragaoka';
-import { WAKAYAMA_DEST } from '../src/route/service';
+import { applyService, islandOffset, playerPathLat, WAKAYAMA_DEST } from '../src/route/service';
 import type { CounterTrain } from '../src/world/oncoming-timetable';
 
 // oncoming-timetable は描画アダプタも同居しており、モジュール初期化時だけ発光用 canvas を作る。
@@ -19,11 +19,10 @@ const { coastalThirdTracks } = await import('../src/world/coastal-stations');
 
 type Tod = keyof typeof START_CLOCK;
 const TODS: Tod[] = ['morning', 'noon', 'evening', 'night'];
-const routeIds = ['shiokaze', 'shiokaze-up', 'kishiwada', 'kishiwada-up', 'izumisano', 'izumisano-up', 'nankai-through', 'nankai-through-up', 'namba', 'namba-up',
-  // 泉佐野以南（実ダイヤの対向列車。みさき公園〜和歌山港は和歌山港線内の対向列車を出さない）
-  'izumisano-misaki', 'izumisano-misaki-up', 'misaki-wakayamako', 'misaki-wakayamako-up'];
+const routeIds = Object.values(ROUTES).filter(r => !r.singleTrack && (r.lineId === 'shiokaze' || r.lineId === 'airport')).map(r => r.id);
 const only = (((globalThis as any).process?.argv as string[] | undefined)?.find(x => x.startsWith("--only="))?.slice("--only=".length) ?? "").split(",").filter(Boolean);
 let checks = 0;
+let safetyCases = 0;
 let minatoNoonExpressFollowFrames = 0;
 const minatoNoonSamples: string[] = [];
 
@@ -39,13 +38,7 @@ function verifyLazy(condition: unknown, message: () => string): asserts conditio
 
 /** world/oncoming.ts の realConsist と同じ種別・編成選択。車体長を含め本番と同じ条件で点検する。 */
 function consist(code: string, ordinal: number, playerTowardNamba: boolean) {
-  let result;
-  if (code === 'L') result = runConsist('local', ordinal, 'noon', playerTowardNamba);
-  else if (code === 'A') result = runConsist('kyuko', ordinal % 2 ? 3 : 1, 'evening', playerTowardNamba);
-  else if (code.startsWith('E')) result = { ...runConsist('kyuko', [0, 2, 4][ordinal % 3], 'evening', playerTowardNamba), label: code.slice(1), id: 'express' as const };
-  else if (code === 'S') result = runConsist('tokkyu', 1, 'evening', playerTowardNamba);
-  else result = { id: 'limited' as const, kind: 'limited' as const, cars: 6, units: [6], label: code === 'Ra' ? '特急ラピートα' : '特急ラピートβ' };
-  const { id, ...spec } = result;
+  const { id, ...spec } = scheduledConsist(code, ordinal, playerTowardNamba);
   return { ...spec, cars: spec.cars!, kind: spec.kind!, dest: playerTowardNamba ? WAKAYAMA_DEST[id][0] : 'なんば' };
 }
 
@@ -86,7 +79,8 @@ function assertSafety(routeId: string, tod: Tod): void {
     if (!point.stop || point.station == null) continue;
     const station = route.stations[point.station];
     if (station.layout !== 'hamadera') continue;
-    const siding = coastalThirdTracks(route, station).find(x => x.main === train.lat);
+    const main = train.lat + islandOffset(route, train.lat, point.s);
+    const siding = coastalThirdTracks(route, station).find(x => Math.abs(x.main - main) < .001);
     verify(siding != null, `${routeId}/${tod}: 浜寺公園の対向副線がない`);
     for (let s = siding.from - train.length; s <= siding.to + train.length; s += 2) {
       verify(Math.abs(traffic.laneAt(train, s) - siding.lat(s)) < .001,
@@ -96,12 +90,30 @@ function assertSafety(routeId: string, tod: Tod): void {
   // 堺で停車する対向普通は、方向に応じた1/3番線の実プロファイルを使う。
   const sakai = route.stations.findIndex(s => s.name === '堺');
   if (sakai >= 0) for (const train of traffic.trains.filter(t => t.code === 'L' && t.plan.points.some(p => p.stop && p.station === sakai))) {
-    const playerTowardNamba = route.services?.find(s => s.id === 'local')?.destination === 'なんば';
+    const playerTowardNamba = route.lineId === 'airport' ? route.stations[0].name === '関西空港' : route.services?.find(s => s.id === 'local')?.destination === 'なんば';
     const expected = route.extraTracks?.find(x => x.id === (playerTowardNamba ? 'sakai-1' : 'sakai-3'))?.lat;
     verify(expected != null && train.paths.some(p => p.station === sakai && p.profile === expected),
       `${routeId}/${tod}/${train.id}: 堺普通が指定番線プロファイルを使わない`);
   }
   verify(new Set(plans.map(p => p.id)).size === plans.length, `${routeId}/${tod}: 列車 id が重複`);
+  if (route.lineId === 'airport' || ['kishiwada-namba', 'namba-kishiwada-up', 'izumisano-sakai', 'sakai-izumisano-up'].includes(routeId)) {
+    // 発車が遅れて離合地点が変わっても、車体が通る全区間で上下の線路が分かれていること。
+    for (const { id: service } of route.services ?? []) {
+      const player = structuredClone(route);
+      applyService(player, service);
+      const checked = new Set<string>();
+      for (const train of traffic.trains) {
+        const from = train.plan.points.at(-1)!.s, to = train.plan.points[0].s + train.length;
+        const path = JSON.stringify([train.lat, train.paths, from, to]);
+        if (checked.has(path)) continue;
+        checked.add(path);
+        for (let s = Math.max(from, route.extent.from); s <= Math.min(to, route.extent.to); s += 2) {
+          verifyLazy(Math.abs(traffic.laneAt(train, s) - playerPathLat(player, s)) >= 3.4,
+            () => `${routeId}/${tod}/${service}: 対向${train.id}の進路が自列車と重なる s=${s}`);
+        }
+      }
+    }
+  }
   for (const plan of plans) {
     verify(plan.points.length >= 2, `${routeId}/${tod}/${plan.id}: 点が不足`);
     for (let i = 1; i < plan.points.length; i++) {
@@ -142,13 +154,15 @@ function assertSafety(routeId: string, tod: Tod): void {
       const inSection = t.head > route.extent.from && t.head + t.length < route.extent.to;
       const atPlatform = route.stations.some(s => t.head + t.length >= s.platform.from && t.head <= s.platform.to);
       if (!t.active || t.v >= .05 || !inSection || atPlatform) { stationarySince.delete(t.id); continue; }
-      const since = stationarySince.get(t.id) ?? clock;
-      stationarySince.set(t.id, since);
       // 同じ進路の先行・合流列車が閉そくを占める間は信号待ちがあり得る。
       // 進路が空いた後の静止と、泉大津の待避線にいる普通を本線の障害とする不具合を検出する。
       const izumiotsuRegression = routeId === 'nankai-through-up' && tod === 'noon' && t.id === '1716'
         && traffic.trains.some(q => q.stopped && q.id === '6818' && q.station != null && route.stations[q.station].name === '泉大津');
-      if (clock - since >= 15) verifyLazy(!izumiotsuRegression && traffic.floorOf(t) >= t.head - 3, () => `${routeId}/${tod}: ${t.id} が駅間で15秒以上静止 clock=${clock.toFixed(1)} head=${t.head.toFixed(1)}`);
+      if (!izumiotsuRegression && traffic.floorOf(t) >= t.head - 3) { stationarySince.delete(t.id); continue; }
+      // 閉そくが開いてからの静止時間を測る。開通前の正当な信号待ちを加算しない。
+      const since = stationarySince.get(t.id) ?? clock;
+      stationarySince.set(t.id, since);
+      verifyLazy(clock - since < 15, () => `${routeId}/${tod}: ${t.id} が駅間で15秒以上静止 clock=${clock.toFixed(1)} head=${t.head.toFixed(1)}`);
     }
     if (routeId === 'shiokaze') {
       const active = traffic.trains.filter(t => t.active).sort((a, b) => a.head - b.head);
@@ -203,6 +217,7 @@ for (const routeId of routeIds) for (const tod of TODS) {
   if (only.length && !only.includes(`${routeId}/${tod}`) && !only.includes(routeId)) continue;
   const timetable = counterTimetable(routeId, tod);
   verify(timetable != null && timetable.length > 0, `${routeId}/${tod}: 時刻表がない`);
+  safetyCases++;
   assertSafety(routeId, tod);
 }
 
@@ -241,7 +256,22 @@ for (const mountainId of ['mountain', 'mountain-up']) {
   verify(meet.heldSignal() === -1, `${mountainId}: 到着後も出発信号を保持する`);
 }
 
+// コースをまたぐ同じ列車は1本として、朝に登場する一般車の系列と編成長を確認する。
+const counted = new Set<string>();
+const fleet = new Map<string, number>();
+for (const id of routeIds) for (const train of counterTimetable(id, 'morning') ?? []) {
+  if (counted.has(train.id) || !['L', 'A', 'E'].includes(train.code[0])) continue;
+  counted.add(train.id);
+  const consist = scheduledConsist(train.code, hashSeed(train.id), true);
+  fleet.set(consist.kind!, (fleet.get(consist.kind!) ?? 0) + 1);
+  verify(consist.units!.reduce((sum, n) => sum + n, 0) === consist.cars, `${train.id}: 編成と両数が一致しない`);
+  if (consist.cars === 4) verify(consist.kind === 'commuter-new', `${train.id}: 4両の系列`);
+}
+const fleetCounts = ['commuter-new', 'commuter-1000', 'commuter-old', 'commuter-9000'].map(k => fleet.get(k) ?? 0);
+verify(fleetCounts.every((n, i) => n > (fleetCounts[i + 1] ?? 0)), `朝の一般車の本数順: ${fleetCounts.join(', ')}`);
+console.log(`朝の一般車（列車番号単位）8300系・1000系・7100系・9000系: ${fleetCounts.join('・')}本`);
+
 // 旧架空コースは従来の 1 編成だけで、共通ダイヤを使わない。
 verify(sakuragaoka.oncoming.length === 1, '桜ヶ丘: 旧対向列車が1編成でない');
 verify(counterTimetable(sakuragaoka.id, 'noon') == null, '桜ヶ丘: 共通時刻表を誤適用');
-console.log(`対向列車検証: ${checks} 件成功（${routeIds.length}方向×4時間帯、0.1秒刻み、昼の湊停車普通直後の急行 ${minatoNoonExpressFollowFrames} フレーム）`);
+console.log(`対向列車検証: ${checks} 件成功（実行 ${safetyCases} コース・時間帯、候補 ${routeIds.length}方向×4時間帯、0.1秒刻み、昼の湊停車普通直後の急行 ${minatoNoonExpressFollowFrames} フレーム）`);

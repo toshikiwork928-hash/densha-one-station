@@ -68,9 +68,9 @@ export const DK_RESERVED: NonNullable<Route['reserved']> = [
   { from: 6040, to: 6370, lat0: 92, lat1: 210, keepRoads: true },
 ];
 
-/** 和歌山大学前駅（このコースの上下）か。stations.ts が標準の駅舎・駅前広場を作らない判定に使う（専用モジュールが描く） */
-export const isDaigakumae = (routeId: string, stationName: string): boolean =>
-  stationName === DK.name && (routeId === 'misaki-wakayamako' || routeId === 'misaki-wakayamako-up');
+/** 和歌山大学前駅か。stations.ts が標準の駅舎・駅前広場を作らない判定に使う（専用モジュールが描く） */
+export const isDaigakumae = (stationName: string): boolean =>
+  stationName === DK.name;
 
 /** 景観を置かない範囲を足す。reverseRoute より前に呼ぶ */
 export function applyDaigakumae(r: Route): void {

@@ -10,13 +10,14 @@ import { through, throughUp } from './routes/through';
 import { namba, nambaUp } from './routes/namba';
 import { misakiWakayamako, misakiWakayamakoUp } from './routes/misaki-wakayamako';
 import { airport, airportThrough } from './routes/airport';
-import { nambaKishiwada, kishiwadaNamba, sakaiIzumisano, izumisanoSakai } from './routes/mainline-long';
+import { izumisanoWakayamako, izumisanoWakayamakoUp, nambaKishiwada, kishiwadaNamba, sakaiIzumisano, izumisanoSakai } from './routes/mainline-long';
 import { airportInbound, airportUp, airportThroughUp, airportOutbound } from './routes/airport-inbound';
 
 export const ROUTES: Record<string, Route> = { [sakuragaoka.id]: sakuragaoka, [shiokaze.id]: shiokaze, [shiokazeUp.id]: shiokazeUp, [mountain.id]: mountain, [mountainUp.id]: mountainUp,
   [kishiwada.id]: kishiwada, [kishiwadaUp.id]: kishiwadaUp, [izumisano.id]: izumisano, [izumisanoUp.id]: izumisanoUp, [through.id]: through, [throughUp.id]: throughUp, [namba.id]: namba, [nambaUp.id]: nambaUp,
   [izumisanoMisaki.id]: izumisanoMisaki, [izumisanoMisakiUp.id]: izumisanoMisakiUp,
   [misakiWakayamako.id]: misakiWakayamako, [misakiWakayamakoUp.id]: misakiWakayamakoUp,
+  [izumisanoWakayamako.id]: izumisanoWakayamako, [izumisanoWakayamakoUp.id]: izumisanoWakayamakoUp,
   [nambaKishiwada.id]: nambaKishiwada, [kishiwadaNamba.id]: kishiwadaNamba, [sakaiIzumisano.id]: sakaiIzumisano, [izumisanoSakai.id]: izumisanoSakai,
   [airportUp.id]: airportUp, [airportThroughUp.id]: airportThroughUp, [airportOutbound.id]: airportOutbound,
   [airport.id]: airport, [airportThrough.id]: airportThrough, [airportInbound.id]: airportInbound };
@@ -62,16 +63,20 @@ const NANKAI_SECTIONS: SectionEntry[] = [
     dirs: [{ id: izumisano.id, label: '下り', desc: '岸和田 → 泉佐野' }, { id: izumisanoUp.id, label: '上り', desc: '泉佐野 → 岸和田' }],
   },
   {
-    id: 'izumisano-misaki', name: '泉佐野〜みさき公園', desc: '10駅・17.9km。泉佐野の3面4線から、海沿いと山あいを南へ。普通・特急サザン（景観・ダイヤは作り込み前）',
+    id: 'izumisano-wakayamako', name: '泉佐野〜和歌山市・和歌山港', desc: 'みさき公園経由。和歌山市まで30.2 km、和歌山港まで33.0 km。和歌山港行きは夕方の特急サザン、和歌山港発は夜の急行・特急サザンで選べます。',
+    dirs: [{ id: izumisanoWakayamako.id, label: '下り', desc: '泉佐野 → 和歌山市・和歌山港' }, { id: izumisanoWakayamakoUp.id, label: '上り', desc: '和歌山市・和歌山港 → 泉佐野' }],
+  },
+  {
+    id: 'izumisano-misaki', name: '泉佐野〜みさき公園', desc: '10駅・17.9km。泉佐野の3面4線から、海沿いと山あいを南へ。普通・急行・特急サザン。時間帯別の平日ダイヤと尾崎での待避を収録',
     dirs: [{ id: izumisanoMisaki.id, label: '下り', desc: '泉佐野 → みさき公園' }, { id: izumisanoMisakiUp.id, label: '上り', desc: 'みさき公園 → 泉佐野' }],
   },
   {
-    id: 'misaki-wakayamako', name: 'みさき公園〜和歌山港', desc: '6駅・15.1km。孝子越えの山あいのトンネル、紀ノ川橋梁、和歌山市、終点の和歌山港（築堤上の島式ホーム）。普通・特急サザン',
+    id: 'misaki-wakayamako', name: 'みさき公園〜和歌山港', desc: '6駅・15.1km。孝子越えの山あいのトンネル、紀ノ川橋梁、和歌山市、終点の和歌山港（築堤上の島式ホーム）。普通・急行・特急サザン',
     dirs: [{ id: misakiWakayamako.id, label: '下り', desc: 'みさき公園 → 和歌山港' }, { id: misakiWakayamakoUp.id, label: '上り', desc: '和歌山港 → みさき公園' }],
   },
 ];
 /** dirs の並び（既定の方向を保つための従来の順。メニューの並びは NANKAI_SECTIONS） */
-const LEGACY_ORDER = ['izumiotsu-sakai', 'izumiotsu-kishiwada', 'sakai-kishiwada', 'kishiwada-izumisano', 'sakai-namba', 'izumisano-misaki', 'misaki-wakayamako', 'namba-kishiwada', 'sakai-izumisano'];
+const LEGACY_ORDER = ['izumiotsu-sakai', 'izumiotsu-kishiwada', 'sakai-kishiwada', 'kishiwada-izumisano', 'sakai-namba', 'izumisano-misaki', 'misaki-wakayamako', 'namba-kishiwada', 'sakai-izumisano', 'izumisano-wakayamako'];
 const AIRPORT_SECTIONS: SectionEntry[] = [
   { id: airportInbound.id, name: 'なんば〜関西空港', desc: '本線・空港線の通し運転・42.8 km',
     dirs: [{ id: airportInbound.id, label: '上り', desc: '関西空港 → なんば' }, { id: airportOutbound.id, label: '下り', desc: 'なんば → 関西空港' }] },

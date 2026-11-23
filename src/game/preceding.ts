@@ -1,7 +1,7 @@
 // 先行列車（見えない仮想列車）と閉そく信号の現示計算。純関数のみ（テスト・調整用に DOM 非依存）
 import type { SignalAspect } from '../core/events';
 import type { Route, ServiceId, ServiceSpec } from '../route/types';
-import { profileLat, sameClass } from '../route/service';
+import { carLenOf, profileLat, sameClass } from '../route/service';
 
 /** 先行列車の自列車に対する時隔 [s]（種別あり路線は HEADWAY_BY が優先） */
 const HEADWAY = 240;
@@ -25,24 +25,27 @@ const HEADWAY_BY: Record<ServiceId, { h: number; extra: number }> = {
 interface Key { t: number; s: number }
 
 /** 先行列車の計画。depT = 駅 index → その駅の発車キーの時刻（待避線での抑止に使う） */
-export interface PrecedingPlan { keys: Key[]; depT: Record<number, number>; arrT: Record<number, number> }
+export interface PrecedingPlan { keys: Key[]; depT: Record<number, number>; arrT: Record<number, number>; length: number; usesLocalLoops: boolean }
 
-/** 先行列車の走行計画 (t, s) キー。区間内は smoothstep で加減速を近似。種別あり路線では先行は普通 */
+/** 先行列車の走行計画 (t, s) キー。区間内は smoothstep で加減速を近似。 */
 export function buildPrecedingKeys(route: Route, service?: ServiceId): PrecedingPlan {
   const keys: Key[] = [], depT: Record<number, number> = {}, arrT: Record<number, number> = {};
   const local = route.services?.find(x => x.id === 'local');
-  if (local) {
+  // 普通の設定がない空港線の通しコースでは、同じ停車パターンの列車を先行させる。
+  const airport = route.lineId === 'airport' && !local ? route.services?.find(x => x.id === (service ?? 'airport')) : undefined;
+  const preceding = local ?? airport;
+  if (preceding) {
     const { h: h0, extra: ex } = HEADWAY_BY[service ?? 'express'];
     // 普通どうし: 待避で長く停まる駅があると、先行の普通が出てすぐ後続が着くので、長い停車の分だけ時隔を広げる
-    const longDwell = service === 'local' ? Math.max(0, ...Object.values(local.timetable).map(x => (x.dep ?? x.arr) - x.arr - 25)) : 0;
+    const longDwell = preceding.id === 'local' && service === 'local' ? Math.max(0, ...Object.values(preceding.timetable).map(x => (x.dep ?? x.arr) - x.arr - 25)) : 0;
     const h = (route.precedingHeadway?.[service ?? 'express'] ?? h0) + longDwell;
     let extra = 0;
     route.stations.forEach((sta, i) => {
-      if (!local.stops.includes(i)) return;
-      const tt = local.timetable[i] ?? { arr: sta.scheduledArrival };
+      if (!preceding.stops.includes(i)) return;
+      const tt = preceding.timetable[i] ?? { arr: sta.scheduledArrival };
       if (i === 0) { keys.push({ t: -1e6, s: sta.stopS }, { t: -h, s: sta.stopS }); depT[i] = -h; return; }
       const arr = tt.arr - h + extra;
-      extra += ex;
+      if (local) extra += ex;
       const dep = (tt.dep ?? tt.arr + 20) - h + extra;
       keys.push({ t: arr, s: sta.stopS }, { t: dep, s: sta.stopS });
       arrT[i] = arr; depT[i] = dep;
@@ -81,11 +84,11 @@ export function buildPrecedingKeys(route: Route, service?: ServiceId): Preceding
   const lastSta = route.stations[route.stations.length - 1];
   // 終着駅で自列車と別の番線（普通の進路 lane が分かれる）に入る普通は、着いたら本線の閉そくから外す
   const ownLane = (v?: ServiceSpec) => v?.lane ? profileLat(v.lane, lastSta.stopS) : 0;
-  const apart = !!lastSta && !!local && !!player && (Math.abs(ownLane(local) - ownLane(player)) > 1 || !!player.precedingLocalApart);
-  if (local?.useLoop && lastSta?.loop && !lastSta.loopPriority) keys.push({ t: 1e6, s: last.s });
+  const apart = !!lastSta && !!preceding && !!player && (Math.abs(ownLane(preceding) - ownLane(player)) > 1 || !!player.precedingLocalApart);
+  if (preceding?.useLoop && lastSta?.loop && !lastSta.loopPriority) keys.push({ t: 1e6, s: last.s });
   else if (apart) keys.push({ t: last.t + 1, s: last.s + 1e5 }, { t: 1e6, s: last.s + 1e5 });
   else keys.push({ t: last.t + 140, s: last.s + 2500 }, { t: 1e6, s: last.s + 2500 });
-  return { keys, depT, arrT };
+  return { keys, depT, arrT, length: airport ? airport.cars * carLenOf(airport.kind) : PREC_LEN, usesLocalLoops: !airport };
 }
 
 /** 時刻 t の先行列車先頭位置 */
@@ -116,8 +119,6 @@ export function aspectOf(sigS: number[], i: number, trains: [number, number][]):
   }
   return 'G';
 }
-
-export const PRECEDING_LENGTH = PREC_LEN;
 
 /** 現示ごとの速度制限 [km/h]（R は 0 = 停止） */
 export const ASPECT_LIMIT: Record<SignalAspect, number> = { R: 0, Y: 45, YG: 65, G: Infinity };

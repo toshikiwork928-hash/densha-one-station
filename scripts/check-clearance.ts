@@ -14,7 +14,7 @@ import { izumisanoMisaki, izumisanoMisakiUp } from '../src/route/routes/izumisan
 import { through, throughUp } from '../src/route/routes/through';
 import { namba, nambaUp } from '../src/route/routes/namba';
 import { misakiWakayamako, misakiWakayamakoUp } from '../src/route/routes/misaki-wakayamako';
-import { nambaKishiwada, kishiwadaNamba, sakaiIzumisano, izumisanoSakai } from '../src/route/routes/mainline-long';
+import { nambaKishiwada, kishiwadaNamba, sakaiIzumisano, izumisanoSakai, izumisanoWakayamako, izumisanoWakayamakoUp } from '../src/route/routes/mainline-long';
 import { airportInbound, airportUp, airportThroughUp, airportOutbound } from '../src/route/routes/airport-inbound';
 import { airport, airportThrough } from '../src/route/routes/airport';
 import { buildAirportTerminal } from '../src/world/airport-terminal';
@@ -101,7 +101,7 @@ async function build(ctx: GameContext): Promise<void> {
   // みさき公園〜和歌山港の和歌山大学前駅の周辺（橋上駅舎・駅ビル・デッキ・イオンモール・西口・マンション・斜面）
   (await import('../src/world/wakayamadaigakumae')).buildWakayamadaigakumae(ctx);
   // 泉佐野〜みさき公園の専用景観（空港線の高架・JR の橋・羽倉崎検車区。電車を除く）
-  const sctx = (await import('../src/world/down-frame')).downFrame(ctx, 'izumisano-misaki');
+  const sctx = (await import('../src/world/down-frame')).downFrame(ctx, izumisanoMisaki);
   if (sctx) {
     (await import('../src/world/izumisano-airport')).buildIzumisanoAirport(sctx);
     (await import('../src/world/hagurazaki-depot')).buildHagurazakiDepot(sctx);
@@ -114,7 +114,7 @@ const all = process.argv.includes('--all');
 const option = (name: string) => process.argv.find(a => a.startsWith(`--${name}=`))?.split('=')[1];
 const routeFilter = option('route'), serviceFilter = option('service');
 const cases: [Route, ServiceId[]][] = [[shiokaze, ['local', 'express', 'airport', 'limited']], [shiokazeUp, ['local', 'express', 'airport', 'limited']], [mountain, ['local']], [mountainUp, ['local']],
-  ...[airportInbound, airportUp, airportThroughUp, airportOutbound, nambaKishiwada, kishiwadaNamba, sakaiIzumisano, izumisanoSakai].map((route): [Route, ServiceId[]] => [route, route.services!.map(service => service.id)]),
+  ...[airportInbound, airportUp, airportThroughUp, airportOutbound, nambaKishiwada, kishiwadaNamba, sakaiIzumisano, izumisanoSakai, izumisanoWakayamako, izumisanoWakayamakoUp].map((route): [Route, ServiceId[]] => [route, route.services!.map(service => service.id)]),
   [airport, airport.services!.map(service => service.id)], [airportThrough, airportThrough.services!.map(service => service.id)],
   [kishiwada, ['local', 'express', 'airport', 'southern']], [kishiwadaUp, ['local', 'express', 'airport', 'southern']],
   [izumisano, ['local', 'express', 'airport', 'southern', 'limited']], [izumisanoUp, ['local', 'express', 'airport', 'southern', 'limited']],

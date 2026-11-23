@@ -14,6 +14,7 @@ import { buildCustomStation } from './custom-stations';
 import { buildElevatedConcourse, buildHeritageFacade, buildCoastalSpecialStations, coastalThirdTracks } from './coastal-stations';
 import { addCanopyRoof, addCanopyBraces, addPlatformWall, architectureOf } from './station-architecture';
 import { isDaigakumae } from '../route/routes/misaki-wakayamako-daigakumae';
+import { sakaiAccessOpenings, sakaiConcourseLevel, sakaiSouthSign } from './sakai-station';
 
 const platMat = new THREE.MeshLambertMaterial({ color: 0xc9c5bc });
 const bodyMat = new THREE.MeshLambertMaterial({ vertexColors: true });
@@ -227,11 +228,28 @@ export function buildIsland(ctx: GameContext, sta: Station, prevName: string, ne
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, 1.1, to-from), platformMat);
     mesh.position.set(x,.55,(from+to)/2); grp.add(mesh);
   };
+  const sakai = sta.name === '堺';
+  const sakaiSouth = sakai ? sakaiSouthSign(ctx.route) : 1;
+  const sakaiOpenings = sakai ? sakaiAccessOpenings(ctx.route, len) : [];
+  const slabWithSakaiOpenings = () => {
+    let start = -len / 2;
+    for (const o of [...sakaiOpenings].sort((a, b) => a.z - b.z)) {
+      const from = o.z - o.depth / 2, to = o.z + o.depth / 2;
+      slab(0, PW, start, from);
+      for (const side of [-1, 1]) {
+        const inner = o.x + side * o.width / 2, outer = side * PW / 2;
+        slab((inner + outer) / 2, Math.abs(outer - inner), from, to);
+      }
+      start = to;
+    }
+    slab(0, PW, start, len / 2);
+  };
   if (below) {
     slab(0,PW,-len/2,accessZ-4.6);
     slab(0,PW,accessZ+4.6,len/2);
     for (const side of [-1,1]) slab(side*(PW+2)/4,(PW-2)/2,accessZ-4.6,accessZ+4.6);
-  } else slab(0,PW,-len/2,len/2);
+  } else if (sakai) slabWithSakaiOpenings();
+  else slab(0,PW,-len/2,len/2);
   const b = new GeoBatch();
   const arch = architectureOf(sta.name);
   const box = (x: number, y: number, z: number, w: number, h: number, d: number, col: number) => b.add('body', P.box, M(x, y, z, 0, w, h, d), col);
@@ -247,8 +265,8 @@ export function buildIsland(ctx: GameContext, sta: Station, prevName: string, ne
     box(e - sx * .02, .9, 0, .06, .3, len, 0x9a968c);
   }
   // 上屋（中央の柱1列）
-  const rl = len * (arch && arch.kind !== 'hall' ? arch.roofRatio : (opt.roof ?? .7));
-  if (!opt.indoor && arch?.kind !== 'hall') {
+  const rl = len * (sakai ? .85 : (arch && arch.kind !== 'hall' ? arch.roofRatio : (opt.roof ?? .7)));
+  if (!sakai && !opt.indoor && arch?.kind !== 'hall') {
     const roofY = arch ? arch.Yroof : 4.35;
     if (arch?.roofShape) addCanopyRoof(b, 0, PW - .8, rl, arch);
     else {
@@ -261,30 +279,64 @@ export function buildIsland(ctx: GameContext, sta: Station, prevName: string, ne
     if (arch) addCanopyBraces(b, 0, PW - 1.2, rl, arch);
     for (const sx of [-1, 1]) box(sx * (PW / 2 - .45), roofY - .2, 0, .1, .35, rl, arch ? arch.roofColor : 0x6b7680);
     for (let z = -rl / 2 + 4; z <= rl / 2 - 4; z += arch ? arch.supportSpacing : 10) {
-      if (access(z)) continue;
+      if (access(z) || (sakai && sakaiOpenings.some(o => Math.abs(z - o.z) < o.depth / 2 + 1))) continue;
       box(0, roofY - 1.7, z, .22, 3.1, .22, arch ? arch.supportColor ?? 0x8a9096 : 0x8a9096);
       box(0, roofY - .25, z, PW - 1.2, .16, .14, arch ? arch.supportColor ?? 0x8a9096 : 0x8a9096);
     }
   }
   // ベンチ（背中合わせ）・自販機・時計
   for (let z = -rl / 2 + 8; z <= rl / 2 - 8; z += 16) for (const sx of [-1, 1]) {
-    if (access(z)) continue;
+    if (access(z) || (sakai && sakaiOpenings.some(o => Math.abs(z - o.z) < o.depth / 2 + 1))) continue;
     if (below && Math.abs(z - (Math.round((z + 78) / 12) * 12 - 78)) < 1.5) continue;
     const bench = above ? 0xe78043 : below ? 0xc8beb0 : 0x2a6aa8;
     box(sx * .55, 1.55, z, .45, .06, 2.2, bench); box(sx * .32, 1.85, z, .06, .45, 2.2, bench);
   }
   for (const z of [-rl / 2 + 3, rl / 2 - 14]) b.add('body', P.boxB, M(0, 1.1, z, 0, .95, 1.83, .7), [0xc8282a, 0x2a5fb0][z < 0 ? 0 : 1]);
   box(0, 3.7, below || above ? 22 : 6, .5, .5, .1, 0x222222);
-  const signs: number[] = [-len * .3, len * .3];
+  const signOffset = len * (sakai ? .26 : .3);
+  const signs: number[] = [-signOffset, signOffset];
   for (const z of signs) for (const dz of [-1.5, 1.5]) box(0, 1.9, z + dz, .08, 1.6, .08, 0x777d84);
   // 階段口（跨線橋へ。ホーム中央）
-  if (!below && !above && (opt.stairs ?? true)) {
+  if (sakai) {
+    const terrain = getTerrain(ctx);
+    const sakaiFloor = sakaiConcourseLevel(terrain.groundY(sc) - terrain.trackY(sc));
+    for (const opening of sakaiOpenings.filter(o => o.kind === 'stairs')) {
+      const count = Math.ceil((1.1 - sakaiFloor) / .17);
+      const stepDepth = opening.depth / count, stepHeight = (1.1 - sakaiFloor) / count;
+      for (let i = 0; i < count; i++) {
+        const z = opening.z + sakaiSouth * ((i + .5) * stepDepth - opening.depth / 2);
+        const top = 1.1 - stepHeight * (i + 1);
+        box(0, top - stepHeight / 2, z, opening.width, stepHeight, stepDepth, 0xaaa79f);
+        // 中央改札側では階段とエスカレーターが並ぶ。
+        if (opening.z === 0) {
+          box(sakaiSouth * .7, top + .01, z, .95, .02, stepDepth - .02, 0x626966);
+          for (const x of [.17, 1.23]) {
+            box(sakaiSouth * x, top + .44, z, .08, .88, stepDepth, 0xaebdba);
+            box(sakaiSouth * x, top + .9, z, .11, .07, stepDepth, 0x454b49);
+          }
+        }
+      }
+      for (const side of [-1, 1]) {
+        const x = side * (opening.width / 2 + .12);
+        box(x, .9, opening.z, .18, 1.3, opening.depth + .3, 0x8e918f);
+        box(x, 2.02, opening.z, .08, .08, opening.depth, 0x6b7072);
+        for (const z of [opening.z - opening.depth / 2, opening.z, opening.z + opening.depth / 2]) box(x, 1.7, z, .08, .7, .08, 0x6b7072);
+      }
+    }
+    const ev = sakaiOpenings.find(o => o.kind === 'elevator')!;
+    box(ev.x, (3.7 + sakaiFloor) / 2, ev.z, ev.width, 3.7 - sakaiFloor, ev.depth, 0x96a8a7);
+    for (const level of [1.1, sakaiFloor]) for (const side of [-1, 1]) {
+      box(ev.x + side * .32, level + 1.04, ev.z + sakaiSouth * (ev.depth / 2 + .015),
+        .62, 2.08, .035, 0x69797c);
+    }
+  } else if (!below && !above && (opt.stairs ?? true)) {
     box(0, 1.6, 0, 2.6, 1.0, 14, 0xd8d4ca);
     for (const sx of [-1, 1]) box(sx * 1.32, 2.6, 0, .06, 1.0, 14, 0x9aa0a6);
   }
   // 人（両側の乗車位置付近）
   for (let k = 0; k < 26; k++) {
     const z = (rnd() - .5) * len * .8, sx = rnd() < .5 ? -1 : 1;
+    if (sakai && sakaiOpenings.some(o => Math.abs(z - o.z) < o.depth / 2 + 1.5)) continue;
     if (Math.abs(z) < 8) continue;
     b.parent = new THREE.Matrix4().makeTranslation(0, 1.1, 0);
     // 人の腕・かばんまで黄色線の内側。狭いホームも幅に追従する。
@@ -422,7 +474,7 @@ export function buildStations(ctx: GameContext): void {
     // 駅舎の位置（Station.structure）: 下りホーム（左）か上りホーム（右）か、ホームごとか。構成の不明な駅は従来どおり下りホームの中央
     const L1 = Math.max(...ctx.route.tracks), S = sta.structure;
     const fullDown = !S || S.building === 'down' || S.building === 'both', fullUp = !!S && (S.building === 'up' || S.building === 'both');
-    buildStation(ctx, sta, prev, next, { elevatedDy: dy, minimal: isDaigakumae(ctx.route.id, sta.name) || !fullDown });
+    buildStation(ctx, sta, prev, next, { elevatedDy: dy, minimal: isDaigakumae(sta.name) || !fullDown });
     // 相対式ホーム: 対向線側にもホーム（上りの運転で使う）
     if (L1 > 0) buildStation(ctx, sta, prev, next, { lat: L1, side: sta.platform.side === 'L' ? 'R' : 'L', minimal: !fullUp, elevatedDy: dy, shift: sta.platformOpp });
     if (S?.link === 'footbridge' && L1 > 0) buildFootbridge(ctx, sta, [-4.1, L1 + 4.1]);

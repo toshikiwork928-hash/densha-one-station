@@ -128,15 +128,14 @@ export interface GameState {
 /** 停車駅（通過駅を除く）の index 列 */
 export const stopIndices = (route: Route): number[] => route.stations.map((s, i) => (s.pass ? -1 : i)).filter(i => i >= 0);
 
-export function stagesOf(route: Route): Stage[] {
+export function stagesOf(route: Route, currentTimeOnly = true): Stage[] {
   const idx = stopIndices(route), st = route.stations;
-  if (route.fullCourseOnly) return [{ id: 'all', from: idx[0], to: idx[idx.length - 1], label: '全線通し' }];
   const list: Stage[] = [];
-  for (let k = 0; k < idx.length - 1; k++) {
+  for (let k = 0; !route.fullCourseOnly && k < idx.length - 1; k++) {
     const a = idx[k], b = idx[k + 1];
     list.push({ id: `${a}-${b}`, from: a, to: b, label: `${st[a].name} → ${st[b].name}` });
   }
-  if (list.length > 1) {
+  if (route.fullCourseOnly || list.length > 1) {
     let a = idx[0], b = idx[idx.length - 1];
     const goals = (route.partialGoals ?? []).filter(g => g.services.includes(route.activeServiceId as ServiceId) && idx.includes(g.from) && idx.includes(g.to) && g.from < g.to);
     const whole = goals.find(g => g.asAll);
@@ -145,10 +144,11 @@ export function stagesOf(route: Route): Stage[] {
       if (!g.asAll && !(g.from === a && g.to === b))
         list.push({ id: `${g.from}-${g.to}`, from: g.from, to: g.to, label: `${st[g.from].name} → ${st[g.to].name}`, long: true });
     }
-    list.push({ id: 'all', from: a, to: b, label: '全線通し' });
+    const label = route.fullCourseOnly && goals.length ? `${st[a].name} → ${st[b].name}` : '全線通し';
+    list.push({ id: 'all', from: a, to: b, label });
   }
   // 実ダイヤのあるコースは、その時間帯に実際の列車が走る区間だけ（例: 日中の和歌山港行の急行は無いので、急行は和歌山市までの区間だけ）
-  if (realDayOf(route)) {
+  if (currentTimeOnly && realDayOf(route)) {
     const real = list.filter(s => realTrainFor(route, route.activeServiceId as ServiceId, s.from, s.to));
     if (real.length) return real;
   }

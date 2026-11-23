@@ -5,7 +5,7 @@ import { islandZone, sameClass, type LoopZone } from '../route/service';
 import { overtakeZone } from './overtake';
 import type { Meet } from './meet';
 import { terminalDistance as distanceToTerminal, terminalSpeedLimit } from './terminal-ats';
-import { ASPECT_LABEL, ASPECT_LIMIT, PRECEDING_LENGTH, aspectOf, buildPrecedingKeys, precedingHead, type PrecedingPlan } from './preceding';
+import { ASPECT_LABEL, ASPECT_LIMIT, aspectOf, buildPrecedingKeys, precedingHead, type PrecedingPlan } from './preceding';
 
 const ATS_ACK_TIME = 5; // 警報から確認までの猶予 [s]
 const ATS_ACK_NOTCH = -4; // 確認に必要なブレーキ段（B4 以上）
@@ -45,12 +45,12 @@ export function createSignalSystem(ctx: GameContext, forceEB: () => void, meet?:
 
   const banner = (text: string, sec = 3) => events.emit('banner', { text, sec });
   /** 先行列車が待避線上（本線の閉そくを占有しない）か */
-  const precOnLoop = () => precZones.find(z => st.precedingS >= z.inFrom + PRECEDING_LENGTH && st.precedingS <= z.outFrom) ?? null;
+  const precOnLoop = () => precZones.find(z => st.precedingS >= z.inFrom + plan.length && st.precedingS <= z.outFrom) ?? null;
   /** 単線は先行列車なし（行き違いの対向列車が単線上にいる間は、その閉そくを占有） */
   const single = !!route.singleTrack;
   const precTrains = (): [number, number][] => {
     if (single) { const o = meet?.occupying(); return o ? [o] : []; }
-    return precOnLoop() ? [] : [[st.precedingS, PRECEDING_LENGTH]];
+    return precOnLoop() ? [] : [[st.precedingS, plan.length]];
   };
   /** 上限（場内）と待避の抑止（出発）を反映 */
   const adjust = (i: number, a: SignalAspect): SignalAspect => {
@@ -63,10 +63,20 @@ export function createSignalSystem(ctx: GameContext, forceEB: () => void, meet?:
 
   function refreshAspects() {
     // 自列車が通過する待避線駅では、自列車が抜けるまで先行を待避線に止めておく
+    const tail = st.train.s - route.trainLength;
+    let following = false;
     for (const h of holds) {
-      if (st.train.s - route.trainLength < h.zone.outTo && st.t - precDelay > h.depT) precDelay = st.t - h.depT;
+      if (tail >= h.zone.outTo) following = true;
+      else if (st.t - precDelay > h.depT) precDelay = st.t - h.depT;
     }
-    st.precedingS = precedingHead(plan.keys, st.t - precDelay);
+    let head = precedingHead(plan.keys, st.t - precDelay);
+    // 待避を終えた普通は後続列車になる。自列車の最後尾がいる閉そくへ入る手前で待つ。
+    if (following) {
+      let block = st.nextSignal < 0 ? sigS.length - 1 : st.nextSignal - 1;
+      while (block >= 0 && sigS[block] > tail) block--;
+      if (block >= 0) head = Math.min(head, Math.max(st.precedingS, sigS[block] - 1));
+    }
+    st.precedingS = head;
     const trains: [number, number][] = [...precTrains(), [st.train.s, route.trainLength]];
     for (let i = 0; i < sigS.length; i++) st.signals[i] = adjust(i, aspectOf(sigS, i, trains));
     // R（冒進後）は ATS が扱うので速度超過判定には使わない
@@ -192,7 +202,7 @@ export function createSignalSystem(ctx: GameContext, forceEB: () => void, meet?:
           if (home >= 0) caps[home] = 'Y';
         }
         const precStops = local ? local.stops.includes(k) : true;
-        if (precStops) precZones.push(z);
+        if (precStops && plan.usesLocalLoops) precZones.push(z);
         // 自列車が本線を通る（通過・本線ホームに停車）駅では、先行の普通を待避線に止めて先に行かせない
         const scheduledWait = local?.waits?.some(w => w.station === k && sameClass(w.passedBy, st.sel.service) && k > 0 && k < route.stations.length - 1);
         if (!sta.enterLoop && precStops && scheduledWait && plan.depT[k] != null) {

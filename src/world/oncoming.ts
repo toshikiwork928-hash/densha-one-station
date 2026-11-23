@@ -12,7 +12,7 @@ import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import type { OncomingSpec, ServiceId, Station, TimeOfDay, TrainKind } from '../route/types';
 import { carLenOf, customPlatformSide, islandOffset, loopShape, loopZone, sameClass, seaSideOf, serviceOf, WAKAYAMA_DEST, type LoopZone } from '../route/service';
-import { classOfSpec, hourlyOf, planOncoming, runClasses, runConsist, rushStopScenes, tokkyuOrder, type TrainClass } from '../route/oncoming-stops';
+import { classOfSpec, hourlyOf, planOncoming, runClasses, runConsist, scheduledConsist, rushStopScenes, tokkyuOrder, type TrainClass } from '../route/oncoming-stops';
 import MEETS from '../data/oncoming-meets.json';
 import { counterTimetable, createTimetableOncoming } from './oncoming-timetable';
 import { onLight } from './batch';
@@ -367,7 +367,7 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
     for (const [sm, code, st] of list) {
       const local = code === 'L', fast = code === 'S' || code.startsWith('R');
       const k = nth[code] = (nth[code] ?? -1) + 1;
-      const { id, ...consist } = realConsist(code, k, towardNamba);
+      const { id, ...consist } = scheduledConsist(code, k, towardNamba);
       let lat = local && ol ? ol.lat : mainOncomingLat;
       const base = {
         carLen: carLenOf(consist.kind!), gap: .8, kmh: local ? 80 : fast ? 105 : 95, ...consist, cars: consist.cars!,
@@ -403,19 +403,10 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
     }
     return out.sort((a, b) => a.spec.spawnAt - b.spec.spawnAt).map((o, i) => Object.assign(o, { idx: i }));
   }
-  /** 種別の記号 → 編成（同じ種別は車両を順に回す） */
-  function realConsist(code: string, k: number, towardWakayama: boolean): ReturnType<typeof runConsist> {
-    if (code === 'L') return runConsist('local', k, 'noon', towardWakayama);
-    if (code === 'A') return runConsist('kyuko', k % 2 ? 3 : 1, 'evening', towardWakayama);
-    if (code.startsWith('E')) return { ...runConsist('kyuko', [0, 2, 4][k % 3], 'evening', towardWakayama), label: code.slice(1), id: 'express' };
-    if (code === 'S') return runConsist('tokkyu', 1, 'evening', towardWakayama);
-    return { id: 'limited', kind: 'limited', cars: 6, units: [6], label: code === 'Ra' ? '特急ラピートα' : '特急ラピートβ' };
-  }
-
   const timed = createTimetableOncoming(ctx, (code, k, towardNamba) => {
-    const { id, ...spec } = realConsist(code, k, towardNamba);
+    const { id, ...spec } = scheduledConsist(code, k, towardNamba);
     // 泉佐野以南のコースでは、和歌山方面の普通は実際のダイヤどおり和歌山市行き（既存コースの羽倉崎行きは変えない）
-    const south = route.id.startsWith('izumisano-misaki') || route.id.startsWith('misaki-wakayamako');
+    const south = route.id.startsWith('izumisano-misaki') || route.id.startsWith('misaki-wakayamako') || route.id.startsWith('izumisano-wakayamako');
     return { ...spec, cars: spec.cars!, kind: spec.kind!, dest: towardNamba ? (south && id === 'local' ? '和歌山市' : WAKAYAMA_DEST[id][0]) : 'なんば' };
   });
   // 停車シーンの間引き: プレイ開始後の最初のフレームで決める（種別・時間帯が確定してから。同じプレイ中は変わらない）
