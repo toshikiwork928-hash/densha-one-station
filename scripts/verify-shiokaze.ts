@@ -903,6 +903,13 @@ if (routeOnly) process.exit(0);
   const dep: Record<ServiceId, number> = { local: 7, express: 6, airport: 6, southern: 5, limited: 9 };
   for (const v of route.services!) {
     const r = structuredClone(route), sv = applyService(r, v.id)!, tr = buildTrack(r);
+    if (v.id === 'local') {
+      const rail = r.extraTracks!.find(x => x.id === 'down-local')!;
+      const station = r.stations.find(st => st.name === '住ノ江')!;
+      for (let s = station.stopS; s <= rail.to; s++) {
+        assert.ok(Math.abs(tr.pathLat(s) - profileLat(rail.lat, s)) < 1e-6, `住ノ江発の普通が合流まで緩行線を走る s=${s}`);
+      }
+    }
     assert.ok(Math.abs(tr.pathLat(r.stations[0].stopS) - (4 - NAMBA_TRACKS[dep[v.id] as 9 | 7 | 6 | 5])) < 1e-6, `namba-up/${v.id}の発車番線`);
     assert.ok(Math.abs(tr.pathLat(r.stations[n - 1].stopS) - (v.id === 'local' ? 4 - 22.8 : 4 - 13.4)) < 1e-6, `namba-up/${v.id}の堺の番線`);
     assert.equal(r.stations[n - 1].mainTrack, v.id === 'local' ? '1番線' : '2番線');

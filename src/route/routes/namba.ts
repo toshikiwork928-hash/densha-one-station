@@ -62,7 +62,7 @@ const DOWN: LatProfile = [...DOWN_HEAD, ...DOWN_TAIL];
 /** 下り緩行線（東端。住ノ江の堺側で急行線から分かれ、岸里玉出の堺側で合流） */
 const DOWN_LOCAL: LatProfile = [[2980, QUAD.downExpress], [3080, QUAD.downLocal], [5760, QUAD.downLocal], [5880, 19.4]];
 /** 下りの普通の走行線（対向列車用。route.trackProfiles の '30'） */
-const DOWN_LOCAL_PATH: LatProfile = [...DOWN_HEAD, ...DOWN_LOCAL.slice(1), ...DOWN_TAIL.slice(2)];
+const DOWN_LOCAL_PATH: LatProfile = [...DOWN_HEAD, ...DOWN_LOCAL, ...DOWN_TAIL.slice(2)];
 /** 高野線（上り・下り）。岸里玉出の先で右から合流し、天下茶屋・新今宮で島式ホームの分だけ右へ、萩ノ茶屋・今宮戎で下り線が右へ開く */
 const KOYA_UP: LatProfile = [
   [5850, 118], [6700, 9], ...bow(6, 9, 5.4), ...bow(7, 9, 5.4), [9400, 9], [9640, 30],
