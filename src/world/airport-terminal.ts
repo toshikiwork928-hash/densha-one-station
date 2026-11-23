@@ -6,6 +6,11 @@ import { airport } from '../route/routes/airport';
 import { sectionFrame } from './section-frame';
 import { AirportParts, airportRailCorridors, buildAirportJunction, setAirportRailCorridors } from './airport-junction';
 import { buildAirportArchitecture } from './airport-architecture';
+import { buildKixStation } from './kix-station';
+import { getTerrain } from './terrain';
+import { buildAirportAircraft } from './airport-aircraft';
+import { airportLinkRoadLat, bridgeApproaches } from './airport-link-roads';
+import { buildRinkuCanopy } from './rinku-canopy';
 
 function airportInboundFrame(ctx: GameContext): GameContext | null {
   if (ctx.route.id !== 'airport-namba-up') return ctx;
@@ -40,6 +45,9 @@ export function buildAirportTerminal(ctx: GameContext): void {
   if (!bridge) return;
   buildAirportJunction(base);
   buildAirportArchitecture(base);
+  buildKixStation(base);
+  buildRinkuCanopy(base);
+  buildAirportAircraft(base, ctx);
   if (base !== ctx) {
     const frame = sectionFrame(airport, ctx.route);
     if (frame) setAirportRailCorridors(ctx, airportRailCorridors(base).map(z => ({
@@ -51,16 +59,13 @@ export function buildAirportTerminal(ctx: GameContext): void {
   const a = track.at(from, 2, 0), b = track.at(to, 2, 0);
   const sea = new THREE.Mesh(new THREE.BoxGeometry(14000, .1, Math.hypot(b.x-a.x,b.z-a.z)),
     new THREE.MeshPhongMaterial({ color: 0x749ba9, shininess: 55 }));
-  sea.position.copy(a).lerp(b,.5); sea.position.y = .02;
+  sea.position.copy(a).lerp(b,.5); sea.position.y = -.64;
   sea.rotation.y = Math.atan2(a.x-b.x,a.z-b.z); sea.name = 'airport-sea'; scene.add(sea);
 
   const count = 30, span = (to-from)/count, steel = 0x85a5a6, concrete = 0xabaea7;
-  const roadAt = (s: number, side: number) => {
-    const shore = Math.max(0, 1-Math.min(s-from,to-s)/520);
-    return 2 + side*(7.4 + 17*shore*shore);
-  };
+  const roadAt = (s: number, side: number) => airportLinkRoadLat(bridge, s, side);
   for (let i = 0; i < count; i++) {
-    const start = from+i*span, end = start+span, parts = new AirportParts();
+    const start = from+i*span, parts = new AirportParts();
     const central = i >= 4 && i < count-4;
     for (let k = 0; k < 6; k++) {
       const s = start+k*span/6, t = s+span/6;
@@ -91,27 +96,29 @@ export function buildAirportTerminal(ctx: GameContext): void {
     }
     parts.span(track.at(start,-4,-1.55),track.at(start,8,-1.55),3.2,1.35,steel);
     parts.draw(scene,'airport-link-bridge');
-    if (i === count-1) {
-      // 道路の取付部は鉄道から外へ離れながら地表に下りる。
-      for (const [shore,sign] of [[from,-1],[end,1]]) {
-        const approaches = new AirportParts();
-        for (const side of [-1,1]) {
-          const point = (d:number,l:number,h:number) => {
-            const base = track.at(shore + sign*d,roadAt(shore,side)+side*d*.13+l,0);
-            base.y = Math.max(.18,track.trackAt(shore).y+9.3-d*.034)+h;
-            return base;
-          };
-          for (let d=0; d<920; d+=20) {
-            approaches.span(point(d,0,0),point(d+20,0,0),14.72,1.2,0x727f82);
-            for (const l of [-7.12,7.12]) approaches.span(point(d,l,1.1),point(d+20,l,1.1),.42,1,0xbcc3be);
-            if(d%60===0 && point(d,0,0).y>2) {
-              const p=point(d,0,-.6), foot=p.clone(); foot.y=-.2;
-              approaches.span(foot,p,2.4,2.8,concrete);
-            }
-          }
-        }
-        approaches.draw(scene,'airport-road-approach');
+  }
+  const terrain = getTerrain(base), approaches = new AirportParts();
+  for (const points of bridgeApproaches(bridge)) {
+    const first = points[0], last = points[points.length - 1];
+    const startY = track.trackAt(first.s).y + 9.3, endY = terrain.groundY(last.s) + 12;
+    const at = (p: typeof first, edge: number, h: number) => {
+      const position = track.at(p.s, p.lat + edge * (p.width / 2 - .24), 0);
+      const y = startY + (endY - startY) * p.blend;
+      const railGap = Math.abs(p.lat - 2) - 2 - p.width / 2;
+      const lift = 1 - THREE.MathUtils.smoothstep(railGap, 7, 17);
+      position.y = y + lift * Math.max(0, track.trackAt(p.s).y + 9.3 - y) + h;
+      return position;
+    };
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i-1], b = points[i];
+      approaches.span(at(a,0,0), at(b,0,0), (a.width + b.width)/2, 1.2, 0x727f82);
+      for (const side of [-1,1]) approaches.span(at(a,side,1.1), at(b,side,1.1), .42, 1, 0xbcc3be);
+      if (i % 6 === 0 && (a.lat < -9 || a.lat > 13)) {
+        const top = at(a,0,-.6), foot = top.clone();
+        foot.y = Math.min(-2, terrain.groundY(a.s));
+        approaches.span(foot,top,2.4,2.8,concrete);
       }
     }
   }
+  approaches.draw(scene,'airport-road-approach');
 }

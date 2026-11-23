@@ -30,6 +30,9 @@ import { izumisanoMisaki } from '../route/routes/izumisano-misaki';
 import { airport } from '../route/routes/airport';
 import { seaMaskOf, type CoastData } from './coast-field';
 import { crossingSpans, type RoadApproaches } from './crossing-roads';
+import { buildRoadCollisionIndex, drawnRoadWidth } from './road-collision';
+import { airportHighwayRows, airportLinkRoads, bridgeReplacesHighway } from './airport-link-roads';
+import { airportWaterMask } from './airport-island';
 import { CUTTING_BANK_WIDTH } from './cuttings';
 
 export interface OsmData {
@@ -420,8 +423,9 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
   // 海（OSM の海岸線の多角形。coast.ts が水面を張る）: 建物・道路・木を海の中に置かない
   const sea = seaMaskOf(data.coast);
   const bridge = route.airportBridge;
+  const islandWater = airportWaterMask(ctx);
   const inSea = (s: number, l: number, m = 0) =>
-    !!bridge && s + m >= Math.min(bridge.from, bridge.to) && s - m <= Math.max(bridge.from, bridge.to) || !!sea && sea.inSea(s,l,m);
+    !!bridge && s + m >= bridge.from && s - m <= bridge.to || !!sea && sea.inSea(s,l,m) || !!islandWater?.(s,l,m);
   const elevated = (s: number) => T.trackY(s) - T.dryY(s) > 3;
   const blocked = (s0: number, s1: number, l0: number, l1: number, g: number, road = false) => {
     const s = (s0 + s1) / 2, [a, b] = span(s), sd = (l0 + l1) / 2 < (a + b) / 2 ? -1 : 1;
@@ -499,7 +503,13 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
   };
 
   // ================= 建物 =================
-  const roadNear0 = buildRoadIndex(data), onRoad = buildRoadSegIndex(data);
+  const airportZone = (s: number) => !!bridge && s >= bridge.from - (bridge.islandAtStart ? 2800 : 2700)
+    && s <= bridge.to + (bridge.islandAtStart ? 2700 : 2800);
+  const streets = buildRoadCollisionIndex(data.roads);
+  const airportRoadCollision = bridge ? buildRoadCollisionIndex([
+    ...airportHighwayRows(data, bridge).filter(r => airportZone((r[3] as number[])[0])), ...airportLinkRoads(route),
+  ]) : null;
+  const roadNear0 = buildRoadIndex(data), onRoad = streets.point;
   /** 建物の外形（中心 s, lat・長さ・幅・角度 a）のうち、道路の帯に入る割合（1m 前後の格子で数える） */
   const roadOverlap = (s: number, lat: number, len: number, wid: number, a: number) => {
     const ca = Math.cos(a), sa = Math.sin(a), du = Math.max(1, len / 8), dv = Math.max(1, wid / 8);
@@ -524,14 +534,18 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
       const distance = (lat - wall) * c.side;
       return distance + hl >= 0 && distance - hl <= CUTTING_BANK_WIDTH;
     })) return false; // 法面と敷地が重なる建物を避ける
-    if (sea && (inSea(s, lat, 3) || inSea(s + hs, lat + hl, 3) || inSea(s - hs, lat - hl, 3) || inSea(s + hs, lat - hl, 3) || inSea(s - hs, lat + hl, 3))) return false; // 海の上
+    if ((bridge || sea) && (inSea(s, lat, 3) || inSea(s + hs, lat + hl, 3) || inSea(s - hs, lat - hl, 3) || inSea(s + hs, lat - hl, 3) || inSea(s - hs, lat + hl, 3))) return false; // 海の上
     if (nearLine(s - hs, s + hs, lat - hl, lat + hl)) return false;
-    if (inReserved(s - half, s + half, lat - half, lat + half)) return false; // 専用モジュールの敷地（駅ビル・車庫・商業施設）
+    if (inReserved(s - hs, s + hs, lat - hl, lat + hl)) return false;
     if (blocked(s - half, s + half, lat - half, lat + half, g)) return false;
     if (nearRiver(s, lat, hs, hl) || waterFootprint(s, lat, hs, hl)) return false; // 川・池の上
     if (underNear(s, lat, Math.max(hs, hl) + 2)) return false; // 線路をくぐる道路の掘り下げ
     if (half < 12 && roadNear0(s, lat)) return false; // 写し方のずれで道路に載った小さな建物
     // 外形が道路の帯（描く幅）に多くかかる建物（写し方のずれ・外接長方形の張り出し・細長い長屋が道路にかかる）。小さな建物は 15%、大きな建物は 30% を超えたら置かない
+    if (airportRoadCollision && airportZone(s)) {
+      const w = Math.max(3, len), d = Math.max(3, wid);
+      return !streets.intersectsBuilding(s, lat, w, d, a) && !airportRoadCollision.intersectsBuilding(s, lat, w, d, a);
+    }
     if (roadOverlap(s, lat, len, wid, a) > (half < 12 ? .15 : .3)) return false;
     return true;
   };
@@ -825,6 +839,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
     }
     return false;
   };
+  const rinku = bridge && route.stations.find(st => st.name === 'りんくうタウン');
   const buildHighway = (w0: number, pts: number[], k = -1) => {
     const w = w0;
     const n = pts.length / 3;
@@ -846,7 +861,17 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
     }
     // 線路の上・近くは架線の上を越える高さへ上げ、前後は 6% の勾配でならす。地上へ下りるランプが線路に近い所は描かない
     const sc = (q: number) => Math.max(route.extent.from, Math.min(route.extent.to, q));
+    // りんくうタウンの横断通路は3階ホームの下を通る。一般の跨線道路とは上下関係が逆になる。
+    const underRinku = rinku && P3.some((a,i) => {
+      const b = P3[i + 1];
+      return b && a.s > rinku.platform.from && a.s < rinku.platform.to
+        && (a.l - 2) * (b.l - 2) <= 0 && Math.abs(b.l - a.l) > Math.abs(b.s - a.s);
+    });
     for (const q of Q) {
+      if (underRinku) {
+        q.h = Math.min(q.h, Math.max(0, T.trackY(sc(q.s)) - ground(q.s) - 4.8));
+        continue;
+      }
       if (gap(q.s, q.l) > w / 2 + 15 && !nearLine(q.s - w / 2 - 6, q.s + w / 2 + 6, q.l - w / 2 - 6, q.l + w / 2 + 6)) continue;
       if (q.h < 4) { q.skip = true; continue; }
       q.h = Math.max(q.h, T.trackY(sc(q.s)) - ground(q.s) + 10);
@@ -860,7 +885,7 @@ export function buildOsmTown(ctx: GameContext, data: OsmData, K: OsmKit, trees: 
       if (a.s < S0 || a.s > S1 || a.skip || c.skip || a.merged) continue;
       // 関西国際空港連絡橋の道路桁は専用景観と重なるため、OSMの同区間だけ省く。
       const mid = (a.s+c.s)/2;
-      if (bridge && mid >= bridge.from-660 && mid <= bridge.to+660 && Math.abs((a.l+c.l)/2) < 65) continue;
+      if (bridge && bridgeReplacesHighway(bridge, mid, (a.l+c.l)/2, w0)) continue;
       const A = track.at(a.s, a.l, 0), B = track.at(c.s, c.l, 0);
       A.y = ground(a.s) + a.h; B.y = ground(c.s) + c.h;
       const dx = B.x - A.x, dz = B.z - A.z, dyv = B.y - A.y, L = Math.hypot(dx, dz);
@@ -1048,33 +1073,6 @@ function offsetLine(pts: number[], off: number): number[] {
   return out;
 }
 
-/** 描く道路の幅 [m]（データの幅を等級ごとの下限・上限で切る） */
-function drawnRoadWidth(cls: number, w: number): number {
-  return Math.min(cls === 1 ? 22 : 14, Math.max(cls === 4 ? 2.5 : cls === 3 ? 4.5 : 6, w));
-}
-
-/** 点が道路の帯（描く幅）の中か。道路の線分を 8m 格子に登録して、線分からの距離で判定する */
-function buildRoadSegIndex(data: OsmData): (s: number, l: number) => boolean {
-  const G = 8, cells = new Map<string, number[]>(), seg: number[] = [];
-  for (const r of data.roads) {
-    const w = drawnRoadWidth(r[0] as number, r[1] as number), pts = r[3] as number[];
-    for (let i = 0; i + 3 < pts.length; i += 2) {
-      const k = seg.push(pts[i], pts[i + 1], pts[i + 2], pts[i + 3], w / 2) / 5 - 1;
-      const x0 = Math.min(pts[i], pts[i + 2]) - w, x1 = Math.max(pts[i], pts[i + 2]) + w, y0 = Math.min(pts[i + 1], pts[i + 3]) - w, y1 = Math.max(pts[i + 1], pts[i + 3]) + w;
-      for (let gx = Math.floor(x0 / G); gx <= Math.floor(x1 / G); gx++) for (let gy = Math.floor(y0 / G); gy <= Math.floor(y1 / G); gy++) {
-        const key = `${gx},${gy}`, a = cells.get(key); if (a) a.push(k); else cells.set(key, [k]);
-      }
-    }
-  }
-  return (s, l) => {
-    for (const k of cells.get(`${Math.floor(s / G)},${Math.floor(l / G)}`) ?? []) {
-      const x0 = seg[k * 5], y0 = seg[k * 5 + 1], dx = seg[k * 5 + 2] - x0, dy = seg[k * 5 + 3] - y0, L2 = dx * dx + dy * dy || 1;
-      const t = Math.max(0, Math.min(1, ((s - x0) * dx + (l - y0) * dy) / L2));
-      if (Math.hypot(s - x0 - dx * t, l - y0 - dy * t) < seg[k * 5 + 4]) return true;
-    }
-    return false;
-  };
-}
 
 /** 木を道路の上に植えないための簡易索引（10m 格子） */
 function buildRoadIndex(data: OsmData): (s: number, l: number) => boolean {

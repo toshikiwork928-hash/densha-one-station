@@ -215,10 +215,31 @@ export function buildIsland(ctx: GameContext, sta: Station, prevName: string, ne
   const s0 = sta.platform.from, s1 = sta.platform.to;
   const len = s1 - s0, sc = (s0 + s1) / 2, t = track.trackAt(sc);
   const grp = new THREE.Group(); grp.position.copy(track.at(sc, lat, 0)); grp.rotation.y = -t.phi; ctx.scene.add(grp);
-  const plat = new THREE.Mesh(new THREE.BoxGeometry(PW, 1.1, len), platMat); plat.position.set(0, .55, 0); grp.add(plat);
+  const below = ctx.route.airportBridge && sta.name === 'りんくうタウン';
+  const above = ctx.route.airportBridge && sta.name === '関西空港';
+  // 関西空港駅の明灰色タイル。屋内照明の反射を残し、通常駅の床材とは分ける。
+  const platformMat = above
+    ? new THREE.MeshLambertMaterial({ color: 0xc2c4c0, emissive: 0xb2b4ae, emissiveIntensity: .7 })
+    : platMat;
+  const accessZ = (ctx.route.airportBridge?.islandAtStart ? -1 : 1) * (below ? 5 : 9);
+  const access = (z: number) => (below || above) && Math.abs(z - accessZ) < 6;
+  const slab = (x: number, width: number, from: number, to: number) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, 1.1, to-from), platformMat);
+    mesh.position.set(x,.55,(from+to)/2); grp.add(mesh);
+  };
+  if (below) {
+    slab(0,PW,-len/2,accessZ-4.6);
+    slab(0,PW,accessZ+4.6,len/2);
+    for (const side of [-1,1]) slab(side*(PW+2)/4,(PW-2)/2,accessZ-4.6,accessZ+4.6);
+  } else slab(0,PW,-len/2,len/2);
   const b = new GeoBatch();
   const arch = architectureOf(sta.name);
   const box = (x: number, y: number, z: number, w: number, h: number, d: number, col: number) => b.add('body', P.box, M(x, y, z, 0, w, h, d), col);
+  if (above) {
+    // 目地は3mピッチの横目地と、ホーム中央・端の縦目地を薄い段差で表す。
+    for (let z = -len / 2 + 3; z < len / 2; z += 3) box(0, 1.105, z, PW - 1.8, .008, .045, 0x878a87);
+    for (const x of [-PW / 2 + .94, 0, PW / 2 - .94]) box(x, 1.106, 0, .045, .008, len - .08, 0x878a87);
+  }
   for (const sx of [-1, 1]) {
     const e = sx * PW / 2;
     box(e - sx * .7, 1.11, 0, .3, .02, len, 0xf2c200); // 点字ブロック
@@ -231,26 +252,33 @@ export function buildIsland(ctx: GameContext, sta: Station, prevName: string, ne
     const roofY = arch ? arch.Yroof : 4.35;
     if (arch?.roofShape) addCanopyRoof(b, 0, PW - .8, rl, arch);
     else {
-      box(0, roofY, 0, PW - .8, .14, rl, arch ? arch.roofColor : 0x6b7680);
-      box(0, roofY - .13, 0, PW - 1, .12, rl, 0xdcdcd8);
+      const spans = above ? [[-rl/2, accessZ-6],[accessZ+6,rl/2]] : [[-rl/2, rl/2]];
+      for (const [a,b] of spans) {
+        box(0, roofY, (a+b)/2, PW - .8, .14, b-a, arch ? arch.roofColor : 0x6b7680);
+        box(0, roofY - .13, (a+b)/2, PW - 1, .12, b-a, 0xdcdcd8);
+      }
     }
     if (arch) addCanopyBraces(b, 0, PW - 1.2, rl, arch);
     for (const sx of [-1, 1]) box(sx * (PW / 2 - .45), roofY - .2, 0, .1, .35, rl, arch ? arch.roofColor : 0x6b7680);
     for (let z = -rl / 2 + 4; z <= rl / 2 - 4; z += arch ? arch.supportSpacing : 10) {
+      if (access(z)) continue;
       box(0, roofY - 1.7, z, .22, 3.1, .22, arch ? arch.supportColor ?? 0x8a9096 : 0x8a9096);
       box(0, roofY - .25, z, PW - 1.2, .16, .14, arch ? arch.supportColor ?? 0x8a9096 : 0x8a9096);
     }
   }
   // ベンチ（背中合わせ）・自販機・時計
   for (let z = -rl / 2 + 8; z <= rl / 2 - 8; z += 16) for (const sx of [-1, 1]) {
-    box(sx * .55, 1.55, z, .45, .06, 2.2, 0x2a6aa8); box(sx * .32, 1.85, z, .06, .45, 2.2, 0x2a6aa8);
+    if (access(z)) continue;
+    if (below && Math.abs(z - (Math.round((z + 78) / 12) * 12 - 78)) < 1.5) continue;
+    const bench = above ? 0xe78043 : below ? 0xc8beb0 : 0x2a6aa8;
+    box(sx * .55, 1.55, z, .45, .06, 2.2, bench); box(sx * .32, 1.85, z, .06, .45, 2.2, bench);
   }
   for (const z of [-rl / 2 + 3, rl / 2 - 14]) b.add('body', P.boxB, M(0, 1.1, z, 0, .95, 1.83, .7), [0xc8282a, 0x2a5fb0][z < 0 ? 0 : 1]);
-  box(0, 3.7, 6, .5, .5, .1, 0x222222);
+  box(0, 3.7, below || above ? 22 : 6, .5, .5, .1, 0x222222);
   const signs: number[] = [-len * .3, len * .3];
   for (const z of signs) for (const dz of [-1.5, 1.5]) box(0, 1.9, z + dz, .08, 1.6, .08, 0x777d84);
   // 階段口（跨線橋へ。ホーム中央）
-  if (opt.stairs ?? true) {
+  if (!below && !above && (opt.stairs ?? true)) {
     box(0, 1.6, 0, 2.6, 1.0, 14, 0xd8d4ca);
     for (const sx of [-1, 1]) box(sx * 1.32, 2.6, 0, .06, 1.0, 14, 0x9aa0a6);
   }
@@ -263,7 +291,8 @@ export function buildIsland(ctx: GameContext, sta: Station, prevName: string, ne
     person(b, rnd, sx * Math.min(1.0 + rnd(), Math.max(0, PW / 2 - 1)), z, rnd() < .7 ? (sx > 0 ? -Math.PI / 2 : Math.PI / 2) : rnd() * 6);
     b.parent = null;
   }
-  b.build({ body: bodyMat }, grp);
+  const furnishing = above ? new THREE.MeshBasicMaterial({vertexColors:true,color:0xd4d4d0}) : bodyMat;
+  b.build({ body: furnishing }, grp);
   // 左（-X）を向く面は表の右が後ろ（前の駅）、右（+X）を向く面は表の右が進行方向（次の駅）
   const tex = nameTex(sta, nextName, prevName), tex2 = nameTex(sta, prevName, nextName);
   const signMats = [tex, tex2].map(tx => new THREE.MeshLambertMaterial({ map: tx, emissive: 0xffffff, emissiveMap: tx, emissiveIntensity: .05 }));
@@ -273,6 +302,7 @@ export function buildIsland(ctx: GameContext, sta: Station, prevName: string, ne
     bb.position.set(sx * .05, 3.0, z); bb.rotation.y = sx < 0 ? -Math.PI / 2 : Math.PI / 2; grp.add(bb);
   }
   onLight(ctx, f => { for (const m of signMats) m.emissiveIntensity = .05 + f * .75; });
+  if (above) onLight(ctx, (_night, tunnel) => { platformMat.emissiveIntensity = .4 + tunnel * .55; });
   return grp;
 }
 

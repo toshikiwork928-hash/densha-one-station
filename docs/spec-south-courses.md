@@ -364,6 +364,8 @@ OSM から取れた構造物（営業キロ s [m]）
 
 ## 15. 自列車のダイヤの再現（4コース、2026-10-10）
 
+通常モードでは、運転士が「定刻の目安」を参考に力行・惰行・制動を選ぶ。ゲームは時刻表に合わせて加速や制動を調整しない。
+
 対象は `izumisano-misaki`・`izumisano-misaki-up`・`misaki-wakayamako`・`misaki-wakayamako-up`。調査は [south-timetable-research.md](./south-timetable-research.md)。既存コースのダイヤ・待避・待ち合わせ・走行中の追い越し・停止位置・種別選択は変えていない（`day-patterns.ts` の `WAKAYAMA_WAITS` などにも触れていない）。
 
 ### 出典

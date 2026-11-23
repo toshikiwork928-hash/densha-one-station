@@ -43,7 +43,7 @@ const KIND_INFO: Record<TrainKind, { name: string; desc: string }> = {
 const carsOfUnits = (u: number[]) => u.reduce((a, n) => a + n, 0);
 
 const MODE_DESC: Record<GameMode, string> = {
-  normal: '力行中は定速補助あり。停止位置・定時・安全で採点',
+  normal: '目安速度を参考に手動で運転。停止位置・定時・安全で採点',
   recovery: '遅れて発車。遅着に厳しい',
   timeOnly: '定時と安全のみ採点',
 };

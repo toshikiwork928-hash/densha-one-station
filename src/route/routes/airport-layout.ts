@@ -28,10 +28,11 @@ export function configureAirportLayout(route: Route): void {
     // りんくうタウンの内側2線はJR。空港側で南海の上下線に合流する。
     extra('jr-rinku-down', [[1380, -40], [1730, 0], [2210, 0], [2420, 0]]),
     extra('jr-rinku-up', [[1380, -36], [1730, 4], [2210, 4], [2420, 4]]),
-    extra('jr-kansai-down', [[8170, 0], [8580, 8], [qEnd, 8]], [end]),
-    extra('jr-kansai-up', [[8230, 4], [8660, 17.2], [qEnd, 17.2]], [end]),
+    extra('jr-kansai-down', [[8170, 0], [8580, 10], [qEnd, 10]], [end]),
+    extra('jr-kansai-up', [[8230, 4], [8660, 19.2], [qEnd, 19.2]], [end]),
   ];
-  route.noInfill = [...(route.noInfill ?? []), { from: rinku.platform.to, to: end + 60 }];
+  // 駅前の商業地と埋立地には、地図にない戸建住宅を補わない。
+  route.noInfill = [...(route.noInfill ?? []), { from: rinku.platform.from - 320, to: end + 60 }];
   route.deckJoin = [{ from: offset - 350, to: offset + 310 },
     { from: offset + 1380, to: offset + 2420 }, { from: offset + 8170, to: end }];
   route.reserved = [...(route.reserved ?? []),
@@ -45,7 +46,10 @@ export function configureAirportLayout(route: Route): void {
   });
   sano.customPlatforms = IZUMISANO_PLATFORMS;
   rinku.customPlatforms = [{ kind: 'island', lat: -4.6, width: 5.8 }, { kind: 'island', lat: 8.6, width: 5.8 }];
-  kansai.customPlatforms = [{ kind: 'island', lat: -.6, width: 5.8 }, { kind: 'island', lat: 12.6, width: 5.8 }];
+  // 関西空港駅は人工地盤の下にホームが収まる屋内駅。専用外形が屋根と壁を描くため、
+  // ホーム個別の上屋・階段箱は indoor オプションで抑制する。
+  kansai.indoor = true;
+  kansai.customPlatforms = [{ kind: 'island', lat: -.6, width: 5.8 }, { kind: 'island', lat: 14.6, width: 5.8 }];
   for (const service of route.services ?? []) {
     // 分岐から終点まで、自列車の軌跡と描画用の下り線を一致させる。
     service.lane = down;

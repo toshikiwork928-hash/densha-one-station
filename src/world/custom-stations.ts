@@ -18,7 +18,10 @@ export function buildCustomStation(ctx: GameContext, sta: Station, prev: string,
   for (const p of list) {
     if (p.external) continue;
     const st: Station = { ...sta, platform: { ...sta.platform, from: p.from ?? sta.platform.from, to: p.to ?? sta.platform.to } };
-    if (p.kind === 'island') buildIsland(ctx, st, prev, next, p.lat, p.width, { stairs: p.stairs ?? true, roof: p.roof });
+    if (p.kind === 'island') buildIsland(ctx, st, prev, next, p.lat, p.width, {
+      stairs: p.stairs ?? true, roof: p.roof,
+      indoor: sta.indoor || (ctx.route.airportBridge && sta.name === 'りんくうタウン'),
+    });
     else { buildStation(ctx, st, prev, next, { lat: p.lat, side: p.side, minimal: !main, elevatedDy: dy }); main = false; }
   }
   // 跨線橋（樽井）: 片面ホームと島式ホームの階段室と、線路の上を渡る通路
@@ -39,6 +42,7 @@ export function buildCustomStation(ctx: GameContext, sta: Station, prev: string,
   }
   // 泉佐野の分割屋根の駅舎は東西の出入口と改札階を自前で持つので、下の簡易な箱は置かない（二重にしない）
   if (!sta.elevated || !main || list.every(p => p.external) || (arch?.kind === 'hall' && arch.style === 'split-roof')) return;
+  if (ctx.route.airportBridge && sta.name === 'りんくうタウン') return; // 専用の改札階が駅舎を兼ねる。
   // 片面ホームが無い（島式だけの）高架駅: 高架下の改札・駅舎（線路の範囲の左外）
   const [lo] = trackSpan(ctx.route, sc), t = ctx.track.trackAt(sc), b = new GeoBatch();
   const grp = new THREE.Group(); grp.position.copy(ctx.track.at(sc, 0, 0)); grp.rotation.y = -t.phi; ctx.scene.add(grp);

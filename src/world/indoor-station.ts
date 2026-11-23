@@ -12,6 +12,7 @@ import { extrudeFn } from './track-mesh';
 import { getTerrain } from './terrain';
 import { nearestS } from './structures';
 import { nameTex } from './stations';
+import { kixCoveredBoxes, type KixCoveredBox } from './kix-covered';
 
 /** 壁の高さ（床面から）と屋根のたかさ（壁の上端からの矢高）。架線のビーム上端・き電線は約 9m、出発信号の灯器は約 7.3m */
 const WALL_H = 9.9, RISE = 1.9;
@@ -20,7 +21,7 @@ const SKIN = .45;
 const DECK_BOTTOM = -1.1;
 const ARCH_N = 14;
 
-export interface HallBox { from: number; to: number; left: number; right: number }
+export interface HallBox { from: number; to: number; left: number; right: number; ceiling?: number }
 
 /** 大屋根の範囲と横幅（線路中心からの横位置）。床版の外縁（coastalDeckBounds）と同じく、最も外の線路から 3.3m 外 */
 export function hallBox(ctx: GameContext, sta: Station): HallBox {
@@ -32,12 +33,18 @@ export function hallBox(ctx: GameContext, sta: Station): HallBox {
 }
 
 export function buildIndoorStations(ctx: GameContext): void {
-  const halls = ctx.route.stations.filter(s => s.indoor).map(s => ({ sta: s, box: hallBox(ctx, s) }));
-  if (!halls.length) return;
+  // 関空は人工地盤下の専用シェルを airport-terminal が描く。従来の
+  // アーチ型大屋根を重ねると、実駅にない二重屋根になるため除外する。
+  const halls = ctx.route.stations
+    .filter(s => s.indoor && !(ctx.route.airportBridge && s.name === '関西空港'))
+    .map(s => ({ sta: s, box: hallBox(ctx, s) }));
+  const airportBoxes = kixCoveredBoxes(ctx.route);
+  if (!halls.length && !airportBoxes.length) return;
   for (const h of halls) buildHall(ctx, h.sta, h.box);
-  watchInside(ctx, halls.map(h => h.box));
+  watchInside(ctx, [...halls.map(h => h.box), ...airportBoxes]);
 }
 
+/** 関西空港の掘割・道路ボックス・駅屋根を環境判定へ登録する。建物本体は専用モジュールが描く。 */
 /** 天井の高さ（床面から）。両壁の上端から中央へ向かう円弧 */
 function ceilingY(box: HallBox, lat: number): number {
   const w = box.right - box.left, mid = (box.left + box.right) / 2;
@@ -187,7 +194,7 @@ function buildHall(ctx: GameContext, sta: Station, box: HallBox): void {
 }
 
 /** カメラが大屋根の中にある間は 'tunnel' を出す（structures.ts のトンネル判定と同じ流れ。env が環境光を落とし、音に反響が掛かる） */
-function watchInside(ctx: GameContext, boxes: HallBox[]): void {
+function watchInside(ctx: GameContext, boxes: (HallBox | KixCoveredBox)[]): void {
   const T = getTerrain(ctx);
   let inside = false, guess = ctx.state.train.s;
   ctx.events.on('reset', () => { if (inside) { inside = false; ctx.events.emit('tunnel', { inside }); } guess = ctx.state.train.s; });
@@ -195,10 +202,13 @@ function watchInside(ctx: GameContext, boxes: HallBox[]): void {
   const near = (s: number) => boxes.some(b => s > b.from - 600 && s < b.to + 600);
   ctx.events.on('frame', () => {
     if (!inside && !near(ctx.state.train.s)) return;
+    // 外部カメラへの切替直後は前回の推定値が数 km 離れることがある。
+    // nearestS の探索幅は ±400m なので、その場合だけ列車位置へ戻す。
+    if (Math.abs(guess - ctx.state.train.s) > 400) guess = ctx.state.train.s;
     const r = nearestS(ctx, ctx.camera.position, guess);
     guess = Math.abs(r.lat) > 150 ? ctx.state.train.s : r.s;
     const y = ctx.camera.position.y - T.trackY(r.s);
-    const now = boxes.some(b => r.s > b.from + .5 && r.s < b.to - .5 && r.lat > b.left + .2 && r.lat < b.right - .2 && y < ceilingY(b, r.lat) && y > -1);
+    const now = boxes.some(b => r.s > b.from + .5 && r.s < b.to - .5 && r.lat > b.left + .2 && r.lat < b.right - .2 && y < (b.ceiling ?? ceilingY(b, r.lat)) && y > -1);
     if (now !== inside) { inside = now; ctx.events.emit('tunnel', { inside }); }
   });
 }

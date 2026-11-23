@@ -12,7 +12,7 @@ import { coastalThirdTracks } from '../world/coastal-stations';
 const RAIL = .38;
 // 海面は線路・建築限界の対象外。空港連絡橋の海面メッシュは 14km 級の面を持つため、
 // これを三角形再分割すると検査時間とメモリを過大消費する。
-const SKIP = /^(playerTrain|oncoming-|overtake-|cab3d|ground|ground-far|ground-grid|backdrop|coastal-sea|coastal-distant-hills|river|catenary-wire)/;
+const SKIP = /^(playerTrain|oncoming-|overtake-|cab3d|ground|ground-far|ground-grid|backdrop|coastal-sea|airport-sea$|airport-island-(sea|ground)$|coastal-distant-hills|river|catenary-wire)/;
 
 interface Line { id: string; from: number; to: number; lat(s: number): number }
 

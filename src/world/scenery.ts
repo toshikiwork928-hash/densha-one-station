@@ -1,5 +1,6 @@
 // 沿線景観: 遠景の山・終端の構造物（同期生成）と、読込素材（木・市街地のビル）の配置
 // 住宅・商店などの近景は town-jp.ts（手続き生成）
+import { airportArchitectureReservations } from './airport-architecture';
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import { fallbackBox, fallbackTree, prepareModel, type LoadedAssets, type PreparedModel } from './assets';
@@ -234,6 +235,7 @@ export function prepareSceneryModels(loaded: LoadedAssets): SceneryModels {
 export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot[] = [], water: WaterMask | null = null): void {
   const { rng: rnd, route, track: { trackAt } } = ctx, T = getTerrain(ctx);
   const bridge = route.airportBridge;
+  const airportSites = bridge ? airportArchitectureReservations(route) : [];
   const TS0 = bridge?.islandAtStart ? bridge.to : route.extent.from;
   const TS1 = bridge && !bridge.islandAtStart ? bridge.from : route.extent.to;
   const L0 = Math.min(...route.tracks), L1 = Math.max(...route.tracks);
@@ -247,6 +249,7 @@ export function placeScenery(ctx: GameContext, M: SceneryModels, spots: TreeSpot
   const put = (model: PreparedModel, s: number, lat: number, yaw: number, k: number, y?: number) => {
     if (noBuildings) return;
     const radius = Math.hypot(model.size.x, model.size.z) * k / 2;
+    if (airportSites.some(z => s + radius > z.from && s - radius < z.to && lat + radius > z.lat0 && lat - radius < z.lat1)) return;
     if (T.riverNear(s, lat, radius) || water?.(s, lat, radius)) return;
     // 描画専用線も分岐端まで敷地を確保。樹冠の幅と前後方向の張り出しを含む。
     if (thirds.some(t => s > t.from - radius && s < t.to + radius && Math.abs(lat - t.lat(s)) < radius + 2.1)) return;

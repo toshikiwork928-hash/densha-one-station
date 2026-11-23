@@ -12,6 +12,7 @@ import { getTerrain, hash, TUNNEL_CENTER, TUNNEL_HALF, TUNNEL_WALL_H } from './t
 import { loopTracks } from './track-mesh';
 import { coastalThirdTracks } from './coastal-stations';
 import { hagoromoDeckEdge } from './hagoromo-branch';
+import { kixCoveredBoxes, type KixCoveredBox } from './kix-covered';
 
 const RAIL = .38;           // レール面（線路基準の高さ）
 const CW = RAIL + 5.34;     // トロリー線の高さ（パンタグラフ上昇時の舟の上面にほぼ接する）
@@ -209,6 +210,7 @@ export function buildCatenary(ctx: GameContext): void {
     ...islandZones(route).map(z => ({ inFrom: z.inFrom, outTo: z.outTo, lat: -z.spread })),
   ];
   const structs = route.structures ?? [];
+  const airportCovered = kixCoveredBoxes(route);
   // 単線の駅の右の線・副線（本線は route.tracks の 0）
   const extraLines = route.singleTrack ? trackLines(route).filter(l => l.kind !== 'main') : [];
   const allLines = trackLines(route);
@@ -251,6 +253,10 @@ export function buildCatenary(ctx: GameContext): void {
   const kindAt = (s: number): Kind => {
     const st = T.structureAt(s, 0);
     if (st?.kind === 'tunnel') return 'tunnel';
+    // 関西空港駅は構内図上のホームが1階にあり、進入線は掘割から
+    // 人工地盤下へ入る。route.structures の山岳トンネルには含めず、
+    // この区間だけ天井吊りのコンパクト架線を使う。
+    if (airportIndoorAt(airportCovered, s)) return 'tunnel';
     if (zones.some(z => s >= z.inFrom - 12 && s <= z.outTo + 12)) return 'loop';
     if (s >= woodFrom) return 'wood';
     if (st?.kind === 'viaduct') return 'viaduct';
@@ -639,4 +645,10 @@ export function buildCatenary(ctx: GameContext): void {
     const h = ctx.renderer.shadowMap.enabled && ctx.env.sun.shadow.mapSize.x >= 2048;
     for (const m of meshes) if (m.castShadow !== h) { m.castShadow = h; m.receiveShadow = true; }
   });
+}
+
+/** 関西空港駅の掘割・ボックス・屋内ホームの相対区間。reverseRoute 後も
+ * ホーム中心から計算するため、下り・上りで同じ見え方になる。 */
+function airportIndoorAt(boxes: KixCoveredBox[], s: number): boolean {
+  return boxes.some(b => s >= b.from && s <= b.to);
 }

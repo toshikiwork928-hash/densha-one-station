@@ -7,7 +7,7 @@ import { departureTime } from '../game/state';
 import { destOf, serviceOf, unitsLabel } from '../route/service';
 import { drawMeter } from './meter';
 import { terminalSpeedLimit } from '../game/terminal-ats';
-import { timetablePace, tractionLimit } from '../game/timetable-pace';
+import { timetablePace } from '../game/timetable-pace';
 
 const fmtHM = (sec: number) => fmtClock(sec);
 
@@ -162,8 +162,6 @@ export function attachHud(ctx: GameContext): void {
     else if (cur) nxt = `<b>${Math.round(cur.kmh)} 解除</b>まで ${Math.round(cur.to - s)}m`;
     const pace = timetablePace(ctx);
     if (pace != null) nxt = (nxt === '&nbsp;' ? '' : nxt + '<br>') + `定刻の目安 ${Math.round(pace)} km/h`;
-    const cap = tractionLimit(ctx);
-    if (cap != null && ctx.state.train.notch > 0 && vk >= cap - 1) nxt += '<br>定速補助中';
     el.nextLimit.innerHTML = nxt;
     // 通過駅が手前にあればそこまでの距離を補助表示
     const p = nextPass();

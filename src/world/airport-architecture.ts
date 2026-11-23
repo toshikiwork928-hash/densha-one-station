@@ -8,6 +8,7 @@ import { sectionFrame } from './section-frame';
 import { GeoBatch, M, P } from './batch';
 import { cullByDistance } from './cull';
 import { getTerrain } from './terrain';
+import { buildRinkuLandmarks } from './rinku-landmarks';
 
 const C = {
   concrete: 0xb8bdc0, dark: 0x4e5b63, steel: 0x78848a,
@@ -85,33 +86,43 @@ function buildRinkuTower(ctx: GameContext, b: GeoBatch, st: Site): void {
   for (let i = -2; i <= 2; i++) groundBox(ctx, b, 'steel', s - 4 + i * 7, side * 41.1, .18, 6.6, .4, C.steel);
 }
 
+/** 階段をホームの中央に収める。 */
+function stairs(ctx: GameContext, b: GeoBatch, s: number, lat: number, bottom: number, top: number): void {
+  const steps = Math.ceil((top - bottom) / .19);
+  for (let i = 1; i <= steps; i++) {
+    const y = bottom + (top - bottom) * i / steps;
+    const q = s + .29 * (i - steps / 2);
+    box(b, 'deck', world(ctx, q, lat, y - .18), -ctx.track.trackAt(q).phi, 1.9, .36, .31, C.concrete);
+  }
+}
+
 function buildRinkuDeck(ctx: GameContext, b: GeoBatch, st: Site): void {
-  const side = st.side, s = st.s;
-  const p = world(ctx, s, 0, ctx.track.trackAt(s).y + 10.8);
-  const deckBottom = ctx.track.trackAt(s).y + 10.2;
-  const pierHeight = Math.max(1, deckBottom - st.ground);
-  // 駅の上を横切る橋上デッキ。床下面をレール面から10m以上離し、架線を塞がない。
-  box(b, 'deck', p, st.yaw, 92, 1.2, 18, C.deck);
-  for (const lat of [-39, -25, 25, 39]) {
-    const q = world(ctx, s, lat, st.ground);
-    column(b, q, st.yaw, 1.4, pierHeight, 1.4, C.concrete);
-  }
-  for (const lat of [-42, 42]) {
-    const q = world(ctx, s, lat, st.ground + 11.5);
-    box(b, 'glass', q, st.yaw, 1.1, 2.8, 18, C.glass);
-  }
-  // 塔側と駅前側の連絡リンク。線路上に柱を増やさず、外側の地面へ下ろす。
-  for (const lat of [side * 30, side * 58]) {
-    const q = world(ctx, s, lat, st.ground + 7.2);
-    box(b, 'deck', q, st.yaw, 12, .9, 7, C.deck);
-  }
-  // 塔の足元から駅前道路へ続く広場と、線路に平行なアクセス道路。
-  groundBox(ctx, b, 'deck', s + 18, side * 33, 34, .22, 66, C.deck, .1);
-  groundBox(ctx, b, 'body', s - 2, side * 22, 12, .18, 150, C.road, .22);
+  const s = st.s, rail = ctx.track.trackAt(s).y, floor = rail - 4.8;
+  // 3階ホームの下に共用改札を置き、2階の自由通路で駅の両側を結ぶ。
+  box(b, 'deck', world(ctx, s, 6, floor - .3), st.yaw, 82, .6, 24, C.deck);
+  for (const lat of [-29, -16, 20, 39]) for (const ds of [-10, 10])
+    column(b, world(ctx, s + ds, lat, st.ground), st.yaw, 1, floor - st.ground, 1);
+  for (const lat of [-4.6, 8.6]) stairs(ctx, b, s - 5, lat, floor, rail + 1.1);
+  for (const lat of [-32, 32]) for (const ds of [-12, 12])
+    box(b, 'glass', world(ctx, s + ds, lat, floor + 1.2), st.yaw, 14, 2.4, .2, C.glass);
+  stairs(ctx, b, s - 17, -30, st.ground + .1, floor);
 }
 
 function buildKixTerminal(ctx: GameContext, b: GeoBatch, st: Site): void {
-  const side = st.side, s = st.s;
+  const side = st.side, s = st.s, rail = ctx.track.trackAt(s).y, floor = rail + 7.8;
+  // 2階の自由通路が線路を横断する。両ホームの階段が床とガラス壁を抜ける部分を開ける。
+  const spans = [[-85, -1.85], [.65, 13.35], [15.85, 105]];
+  for (const [left, right] of spans) {
+    const middle = (left + right) / 2;
+    box(b, 'deck', world(ctx, s - 6, middle, floor - .4), st.yaw, right - left, .8, 4, C.deck);
+    box(b, 'glass', world(ctx, s - 8, middle, floor + 1.4), st.yaw, right - left, 2.8, .25, C.glass);
+  }
+  box(b, 'deck', world(ctx, s + 2, 10, floor - .4), st.yaw, 190, .8, 12, C.deck);
+  for (const lat of [-61, -27, 27, 60, 95]) for (const ds of [-6, 6])
+    column(b, world(ctx, s + ds, lat, st.ground), st.yaw, 1.2, floor - st.ground, 1.2);
+  box(b, 'glass', world(ctx, s + 8, 10, floor + 1.4), st.yaw, 190, 2.8, .25, C.glass);
+  box(b, 'roof', world(ctx, s, 10, floor + 3.3), st.yaw, 190, .45, 17, C.silver);
+  for (const lat of [-.6, 14.6]) stairs(ctx, b, s - 9, lat, rail + 1.1, floor);
   // T1 は列車から見て左、Aeroplaza・ホテル側は右。前面のガラスと銀色の屋根を分節する。
   const roofStart = s - 245, roofEnd = s + 95, step = 24;
   for (let q = roofStart; q < roofEnd; q += step) {
@@ -119,29 +130,29 @@ function buildKixTerminal(ctx: GameContext, b: GeoBatch, st: Site): void {
     const span = Math.min(step + .6, roofEnd - q + .6);
     const rise = .55 * Math.sin((mid - roofStart) / (roofEnd - roofStart) * Math.PI);
     // 断面を横方向に丸めて押し出す。平板を重ねず、各パネルの上下面を閉じる。
-    const cross = 8, roofHalf = 15;
+    const cross = 8, roofHalf = 32;
     for (let j = 0; j < cross; j++) {
       const x0 = -roofHalf + roofHalf * 2 * j / cross, x1 = -roofHalf + roofHalf * 2 * (j + 1) / cross;
       const y0 = 17 + rise + 1.35 * (1 - (x0 / roofHalf) ** 2), y1 = 17 + rise + 1.35 * (1 - (x1 / roofHalf) ** 2);
-      const a = world(ctx, q, -side * (31 + x0), st.ground + y0), z = world(ctx, q + span, -side * (31 + x0), st.ground + y0);
-      const c = world(ctx, q, -side * (31 + x1), st.ground + y1), d = world(ctx, q + span, -side * (31 + x1), st.ground + y1);
-      const ab = world(ctx, q, -side * (31 + x0), st.ground + 16.7), zb = world(ctx, q + span, -side * (31 + x0), st.ground + 16.7);
-      const cb = world(ctx, q, -side * (31 + x1), st.ground + 16.7), db = world(ctx, q + span, -side * (31 + x1), st.ground + 16.7);
+      const a = world(ctx, q, -side * (105 + x0), st.ground + y0), z = world(ctx, q + span, -side * (105 + x0), st.ground + y0);
+      const c = world(ctx, q, -side * (105 + x1), st.ground + y1), d = world(ctx, q + span, -side * (105 + x1), st.ground + y1);
+      const ab = world(ctx, q, -side * (105 + x0), st.ground + 16.7), zb = world(ctx, q + span, -side * (105 + x0), st.ground + 16.7);
+      const cb = world(ctx, q, -side * (105 + x1), st.ground + 16.7), db = world(ctx, q + span, -side * (105 + x1), st.ground + 16.7);
       b.addTris('roof', [a.x, a.y, a.z, z.x, z.y, z.z, d.x, d.y, d.z, a.x, a.y, a.z, d.x, d.y, d.z, c.x, c.y, c.z], C.silver);
       b.addTris('roof', [ab.x, ab.y, ab.z, cb.x, cb.y, cb.z, db.x, db.y, db.z, ab.x, ab.y, ab.z, db.x, db.y, db.z, zb.x, zb.y, zb.z], C.steel);
       b.addTris('roof', [a.x, a.y, a.z, ab.x, ab.y, ab.z, zb.x, zb.y, zb.z, a.x, a.y, a.z, zb.x, zb.y, zb.z, z.x, z.y, z.z], C.steel);
     }
-    groundBox(ctx, b, 'body', mid, -side * 30, 28, 17, span - 1, C.concrete);
-    groundBox(ctx, b, 'glass', mid, -side * 45, .28, 16, 27, C.glass, .6);
-    for (const ds of [-8, 0, 8]) groundBox(ctx, b, 'steel', mid + ds, -side * 45.2, .45, 15.8, .18, C.steel, .7);
+    groundBox(ctx, b, 'body', mid, -side * 105, 63, 17, span - 1, C.concrete);
+    groundBox(ctx, b, 'glass', mid, -side * 72.9, .28, 16, span - 1, C.glass, .6);
+    for (const ds of [-8, 0, 8]) groundBox(ctx, b, 'steel', mid + ds, -side * 72.8, .45, 15.8, .18, C.steel, .7);
   }
   // 進入側の正面エンドキャップ。ガラス、サッシ、柱、軒を一体で閉じる。
   const cap = roofStart - 1;
-  groundBox(ctx, b, 'glass', cap, -side * 30, 28, 16, .35, C.glass, .6);
-  for (let i = -3; i <= 3; i++) groundBox(ctx, b, 'steel', cap, -side * (30 + i * 4), .28, 16.4, .35, C.steel, .4);
-  groundBox(ctx, b, 'steel', cap, -side * 30, 30, .55, .8, C.steel, 16.6);
+  groundBox(ctx, b, 'glass', cap, -side * 105, 63, 16, .35, C.glass, .6);
+  for (let i = -3; i <= 3; i++) groundBox(ctx, b, 'steel', cap, -side * (105 + i * 9), .28, 16.4, .35, C.steel, .4);
+  groundBox(ctx, b, 'steel', cap, -side * 105, 65, .55, .8, C.steel, 16.6);
   // 右側の Aeroplaza / ホテルは段状にし、単純な直方体に見せない。
-  const hotelS = s - 110, hotelLat = side * 68;
+  const hotelS = s, hotelLat = side * 119;
   groundBox(ctx, b, 'body', hotelS, hotelLat, 48, 14, 58, C.hotel);
   for (let level = 0; level < 3; level++) {
     const q = world(ctx, hotelS + level * 16, hotelLat, st.ground + 14 + level * 4.8);
@@ -151,7 +162,7 @@ function buildKixTerminal(ctx: GameContext, b: GeoBatch, st: Site): void {
     for (let i = -2; i <= 2; i++) groundBox(ctx, b, 'glass', hotelS + i * 14, lat, 6, 4.8, .35, C.glassDark, 7);
   }
   // 空港アクセスの多層駐車場。開いたデッキと柱の間から背景が見える。
-  const parkLat = side * 96, parkS = s - 35;
+  const parkLat = -side * 46, parkS = s - 126;
   for (let floor = 0; floor < 4; floor++) {
     const y = floor * 3.8;
     groundBox(ctx, b, 'deck', parkS, parkLat, 43, .55, 96, C.deck, y);
@@ -162,21 +173,18 @@ function buildKixTerminal(ctx: GameContext, b: GeoBatch, st: Site): void {
   for (const lat of [parkLat - side * 19, parkLat + side * 19]) {
     for (const ds of [-38, 38]) groundBox(ctx, b, 'steel', parkS + ds, lat, .8, 15.8, .8, C.steel);
   }
-  // 650m のアクセス帯を小区画に分け、単色の地面を歩道・車道・駐車区画で割る。
-  for (let ds = -320; ds <= 300; ds += 40) {
-    const q = s + ds;
-    groundBox(ctx, b, 'body', q, side * 38, 12, .18, 36, C.road, .22);
-    groundBox(ctx, b, 'deck', q, side * 30, 2.2, .12, 36, C.concrete, .18);
-    groundBox(ctx, b, 'deck', q, side * 50, 2.2, .12, 36, C.concrete, .18);
-    groundBox(ctx, b, 'deck', q, parkLat, 43, .1, 36, ds % 80 ? C.deck : C.concrete, .16);
-    for (let lane = -3; lane <= 3; lane++) groundBox(ctx, b, 'steel', q + lane * 4, parkLat, .08, .025, 5, C.steel, .25);
-  }
+
 }
 
 function addSite(ctx: GameContext, b: GeoBatch, name: string): boolean {
   const st = site(ctx, name);
   if (!st) return false;
-  if (name === 'りんくうタウン') { buildRinkuTower(ctx, b, st); buildRinkuDeck(ctx, b, st); }
+  if (name === 'りんくうタウン') {
+    buildRinkuTower(ctx, b, st); buildRinkuDeck(ctx, b, st);
+    const group = new THREE.Group(); group.name = 'airport-rinku-landmarks';
+    buildRinkuLandmarks(ctx, st.s, group);
+    if (group.children.length) ctx.scene.add(group);
+  }
   if (name === '関西空港') buildKixTerminal(ctx, b, st);
   return true;
 }
@@ -217,12 +225,17 @@ export function airportArchitectureReservations(route: Route): NonNullable<Route
     const st = source.stations.find(x => x.name === name);
     if (!st?.platform) continue;
     const center = (st.platform.from + st.platform.to) / 2;
-    const side = source.id.endsWith('-up') ? -1 : 1;
-    const spec = name === 'りんくうタウン'
-      ? { from: center - 55, to: center + 65, lat0: side * 28 - 42, lat1: side * 28 + 110, keepRoads: true }
-      : { from: center - 340, to: center + 300, lat0: side * 18 - 118, lat1: side * 18 + 118, keepRoads: true, noPiers: true };
-    if (!frame) out.push(spec);
-    else out.push({ ...spec, from: Math.min(frame.mapS(spec.from), frame.mapS(spec.to)), to: Math.max(frame.mapS(spec.from), frame.mapS(spec.to)), lat0: Math.min(frame.mapL(spec.lat0), frame.mapL(spec.lat1)), lat1: Math.max(frame.mapL(spec.lat0), frame.mapL(spec.lat1)) });
+    // 個々の棟と内海だけを予約し、棟間の道路や駅前広場は残す。
+    const footprints = name === 'りんくうタウン'
+      ? [[-22,76,30,83], [-19,49,-315,-94], [8,156,-437,-373], [25,90,-376,-312],
+         [404,548,-365,-178]]
+      : [[-247,100,-138,-72], [-176,-76,-68,-24], [-31,55,94,145], [-950,132,-18,27]];
+    for (const [from,to,l0,l1] of footprints) {
+      const s0 = center + from, s1 = center + to;
+      const a = frame ? frame.mapS(s0) : s0, b = frame ? frame.mapS(s1) : s1;
+      const l = frame ? frame.mapL(l0) : l0, r = frame ? frame.mapL(l1) : l1;
+      out.push({from: Math.min(a,b), to: Math.max(a,b), lat0: Math.min(l,r), lat1: Math.max(l,r)});
+    }
   }
   return out;
 }

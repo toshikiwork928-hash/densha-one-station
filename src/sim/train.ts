@@ -68,17 +68,12 @@ export const createTrainEnv = (): TrainEnv => ({ adhesion: 1, gradePermil: 0 });
 const G = 9.81;
 
 /** 1 ステップ進める。戻り値: 今回停止した瞬間なら true */
-export function stepTrain(tr: TrainState, env: TrainEnv, dt: number, tractionLimitKmh = Infinity): boolean {
+export function stepTrain(tr: TrainState, env: TrainEnv, dt: number): boolean {
   const v = tr.v, n = tr.notch, P = env.perf ?? DEFAULT_PERF;
   let target = 0;
   if (n > 0) {
     const amax = v >= P.vMax ? 0 : v < P.vBase ? P.a0 : P.a0 * Math.pow(P.vBase / v, P.k);
     target = amax * n / 5;
-    // 通常モードの定速補助。下り勾配では弱い常用制動まで使い、惰行・手動ブレーキは運転士に任せる。
-    if (Number.isFinite(tractionLimitKmh)) {
-      const accelerationToTarget = (tractionLimitKmh / 3.6 - v) * .45;
-      target = Math.min(target, Math.max(-P.bMax * .35, accelerationToTarget));
-    }
   } else if (n < 0) target = n === NOTCH_EB ? -P.eb : -P.bMax * (-n) / 8;
   // 粘着低下時は加減速度の上限を下げる（簡易）
   if (env.adhesion < 1) target *= env.adhesion;

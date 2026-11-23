@@ -11,7 +11,7 @@ const names: [string, string][] = [['泉佐野', 'いずみさの'], ['りんく
 const stations: Station[] = names.map(([name, kana], i) => {
   const stopS = 180 + DIST[i];
   return { name, kana, stopS, platform: { from: stopS - 180, to: stopS + 40, side: 'R' }, scheduledArrival: 0,
-    dwell: i === 1 ? 25 : undefined, stopMarkerCars: 8, elevated: true, layout: 'custom', headEnd: i === 2 };
+    dwell: i === 1 ? 25 : undefined, stopMarkerCars: 8, elevated: i !== 2, layout: 'custom', headEnd: i === 2 };
 });
 const signs = (stopS: number): Sign[] => [
   ...[500, 300, 200, 100, 50].map((meters): Sign => ({ kind: 'distance', s: stopS - meters, meters })),
@@ -35,11 +35,14 @@ export const airport: Route = {
     { type: 'straight', length: 1600 },
   ],
   elevation0: 9, gradients: [{ from: 260, to: 660, permil: 35 }, { from: 1050, to: 1610, permil: -25 },
-    { from: 2410, to: 3090, permil: 15 }, { from: 6450, to: 7210, permil: -20 }],
+    { from: 2410, to: 3090, permil: 15 }, { from: 6450, to: 6870, permil: -20 },
+    { from: 7730, to: 8530, permil: -8.5 }],
   limits: [{ from: 535, to: 1390, kmh: 85, label: '曲線制限' }], stations, services,
   prevName: '井原里', nextName: undefined, signs: stations.slice(1).flatMap(s => signs(s.stopS)), extent: { from: -400, to: 9032 }, tracks: [0, 4],
   scenery: { cityZones: [{ from: -Infinity, to: Infinity }] },
-  structures: [{ kind: 'viaduct', from: -400, to: 9200 }], oncoming: [], crossings: [],
+  // りんくうタウンまでの市街地高架と空港連絡橋を経て、空港島側で地上へ下ろす。
+  // 空港島の高架を降り、掘割を通って人工地盤下のホームに入る。
+  structures: [{ kind: 'viaduct', from: -400, to: 7960 }], oncoming: [], crossings: [],
   signals: [320, 960, 1640, 2210, 2980, 3750, 4520, 5290, 6060, 6830, 7600, 8370].map(s => ({ id: 'airport-' + s, s })),
   terminalApproach: true, terminalAtsOnly: true, fullCourseOnly: true,
 };

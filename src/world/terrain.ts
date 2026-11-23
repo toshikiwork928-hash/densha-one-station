@@ -10,6 +10,7 @@ import { osmFor, osmReady, osmSceneryFor } from './osm-town';
 import { RIVER_WATER, makeRiverField, type RiverField } from './river';
 import { buildMountainTerrain, makeMountainTerrain, type MountainTerrain } from './mountain-terrain';
 import { buildUnderpasses, makeUnderpassField, type UnderpassField } from './underpass';
+import { airportIslandTerrain } from './airport-island';
 
 export type StructureKind = 'tunnel' | 'viaduct' | 'bridge';
 type Structure = NonNullable<Route['structures']>[number];
@@ -89,7 +90,10 @@ function makeTerrain(route: Route, track: Track): Terrain {
     return d;
   };
   // 地面が線路の高さに沿うコース（groundFollowsTrack）: 線路が地面の高さ。高架（viaduct）の所だけ viaductHeight だけ地面が低い（両端 120m で線路の高さへ）
-  const follow = !!route.groundFollowsTrack, viaducts = structs.filter(s => s.kind === 'viaduct'), viaductH = route.viaductHeight ?? 9;
+  const follow = !!route.groundFollowsTrack;
+  const terminal = route.airportBridge && route.stations.find(st => st.name === '関西空港');
+  const terminalCenter = terminal ? (terminal.platform.from + terminal.platform.to) / 2 : 0;
+  const viaducts = structs.filter(s => s.kind === 'viaduct'), viaductH = route.viaductHeight ?? 9;
   const viaductDrop = (s: number) => {
     let d = 0;
     for (const v of viaducts) d = Math.max(d, viaductH * smooth((s - v.from) / 120) * smooth((v.to - s) / 120));
@@ -106,8 +110,11 @@ function makeTerrain(route: Route, track: Track): Terrain {
     const bridge = route.airportBridge;
     if (bridge && s >= Math.min(bridge.from, bridge.to) && s <= Math.max(bridge.from, bridge.to)) return -4;
     const y = trackY(s);
-    if (follow) return y - viaductDrop(s) - bridgeDrop(s);
-    return y >= 0 ? y * tunnelW(s) : y;
+    const base = follow ? y - viaductDrop(s) - bridgeDrop(s) : y >= 0 ? y * tunnelW(s) : y;
+    // 空港島では高架の終わりに向かって造成面を道床の下へつなぐ。
+    if (!terminal) return base;
+    const approach = (terminalCenter - s) * (bridge?.islandAtStart ? -1 : 1);
+    return base + (y - .35 - base) * smooth((990 - approach) / 280);
   };
   const groundY = (s: number) => dryY(s) - riverDip(s);
   // OSM の水面に沿った溝。沿線データはコース読み込み後に使える（loadOsmFor）ので、最初に使えるようになった時に作って持ち続ける
@@ -313,14 +320,16 @@ export function buildTerrain(ctx: GameContext): Terrain {
   const edgeY = (y: number) => follow ? y - 9 : Math.min(y, 0) - 9;
   // 地面リボン（曲線内側は折り返さないよう幅を制限）
   const LAT = [-1404, -1000, -700, -500, -350, -220, -90, -30, -6, 0, 4, 10, 34, 94, 224, 350, 500, 700, 1000, 1404];
+  const clipCoast = airportIslandTerrain(ctx);
   const cols = (s: number): [number, number][] => {
     const y = T.groundY(s), k = T.curvature(s), R = Math.abs(k) > 1e-5 ? 1 / Math.abs(k) : 1e9;
-    return LAT.map((l, j) => {
+    const row = LAT.map((l, j): [number, number] => {
       const inside = (k > 0 && l > 0) || (k < 0 && l < 0);
       const ll = inside ? Math.sign(l) * Math.min(Math.abs(l), R * .85) : l;
       const rel = T.reliefY(s, l);
       return [ll, (j === 0 || j === LAT.length - 1 ? edgeY(y) : y - .02) + rel];
     });
+    return clipCoast ? clipCoast(s, row) : row;
   };
   // 大都市（route.urban）は舗装・空き地の灰色がちの地面
   const gc = new THREE.Color(route.airportBridge ? 0x99998b : route.urban ? 0x9a9a8e : 0x7fa05a), dirt = new THREE.Color(0x9a9270), forestC = new THREE.Color(0x48663a);
@@ -344,7 +353,7 @@ export function buildTerrain(ctx: GameContext): Terrain {
   const denseCols = (rowDip: number[], lats = denseLat) => (s: number): [number, number][] => {
     const k = T.curvature(s), R = Math.abs(k) > 1e-5 ? 1 / Math.abs(k) : 1e9;
     rowDip.length = 0;
-    return lats.map((l, j) => {
+    const row = lats.map((l, j): [number, number] => {
       const inside = (k > 0 && l > 0) || (k < 0 && l < 0);
       const ll = inside ? Math.sign(l) * Math.min(Math.abs(l), R * .85) : l;
       const edge = j === 0 || j === lats.length - 1;
@@ -353,6 +362,7 @@ export function buildTerrain(ctx: GameContext): Terrain {
       rowDip.push(edge ? 0 : T.dryY(s) - y);
       return [ll, edge ? edgeY(T.dryY(s)) : y - .02];
     });
+    return clipCoast ? clipCoast(s, row) : row;
   };
   const river = new THREE.MeshPhongMaterial({ color: 0x3c6577, shininess: 90, specular: 0x8899aa });
   /** 区間 [a, b] を、川の範囲の内側（細かい格子）と外側（従来の格子）に分けて作る */

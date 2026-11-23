@@ -4,10 +4,6 @@ import { terminalSpeedLimit } from './terminal-ats';
 
 /** 次の停車駅に定刻で着くための巡航速度 [km/h]。停車直前や、制限内で定刻に届かない区間では表示しない。 */
 export function timetablePace(ctx: GameContext): number | null {
-  return nextStationPace(ctx, cruiseSpeed);
-}
-
-function nextStationPace(ctx: GameContext, calculate: typeof cruiseSpeed): number | null {
   const { route, state, trainEnv, track } = ctx;
   if (state.state !== 'run' || state.target < 0) return null;
   const station = route.stations[state.target];
@@ -15,16 +11,7 @@ function nextStationPace(ctx: GameContext, calculate: typeof cruiseSpeed): numbe
   const seconds = station.scheduledArrival - state.t;
   const limit = Math.min(track.limitAt(state.train.s), state.sigLimit,
     terminalSpeedLimit(route, state.target, state.train.s), (trainEnv.perf?.vMax ?? Infinity) * 3.6);
-  return calculate(distance, seconds, state.train.v, trainEnv.perf ?? DEFAULT_PERF, limit);
-}
-
-/** 通常運転では先の曲線と停車操作に8秒の余裕を取る。 */
-export function normalCruiseSpeed(distance: number, seconds: number, speed: number, perf: TrainPerf, limitKmh: number): number | null {
-  return cruiseSpeed(distance, seconds - 8, speed, perf, limitKmh);
-}
-
-export function tractionLimit(ctx: GameContext): number | null {
-  return ctx.state.sel.mode === 'normal' ? nextStationPace(ctx, normalCruiseSpeed) : null;
+  return cruiseSpeed(distance, seconds, state.train.v, trainEnv.perf ?? DEFAULT_PERF, limit);
 }
 
 function cruiseSpeed(distance: number, seconds: number, speed: number, perf: TrainPerf, limit: number): number | null {

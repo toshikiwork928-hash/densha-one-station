@@ -4,14 +4,13 @@ import { ROUTES } from '../src/route';
 import { applyService, selectableServices } from '../src/route/service';
 import { realDayOf, realTrainFor } from '../src/route/real-diagram';
 import { createState, departureTime, stagesOf } from '../src/game/state';
-import { normalCruiseSpeed } from '../src/game/timetable-pace';
 import { terminalSpeedLimit } from '../src/game/terminal-ats';
 import { buildTrack } from '../src/route/track';
 import { TRAIN_PERF, stepTrain, type TrainPerf } from '../src/sim/train';
 import type { Route } from '../src/route/types';
 
-// 2mごとに先の制限と停車位置から逆算し、同じブレーキ操作で力行調整の有無を比べる。
-function measure(route: Route, from: number, to: number, seconds: number, perf: TrainPerf, assisted: boolean) {
+// 2mごとに先の制限と停車位置から逆算し、物理計算だけで所要時間と最高速度を測る。
+function measure(route: Route, from: number, to: number, perf: TrainPerf) {
   const track = buildTrack(route);
   const start = route.stations[from].stopS, end = route.stations[to].stopS;
   const count = Math.ceil((end - start) / 2), ds = (end - start) / count;
@@ -24,16 +23,18 @@ function measure(route: Route, from: number, to: number, seconds: number, perf: 
   }
   const tr = { s: start, v: 0, acc: 0, notch: 5 };
   const dt = .1;
+  let maxSpeed = 0;
   for (let t = 0; t < 3600; t += dt) {
-    if (tr.s >= end || (end - tr.s < 1.5 && tr.v < .1)) return Math.round(t);
+    if (tr.s >= end || (end - tr.s < 1.5 && tr.v < .1)) {
+      return { seconds: Math.round(t), maxSpeed: Math.round(maxSpeed * 3.6 * 10) / 10 };
+    }
     const i = Math.min(count - 1, Math.floor((tr.s - start) / ds));
     const speed = allowed[i] + (allowed[i + 1] - allowed[i]) * ((tr.s - start) / ds - i);
     const grade = track.gradeAt(tr.s);
     const predicted = tr.v + Math.max(0, tr.acc - grade * .00981) * .9;
     tr.notch = predicted > speed ? -Math.min(8, Math.ceil((predicted - speed) * 6 + 3)) : tr.v > speed - .5 ? 0 : 5;
-    const limit = Math.min(track.limitAt(tr.s), terminalSpeedLimit(route, to, tr.s), perf.vMax * 3.6);
-    const cap = assisted ? normalCruiseSpeed(end - tr.s, seconds - t, tr.v, perf, limit) : null;
-    stepTrain(tr, { adhesion: 1, gradePermil: grade, perf }, dt, cap ?? Infinity);
+    stepTrain(tr, { adhesion: 1, gradePermil: grade, perf }, dt);
+    maxSpeed = Math.max(maxSpeed, tr.v);
   }
   throw new Error(route.id + ': ' + from + '→' + to + ' 計測未完了');
 }
@@ -59,9 +60,8 @@ for (const source of Object.values(ROUTES)) {
           const key = [route.id, timeOfDay, service, train, from, to, seconds].join('/');
           if (!seen.has(key)) {
             seen.add(key);
-            const baseline = measure(route, from, to, seconds, perf, false);
-            const normal = measure(route, from, to, seconds, perf, true);
-            rows.push({ route: route.id, timeOfDay, service, train, from: route.stations[from].name, to: station.name, seconds, baseline, normal });
+            const physics = measure(route, from, to, perf);
+            rows.push({ route: route.id, timeOfDay, service, train, from: route.stations[from].name, to: station.name, seconds, physics });
           }
           from = to;
         }
@@ -71,15 +71,11 @@ for (const source of Object.values(ROUTES)) {
 }
 const southern43 = rows.filter(row => row.train === '0603' && row.to === '和歌山市');
 assert(southern43.length > 0);
-for (const section of southern43) {
-  assert(Math.abs(section.seconds - section.normal) < 30, 'サザン43号の通常運転で大幅な早着・遅着');
-}
 writeFileSync('node_modules/.cache/runtime-benchmark.json', JSON.stringify(rows));
 for (const mountain of [false, true]) {
   const sample = rows.filter(r => r.route.startsWith('mountain') === mountain);
   console.log(mountain ? '高野線短縮' : '南海本線・和歌山港線', new Set(sample.map(r => r.route)).size, 'コース', sample.length, '駅間条件');
-  for (const mode of ['baseline', 'normal'] as const) {
-    const deltas = sample.map(r => r[mode] - r.seconds).sort((a,b) => a-b);
-    console.log(mode, '中央値', deltas[Math.floor(deltas.length / 2)], '秒、60秒以上早着', deltas.filter(d => d <= -60).length, '件');
-  }
+  const deltas = sample.map(r => r.physics.seconds - r.seconds).sort((a,b) => a-b);
+  const speeds = sample.map(r => r.physics.maxSpeed).sort((a,b) => a-b);
+  console.log('物理計算', '所要差中央値', deltas[Math.floor(deltas.length / 2)], '秒、60秒以上早着', deltas.filter(d => d <= -60).length, '件', '最高速度中央値', speeds[Math.floor(speeds.length / 2)], 'km/h');
 }
