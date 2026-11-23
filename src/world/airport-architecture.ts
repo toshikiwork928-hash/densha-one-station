@@ -219,7 +219,7 @@ export function buildAirportArchitecture(ctx: GameContext): void {
 /** OSM の建物・木・駐車場を専用施設の敷地から除く。stopS ではなく platform の共有座標を使う。 */
 export function airportArchitectureReservations(route: Route): NonNullable<Route['reserved']> {
   const out: NonNullable<Route['reserved']> = [];
-  const source = route.id === 'airport-namba-up' ? airport : route;
+  const source = route.airportBridge?.islandAtStart ? airport : route;
   const frame = source === route ? null : sectionFrame(source, route);
   for (const name of ['りんくうタウン', '関西空港']) {
     const st = source.stations.find(x => x.name === name);

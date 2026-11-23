@@ -6,14 +6,16 @@ import {
 import type { GameActions, GameContext } from '../core/context';
 import type { CameraMode } from '../core/events';
 import { DEFAULT_PERF, TRAIN_PERF, stepTrain } from '../sim/train';
-import { serviceOf, selectableServices } from '../route/service';
+import { selectableServices, serviceOf } from '../route/service';
+import { lineOf } from '../route';
+import { courseMenu } from '../route/course-menu';
 import { createOvertake, waitsAt } from './overtake';
 import { createMeet } from './meet';
 import { createReplay } from './replay';
 import { judgeStop, scoreGame } from './scoring';
 import { createSignalSystem } from './signals';
 import { saveSelection } from './ranking';
-import { departureTime, isFinalStop, nextStopIndex, resetState, stagesOf, type GameMode, type GameStateName } from './state';
+import { departureTime, isFinalStop, nextStopIndex, resetState, stagesOf, type GameMode, type GameStateName, type Selection } from './state';
 
 const MIN_DWELL = 10; // 遅着時でも最低これだけ停車 [s]
 const MODES: GameMode[] = ['normal', 'recovery', 'timeOnly'];
@@ -24,7 +26,7 @@ export interface Game {
   update(dt: number): void;
 }
 
-export function createGame(ctx: GameContext): Game {
+export function createGame(ctx: GameContext, changeRoute?: (selection: Selection) => boolean): Game {
   const { route, track, events } = ctx;
   const st = ctx.state;
 
@@ -280,11 +282,19 @@ export function createGame(ctx: GameContext): Game {
     const stages = stagesOf(route);
     const si = Math.max(0, stages.findIndex(s => s.id === st.sel.stageId));
     const mi = Math.max(0, MODES.indexOf(st.sel.mode));
-    const svcs = selectableServices(route);
     let service = st.sel.service, stageId = stages[(si + stageDelta + stages.length) % stages.length].id;
-    if (serviceDelta && svcs.length) {
+    if (serviceDelta) {
+      const line = changeRoute && lineOf(route.id);
+      const menu = line && courseMenu(line, route.timeOfDay ?? ctx.envState.timeOfDay);
+      const svcs = menu?.services ?? selectableServices(route);
+      if (!svcs.length) return;
       const k = Math.max(0, svcs.findIndex(x => x.id === service));
       service = svcs[(k + serviceDelta + svcs.length) % svcs.length].id;
+      const dir = menu?.preferred(service, route.id);
+      if (dir && dir.id !== route.id) {
+        changeRoute?.({ ...st.sel, stageId: '', routeId: dir.id, service });
+        return;
+      }
       // 種別が変わると停車駅間が変わるので先頭区間へ（全線通しと、新しい種別でも選べる終点指定の区間は維持）
       const keep = route.partialGoals?.some(g => !g.asAll && `${g.from}-${g.to}` === stageId && g.services.includes(service));
       if (stageId !== 'all' && !keep) stageId = '';
@@ -301,6 +311,11 @@ export function createGame(ctx: GameContext): Game {
     if (route.timeOfDay === tod || (st.state !== 'title' && st.state !== 'result')) return;
     route.startClock = c; // 実ダイヤのあるコースは reset（resetState → applyRealDiagram）が実際の列車の発車時刻にする
     route.timeOfDay = tod;
+    const line = changeRoute && lineOf(route.id);
+    if (changeRoute && line && st.state === 'title') {
+      const dir = courseMenu(line, tod).preferred(st.sel.service, route.id);
+      if (dir && dir.id !== route.id && changeRoute({ ...st.sel, stageId: '', routeId: dir.id })) return;
+    }
     if (st.state === 'title') reset(); // 時刻表・待避を時間帯のものにして、HUD・時刻表・行路表を描き直す
   }
   events.on('envChange', syncClock);

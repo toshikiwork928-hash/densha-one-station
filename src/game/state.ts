@@ -1,7 +1,7 @@
 // ゲーム状態（1プレイ分）
 import { NOTCH_INITIAL } from '../core/config';
 import type { SignalAspect } from '../core/events';
-import { applyService, selectableServices } from '../route/service';
+import { applyService, selectableServices, WAKAYAMA_DEST } from '../route/service';
 import { applyRealDiagram, realDayOf, realTrainFor } from '../route/real-diagram';
 import { applyPlayerVehicles } from '../route/player-vehicles';
 import type { Route, ServiceId, TrainKind } from '../route/types';
@@ -177,17 +177,18 @@ export function createState(route: Route, sel?: Selection): GameState {
   return st;
 }
 
-/** 選んだ区間の終点に合わせて行先を決める（ServiceSpec.destinationByEnd）。元の行先は初回に退避 */
+/** 実列車があるときは、その運転区間にかかわらず列車本来の行先を案内する。 */
 const baseDest = new WeakMap<object, [string | undefined, string | undefined]>();
-function applyDestinations(route: Route, end: number): void {
-  const name = route.stations[end]?.name;
-  for (const v of route.services ?? []) {
-    if (!v.destinationByEnd) continue;
-    let b = baseDest.get(v);
-    if (!b) { b = [v.destination, v.destinationKana]; baseDest.set(v, b); }
-    const hit = name ? v.destinationByEnd[name] : undefined;
-    v.destination = hit ? hit[0] : b[0]; v.destinationKana = hit ? hit[1] : b[1];
+const readings = new Map<string, string>([['なんば', 'なんば'], ...Object.values(WAKAYAMA_DEST)]);
+function applyDestination(service: NonNullable<Route['services']>[number], end: string, trainDestination?: string): void {
+  let base = baseDest.get(service);
+  if (!base) {
+    base = [service.destination, service.destinationKana];
+    baseDest.set(service, base);
   }
+  const [name, kana] = service.destinationByEnd?.[end] ?? base;
+  service.destination = trainDestination ?? name;
+  service.destinationKana = trainDestination ? readings.get(trainDestination) ?? (trainDestination === name ? kana : trainDestination) : kana;
 }
 
 export function resetState(st: GameState, route: Route): void {
@@ -197,13 +198,13 @@ export function resetState(st: GameState, route: Route): void {
   // 保存済み種別がこのコースで選べない場合、急行または先頭の種別へ戻す。
   if (services.length && !services.some(x => x.id === sel.service)) sel.service = fallback;
   applyPlayerVehicles(route, sel.vehicles);
-  applyService(route, sel.service); // 停車駅・時刻・編成長を種別に合わせてから区間を決める
+  const service = applyService(route, sel.service); // 停車駅・時刻・編成長を種別に合わせてから区間を決める
   if (!sel.stageId) sel.stageId = stagesOf(route)[0]?.id ?? 'all';
   const stage = findStage(route, sel.stageId);
   if (stage) sel.stageId = stage.id; // 種別により存在しない区間（例: 特急の全線通し）は先頭区間へ
   const from = stage?.from ?? 0, end = stage?.to ?? route.stations.length - 1;
-  applyDestinations(route, end);
-  applyRealDiagram(route, sel.service, from, end); // 開始時刻と時刻表を実際の列車に合わせる
+  const train = applyRealDiagram(route, sel.service, from, end);
+  if (service) applyDestination(service, route.stations[end].name, train?.to);
   const s0 = from === 0 ? route.startS : route.stations[from].stopS;
   const late = stage ? lateStartFor(stage, sel.mode) : 0;
   Object.assign(st, {

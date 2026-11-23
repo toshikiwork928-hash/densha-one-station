@@ -2,6 +2,8 @@
 import './ui/styles.css';
 import * as THREE from 'three';
 import { MAX_DT } from './core/config';
+import { loadSettings } from './env/settings';
+import { courseMenu } from './route/course-menu';
 import type { GameContext } from './core/context';
 import { $ } from './core/dom';
 import { EventBus } from './core/events';
@@ -9,7 +11,7 @@ import { createRng } from './core/rng';
 import { buildTrack } from './route/track';
 import { createTrainEnv } from './sim/train';
 import { createState } from './game/state';
-import { loadSelection, selectionForLine } from './game/ranking';
+import { loadSelection, saveSelection, selectionForLine } from './game/ranking';
 import { createGame } from './game/loop';
 import { createRenderCore } from './render/renderer';
 import { installRenderRecovery } from './render/recovery';
@@ -24,6 +26,7 @@ import { attachSfx } from './audio/sfx';
 import { attachHud } from './ui/hud';
 import { attachOverlay } from './ui/overlay';
 import { lineFromHash, resolveRoute } from './ui/lines';
+import { lineOf } from './route';
 import { attachKeyboard } from './input/keyboard';
 import { attachTouch } from './input/touch';
 import { attachMouse } from './input/mouse';
@@ -32,11 +35,18 @@ import { attachGamepad } from './input/gamepad';
 const renderCanvas = $<HTMLCanvasElement>('c');
 const recovery = installRenderRecovery(renderCanvas);
 const line = lineFromHash();
-const saved = line ? selectionForLine(line.id) : loadSelection();
+const previous = loadSelection();
+const previousLine = lineOf(resolveRoute(previous?.routeId).id);
+const saved = line ? selectionForLine(line.id) ?? (line.id === previousLine?.id ? previous : undefined) : previous;
+const settings = loadSettings();
 const inspectionRoute = import.meta.env.DEV && new URLSearchParams(location.search).has('inspect')
   ? new URLSearchParams(location.search).get('route') : null;
-const routeId = line && !line.dirs.some(d => d.id === saved?.routeId) ? line.dirs[0].id : saved?.routeId;
-const route = resolveRoute(inspectionRoute ?? routeId);
+const savedRoute = resolveRoute(line && !line.dirs.some(d => d.id === saved?.routeId) ? line.dirs[0].id : saved?.routeId);
+const savedLine = line ?? lineOf(savedRoute.id);
+const dir = saved && savedLine && courseMenu(savedLine, settings.timeOfDay).preferred(saved.service, savedRoute.id);
+const route = resolveRoute(inspectionRoute ?? dir?.id ?? savedRoute.id);
+if (saved && route.id !== savedRoute.id) saved.stageId = '';
+route.timeOfDay = settings.timeOfDay;
 preloadLook(); // 最初がイラストなら加工コードの取得だけ先に始める（待たない）
 await loadCourseData(route); // 選んだコースの沿線データ（区間ごとの別ファイル）。準備できてから世界を作る
 const { renderer, scene, camera } = createRenderCore(renderCanvas);
@@ -52,7 +62,7 @@ const ctx: GameContext = {
   scene, camera, renderer, env,
   rng: createRng(12345),
   assetsReady: false,
-  envState: { timeOfDay: 'noon', weather: 'clear', intensity: 0 },
+  envState: { timeOfDay: settings.timeOfDay, weather: settings.weather, intensity: settings.intensity },
   light: { night: 0, tunnel: 0 },
   cameraMode: 'cab',
   actions: undefined as unknown as GameContext['actions'], // createGame で設定
@@ -61,7 +71,12 @@ ctx.state.sel.routeId = route.id; // 選択の保存（路線ごと）に使う
 
 const world = buildWorld(ctx);
 releaseOsmData(); // 生成済みの景観は残る。読込済みの元データだけ手放す
-const game = createGame(ctx);
+const game = createGame(ctx, selection => {
+  if (lineFromHash()?.id !== lineOf(route.id)?.id) return false;
+  saveSelection(selection);
+  location.reload();
+  return true;
+});
 const cab = createCabCamera(ctx);
 attachEnvSystem(ctx); // [B] 空・時間帯・天候・影・夜間照明
 attachLookSwitch(ctx); // 標準 / イラストの切替。イラスト専用の処理は選んだ時だけ有効にする

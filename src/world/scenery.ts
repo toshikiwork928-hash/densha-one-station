@@ -36,9 +36,11 @@ export function buildBackdrop(ctx: GameContext): void {
   const { scene, rng: rnd, track, route } = ctx;
   // 山岳線は専用地形を使い、空港線から望む大阪湾の水平線は空のシェーダーで描く。
   const bridge = route.airportBridge;
-  if (route.theme === 'mountain' || (bridge && !bridge.islandAtStart)) return;
-  const S0 = bridge ? route.stations.find(s => s.name === '泉佐野')!.platform.to : route.extent.from - 1500;
-  const S1 = route.extent.to + 1500;
+  if (route.theme === 'mountain') return;
+  const sano = bridge && route.stations.find(st => st.name === '泉佐野');
+  if (sano && (bridge?.islandAtStart ? sano === route.stations.at(-1) : sano === route.stations[0])) return;
+  const S0 = sano && bridge?.islandAtStart ? sano.platform.to : route.extent.from - 1500;
+  const S1 = sano && !bridge?.islandAtStart ? sano.platform.from : route.extent.to + 1500;
   // 曲線の内側で山並みが折り重ならないよう、線路を ±600m で平滑化した基準線から横へずらす
   const STEP = 60, W = 10, raw: { x: number; z: number; c: number; sn: number }[] = [];
   for (let s = S0 - W * STEP; s <= S1 + (W + 1) * STEP; s += STEP) { const t = track.trackAt(s); raw.push({ x: t.x, z: t.z, c: Math.cos(t.phi), sn: Math.sin(t.phi) }); }
@@ -57,9 +59,14 @@ export function buildBackdrop(ctx: GameContext): void {
   if (route.coastalLandmarks?.length && route.coastalScenery !== false) {
     // 従来の前後稜線で使っていた82回分も消費し、後続の駅・人などの乱数列を保つ。
     for (let i = 0; i < 82; i++) rnd();
-    const cityStart = bridge?.islandAtStart ? route.stations.find(station => station.name === '堺')?.platform.from : undefined;
-    buildCoastalBackdrop(ctx, S0, cityStart ?? S1, at);
-    if (cityStart != null) buildUrbanBackdrop(ctx, cityStart, S1, at);
+    const sakai = route.stations.find(st => st.name === '堺');
+    const fromNamba = route.stations[0].name === 'なんば';
+    const toNamba = route.stations.at(-1)?.name === 'なんば';
+    if (sakai && (fromNamba || toNamba)) {
+      const boundary = sakai.platform.from;
+      buildUrbanBackdrop(ctx, fromNamba ? S0 : boundary, fromNamba ? boundary : S1, at);
+      buildCoastalBackdrop(ctx, fromNamba ? boundary : S0, fromNamba ? S1 : boundary, at);
+    } else buildCoastalBackdrop(ctx, S0, S1, at);
     return;
   }
   const ridge = (s: number, layer: number, side: number) => {
@@ -110,7 +117,7 @@ export function buildBackdrop(ctx: GameContext): void {
 
 /** 沿岸市街地の概形。港・海岸線の位置は測量値ではなく、線路から遠いシルエット。 */
 function buildCoastalBackdrop(ctx: GameContext, from: number, to: number, at: (s: number, lat: number, y: number) => THREE.Vector3): void {
-  if (ctx.route.urban) { buildUrbanBackdrop(ctx, from, to, at); return; }
+  if (to <= from) return;
   const seaSide = seaSideOf(ctx.route);
   const positions: number[] = [], indices: number[] = [];
   // 海は線路から900m以遠。近景の道路・住宅・支線を水面で覆わない。

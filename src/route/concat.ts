@@ -60,14 +60,21 @@ export function concatRoutes(a: Route, b: Route, opt: ConcatOptions): Route {
     return [...(pa ?? [[-1e6, base]]).filter(([q]) => q < joinS - 1), [joinS, pb ? profileLat(pb, joinB.platform.from) : base], ...(pb ?? [[1e6, base]]).map(([q, l]) => [sh(q), l] as [number, number]).filter(([q]) => q > joinS + 1)];
   };
   const profiles: Record<string, LatProfile> = {};
-  for (const c of a.tracks) { const pr = joinProfile(a.trackProfiles?.[String(c)], b.trackProfiles?.[String(c)], c); if (pr) profiles[String(c)] = pr; }
+  const keys = new Set([...Object.keys(a.trackProfiles ?? {}), ...Object.keys(b.trackProfiles ?? {})]);
+  for (const key of keys) {
+    // 複々線の対向普通には仮のキー（30）を使う。区間外では対向本線を走る。
+    const base = a.tracks.includes(+key) ? +key : a.tracks[1];
+    const pr = joinProfile(a.trackProfiles?.[key] ?? a.trackProfiles?.[base], b.trackProfiles?.[key] ?? b.trackProfiles?.[base], base);
+    if (pr) profiles[key] = pr;
+  }
   // 種別ごとの走行線・制限・番線・ドアの側（区間データの同じ種別から）。駅 index は b を通しの index へ
   const ib0 = (i: number) => i + na - 1;
   const services = opt.services.map(v => {
     // 区間データに無い種別（堺〜泉大津の特急サザン）は同じ格の種別（特急ラピート）の走行線・番線・ドアの側を使う
     const pick = (r: Route) => r.services?.find(x => x.id === v.id) ?? r.services?.find(x => sameClass(x.id, v.id));
     const av = pick(a), bv = pick(b);
-    const lane = v.lane ?? joinProfile(av?.lane, bv?.lane, a.tracks[0]);
+    const base = a.tracks[0];
+    const lane = v.lane ?? (av?.lane || bv?.lane ? joinProfile(av?.lane ?? a.trackProfiles?.[base], bv?.lane ?? b.trackProfiles?.[base], base) : undefined);
     const laneLimits = v.laneLimits ?? [...(av?.laneLimits ?? []), ...(bv?.laneLimits ?? []).map(L => ({ ...L, from: sh(L.from), to: sh(L.to) }))];
     const remap = <T,>(ra?: Record<number, T>, rb?: Record<number, T>) => ra || rb ? { ...ra, ...Object.fromEntries(Object.entries(rb ?? {}).filter(([k]) => +k > 0).map(([k, x]) => [ib0(+k), x])) } : undefined;
     const platformSides = v.platformSides ?? remap(av?.platformSides, bv?.platformSides);
@@ -93,6 +100,12 @@ export function concatRoutes(a: Route, b: Route, opt: ConcatOptions): Route {
     stations,
     services,
     ...(Object.keys(profiles).length ? { trackProfiles: profiles } : {}),
+    ...(b.oncomingLocal ? { oncomingLocal: {
+      lat: b.oncomingLocal.lat, stations: [...(a.oncomingLocal?.stations ?? []), ...b.oncomingLocal.stations.map(ib)],
+    } } : {}),
+    ...(b.counterLanes ? { counterLanes: [...(a.counterLanes ?? []), ...b.counterLanes.map(lane => ({
+      ...lane, station: ib(lane.station), profile: lane.profile.map(([q, lat]): [number, number] => [sh(q), lat]),
+    }))] } : {}),
     ...(a.extraTracks || b.extraTracks ? { extraTracks: [
       ...(a.extraTracks ?? []).filter(x => x.from < joinS).map(x => ({ ...x, to: Math.min(x.to, joinS) })),
       ...(b.extraTracks ?? []).filter(x => x.to > joinB.platform.from).map(x => ({ ...x, lat: x.lat.map(([q, l]) => [sh(q), l] as [number, number]), from: Math.max(joinS, sh(x.from)), to: sh(x.to), ...(x.bumpers ? { bumpers: x.bumpers.map(sh) } : {}) })),
@@ -129,7 +142,7 @@ export function concatRoutes(a: Route, b: Route, opt: ConcatOptions): Route {
     coastalLandmarks: [
       // 向き（反転済みか）は区間データのものを持ち越す（通しの route.id の '-up' と区間の向きが合わない区間がある）
       ...(a.coastalLandmarks ?? []).map(l => ({ ...l, reversed: l.reversed ?? a.id.endsWith('-up') })),
-      ...(b.coastalLandmarks ?? []).filter(l => l.kind !== 'twin-tower').map(l => ({ ...l, s: sh(l.s), reversed: l.reversed ?? b.id.endsWith('-up') })),
+      ...(b.coastalLandmarks ?? []).filter(l => l.kind !== 'twin-tower' || !a.coastalLandmarks?.some(x => x.kind === l.kind)).map(l => ({ ...l, s: sh(l.s), reversed: l.reversed ?? b.id.endsWith('-up') })),
     ],
     precedingHeadway: undefined,
     terminalApproach: false,

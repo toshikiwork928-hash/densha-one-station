@@ -7,7 +7,7 @@ import { kishiwada, kishiwadaUp } from '../src/route/routes/kishiwada';
 import { izumisano, izumisanoUp } from '../src/route/routes/izumisano';
 import { izumisanoMisaki, izumisanoMisakiUp } from '../src/route/routes/izumisano-misaki';
 import { airport, airportThrough } from '../src/route/routes/airport';
-import { airportInbound } from '../src/route/routes/airport-inbound';
+import { airportInbound, airportUp, airportThroughUp, airportOutbound } from '../src/route/routes/airport-inbound';
 import { through, throughUp } from '../src/route/routes/through';
 import { namba, nambaUp } from '../src/route/routes/namba';
 import { misakiWakayamako, misakiWakayamakoUp } from '../src/route/routes/misaki-wakayamako';
@@ -178,6 +178,18 @@ export const IT: Record<'airport' | 'limited', ServiceSpec['timetable']> = {
   limited: ${values.limited},
 };
 `);
+}
+function writeAirportReturns(): void {
+  const lines = ["// 空港線の追加3方向の時刻表（scripts/timetable.ts が生成）", "import type { ServiceSpec } from '../types';"];
+  for (const [name, source] of [['AT_UP', airportUp], ['KT_UP', airportThroughUp], ['NT_AIRPORT', airportOutbound]] as const) {
+    const rows = table(structuredClone(source));
+    lines.push(`export const ${name} = {`, ...Object.entries(rows).map(([id, tt]) => `  ${id}: ${tt},`), "} satisfies Record<string, ServiceSpec['timetable']>;");
+  }
+  writeFileSync('src/route/routes/airport-return-timetable.ts', lines.join('\n') + '\n');
+}
+if (process.argv.includes('--airport-returns-only') || process.argv.includes('--airport-only') || process.argv.length === 2) {
+  writeAirportReturns();
+  if (process.argv.includes('--airport-returns-only')) process.exit(0);
 }
 if (process.argv.includes('--airport-only') || process.argv.length === 2) {
   writeAirportInbound();

@@ -12,7 +12,7 @@ import { getTerrain, hash, TUNNEL_CENTER, TUNNEL_HALF, TUNNEL_WALL_H } from './t
 import { loopTracks } from './track-mesh';
 import { coastalThirdTracks } from './coastal-stations';
 import { hagoromoDeckEdge } from './hagoromo-branch';
-import { kixCoveredBoxes, type KixCoveredBox } from './kix-covered';
+import { kixCoveredBoxes } from './kix-covered';
 
 const RAIL = .38;           // レール面（線路基準の高さ）
 const CW = RAIL + 5.34;     // トロリー線の高さ（パンタグラフ上昇時の舟の上面にほぼ接する）
@@ -256,7 +256,7 @@ export function buildCatenary(ctx: GameContext): void {
     // 関西空港駅は構内図上のホームが1階にあり、進入線は掘割から
     // 人工地盤下へ入る。route.structures の山岳トンネルには含めず、
     // この区間だけ天井吊りのコンパクト架線を使う。
-    if (airportIndoorAt(airportCovered, s)) return 'tunnel';
+    if (airportCovered.some(box => s >= box.from && s <= box.to)) return 'tunnel';
     if (zones.some(z => s >= z.inFrom - 12 && s <= z.outTo + 12)) return 'loop';
     if (s >= woodFrom) return 'wood';
     if (st?.kind === 'viaduct') return 'viaduct';
@@ -471,13 +471,16 @@ export function buildCatenary(ctx: GameContext): void {
     const under = T.structureAt(sp.s, 0);
     const deck = under?.kind === 'viaduct' || under?.kind === 'bridge';
     if (sp.kind === 'tunnel') {
+      const cover = airportCovered.find(box => sp.s >= box.from && sp.s <= box.to);
       // 天井から吊る剛な金具（碍子は白）
       for (const g of groups) {
         const side = g[0].c < MID ? -1 : 1, xd = g[0].c + side * .85;
-        drop(b, ceilingY(xd) - .03, g, side, COL.fit, COL.insT);
+        drop(b, (cover?.ceiling ?? ceilingY(xd)) - .03, g, side, COL.fit, COL.insT);
       }
       // き電線・架空地線は側壁の腕金に
-      const wl = L0 - 2.6, wr = L1 + 2.6, yf = 4.6;
+      const wl = cover ? cover.left + .3 : L0 - 2.6;
+      const wr = cover ? cover.right - .3 : L1 + 2.6;
+      const yf = 4.6;
       for (const [x, d] of [[wl, -1], [wr, 1]] as const) {
         box(b, x + d * .15, yf - .1, 0, .3, .06, .1, COL.fit);
         insulator(b, x, yf - .05, 0, 0, 1, 0, 2, COL.insT);
@@ -645,10 +648,4 @@ export function buildCatenary(ctx: GameContext): void {
     const h = ctx.renderer.shadowMap.enabled && ctx.env.sun.shadow.mapSize.x >= 2048;
     for (const m of meshes) if (m.castShadow !== h) { m.castShadow = h; m.receiveShadow = true; }
   });
-}
-
-/** 関西空港駅の掘割・ボックス・屋内ホームの相対区間。reverseRoute 後も
- * ホーム中心から計算するため、下り・上りで同じ見え方になる。 */
-function airportIndoorAt(boxes: KixCoveredBox[], s: number): boolean {
-  return boxes.some(b => s >= b.from && s <= b.to);
 }

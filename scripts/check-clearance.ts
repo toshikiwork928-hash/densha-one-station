@@ -14,7 +14,8 @@ import { izumisanoMisaki, izumisanoMisakiUp } from '../src/route/routes/izumisan
 import { through, throughUp } from '../src/route/routes/through';
 import { namba, nambaUp } from '../src/route/routes/namba';
 import { misakiWakayamako, misakiWakayamakoUp } from '../src/route/routes/misaki-wakayamako';
-import { airportInbound } from '../src/route/routes/airport-inbound';
+import { nambaKishiwada, kishiwadaNamba, sakaiIzumisano, izumisanoSakai } from '../src/route/routes/mainline-long';
+import { airportInbound, airportUp, airportThroughUp, airportOutbound } from '../src/route/routes/airport-inbound';
 import { airport, airportThrough } from '../src/route/routes/airport';
 import { buildAirportTerminal } from '../src/world/airport-terminal';
 import { buildTrack } from '../src/route/track';
@@ -113,7 +114,7 @@ const all = process.argv.includes('--all');
 const option = (name: string) => process.argv.find(a => a.startsWith(`--${name}=`))?.split('=')[1];
 const routeFilter = option('route'), serviceFilter = option('service');
 const cases: [Route, ServiceId[]][] = [[shiokaze, ['local', 'express', 'airport', 'limited']], [shiokazeUp, ['local', 'express', 'airport', 'limited']], [mountain, ['local']], [mountainUp, ['local']],
-  [airportInbound, airportInbound.services!.map(service => service.id)],
+  ...[airportInbound, airportUp, airportThroughUp, airportOutbound, nambaKishiwada, kishiwadaNamba, sakaiIzumisano, izumisanoSakai].map((route): [Route, ServiceId[]] => [route, route.services!.map(service => service.id)]),
   [airport, airport.services!.map(service => service.id)], [airportThrough, airportThrough.services!.map(service => service.id)],
   [kishiwada, ['local', 'express', 'airport', 'southern']], [kishiwadaUp, ['local', 'express', 'airport', 'southern']],
   [izumisano, ['local', 'express', 'airport', 'southern', 'limited']], [izumisanoUp, ['local', 'express', 'airport', 'southern', 'limited']],

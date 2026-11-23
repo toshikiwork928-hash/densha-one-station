@@ -5,9 +5,9 @@ import { realServiceAvailable } from './real-diagram';
 
 /** TOPで選べる種別。南海本線の特急は、コース両端も実際の停車駅に限る（ラピートβ: 難波・新今宮・天下茶屋・堺・岸和田・泉佐野。
  *  特急サザンはそれに加えて、みさき公園・和歌山大学前・和歌山市・和歌山港など、泉佐野より和歌山側の停車駅）。 */
-export function selectableServices(route: Route): ServiceSpec[] {
+export function selectableServices(route: Route, timeOfDay = route.timeOfDay): ServiceSpec[] {
   // 実ダイヤのあるコースは、その時間帯に実際に走る種別だけ（日中の急行など、実際に無いものは選べない。route/real-diagram.ts）
-  const services = (route.services ?? []).filter(v => realServiceAvailable(route, v.id));
+  const services = (route.services ?? []).filter(v => realServiceAvailable(route, v.id, timeOfDay));
   if (route.lineId !== 'shiokaze') return services;
   const limitedStops = new Set(['なんば', '新今宮', '天下茶屋', '堺', '岸和田', '泉佐野']);
   const southernStops = new Set([...limitedStops, '尾崎', 'みさき公園', '和歌山大学前', '和歌山市', '和歌山港']);

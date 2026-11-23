@@ -145,6 +145,7 @@ export const misakiWakayamako: Route = {
   viaductHeight: 6,
   // 終点・和歌山港は低速進入の ATS を有効にする（頭端式の終着駅。上りは終着が途中駅なので下で無効にする）
   terminalApproach: true,
+  destinationApproach: '和歌山市',
   // 普通の通しは和歌山市まで（和歌山市〜和歌山港は区間だけ選べる）。急行・サザンは通し（和歌山港まで）のほかに和歌山市を終点にする区間も選べる。上りへは引き継がない
   partialGoals: [
     { from: 0, to: stations.findIndex(s => s.name === '和歌山市'), services: ['local'], asAll: true },

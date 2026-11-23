@@ -6,7 +6,7 @@ import { ASPECT_LABEL, ASPECT_LIMIT } from '../game/preceding';
 import { departureTime } from '../game/state';
 import { destOf, serviceOf, unitsLabel } from '../route/service';
 import { drawMeter } from './meter';
-import { terminalSpeedLimit } from '../game/terminal-ats';
+import { terminalDistance as distanceToTerminal, terminalSpeedLimit } from '../game/terminal-ats';
 import { timetablePace } from '../game/timetable-pace';
 
 const fmtHM = (sec: number) => fmtClock(sec);
@@ -124,8 +124,7 @@ export function attachHud(ctx: GameContext): void {
     const ats = st.ats;
     sx.ats.className = 'ats-' + (ats.state === 'normal' ? 'ok' : ats.state);
     const terminalLimit = terminalSpeedLimit(route, st.target, st.train.s);
-    const terminalDistance = route.terminalApproach && st.target === route.stations.length - 1
-      ? route.stations[st.target].stopS - st.train.s : Infinity;
+    const terminalDistance = distanceToTerminal(route, st.target, st.train.s);
     sx.ats.textContent = ats.state === 'normal' ? (terminalLimit < Infinity ? `ATS 終着照査 ${Math.floor(terminalLimit)}km/h` : terminalDistance <= 1500 ? `ATS 終着予告 65km/hまで ${Math.ceil(terminalDistance - 1000)}m` : st.sigLimit < Infinity ? `ATS 正常（信号制限 ${Math.floor(st.sigLimit + 1e-6)}）` : 'ATS 正常')
       : ats.state === 'warn' ? `ATS 警報 ${Math.max(0, ats.timer).toFixed(1)}s — B4以上＋確認(A)`
         : `ATS 非常制動 — 停止後 確認(A)で復帰`;

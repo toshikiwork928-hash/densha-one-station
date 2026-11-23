@@ -19,7 +19,7 @@ import { coastalThirdTracks } from '../src/world/coastal-stations';
 import { loadOsmFor, osmFor, waterMaskOf } from '../src/world/osm-town';
 import type { Route, ServiceId, TimeOfDay } from '../src/route/types';
 import { realTrainFor, realWaitsOf } from '../src/route/real-diagram';
-import { createState, departureTime, stagesOf, type VehicleSel } from '../src/game/state';
+import { resetState, createState, departureTime, stagesOf, type VehicleSel } from '../src/game/state';
 import { createGame } from '../src/game/loop';
 import { EventBus } from '../src/core/events';
 import { createTrainEnv } from '../src/sim/train';
@@ -71,7 +71,7 @@ function context(source: Route, service: ServiceId, vehicles: VehicleSel = {}, t
 }
 
 const airportCourses = Object.values(ROUTES).filter(route => route.stations.at(-1)?.name === '関西空港');
-assert.deepEqual(airportCourses.map(r => r.stations[0].name).sort(), ['岸和田', '泉佐野'].sort());
+assert.deepEqual(airportCourses.map(r => r.stations[0].name).sort(), ['なんば', '岸和田', '泉佐野'].sort());
 for (const source of airportCourses) {
   assert.equal(lineOf(source.id)?.id, 'airport');
   for (const service of selectableServices(source)) {
@@ -108,6 +108,39 @@ for (const source of airportCourses) {
   }
 }
 
+const newSections = [
+  ['泉佐野', '関西空港'], ['岸和田', '関西空港'], ['なんば', '関西空港'],
+  ['なんば', '岸和田'], ['堺', '泉佐野'],
+] as const;
+const expandedCourses: Route[] = [];
+for (const [a, b] of newSections) {
+  for (const [start, end] of [[a, b], [b, a]]) {
+    const source = Object.values(ROUTES).find(r => r.stations[0].name === start && r.stations.at(-1)?.name === end);
+    assert.ok(source, `${start}から${end}までのコース`);
+    expandedCourses.push(source);
+    for (const svc of selectableServices(source)) {
+      const ctx = context(source, svc.id), last = ctx.route.stations.length - 1;
+      assert.ok(svc.destination && svc.destinationKana);
+      assert.equal(approachText(ctx.route, last, svc).includes('終点'), svc.destination === end);
+      assert.equal(Number.isFinite(terminalSpeedLimit(ctx.route, last, ctx.route.stations[last].stopS - 50)), ['なんば','関西空港'].includes(end));
+    }
+  }
+}
+// 同じ みさき公園→和歌山市 の担当でも、昼のサザンは和歌山市止まり、夕方は和歌山港行き。
+for (const [tod, dest] of [['noon','和歌山市'],['evening','和歌山港']] as const) {
+  const ctx = context(misakiWakayamako, 'southern', {}, tod);
+  ctx.state.sel.stageId = '0-4';
+  resetState(ctx.state, ctx.route);
+  const city = ctx.state.endIndex, svc = ctx.route.services!.find(v => v.id === 'southern')!;
+  assert.equal(ctx.route.stations[city].name, '和歌山市');
+  assert.equal(svc.destination, dest);
+  assert.equal(approachText(ctx.route, city, svc).includes('終点'), dest === '和歌山市');
+  ctx.state.target = city; ctx.state.nextSignal = -1;
+  ctx.state.train.s = ctx.route.stations[city].stopS - 50; ctx.state.train.v = 65 / 3.6;
+  let brakes = 0;
+  createSignalSystem(ctx, () => brakes++).update(1 / 30, true);
+  assert.equal(brakes, Number(dest === '和歌山市'));
+}
 // 関西空港→なんば: 空港急行・ラピートβの行先、停車駅、時刻表、終端ATSを確認する。
 const airportInboundCourses = Object.values(ROUTES).filter(route => route.stations[0]?.name === '関西空港' && route.stations.at(-1)?.name === 'なんば');
 assert.equal(airportInboundCourses.length, 1, '関西空港発なんば行きの登録');
@@ -260,12 +293,23 @@ if (process.argv.includes('--selection-only')) process.exit(0);
         assert.ok(approachText(r, last, atLast).includes('終点'), approachText(r, last, atLast));
         if (v.id === 'local') assert.ok(!approachText(r, last, svc).includes('終点'), '普通（和歌山市行）は和歌山港を終点と言わない');
         // 行先は選んだ区間の終点で決まる: 普通は和歌山市（4-5 は和歌山港）、急行・サザンは和歌山港（和歌山市までの区間は和歌山市）
-        for (const [stageId, dest] of [['all', v.id === 'local' ? '和歌山市' : '和歌山港'], ['0-4', '和歌山市'], ['4-5', '和歌山港']] as const) {
+        for (const [stageId, fallbackDest] of [['all', v.id === 'local' ? '和歌山市' : '和歌山港'], ['0-4', '和歌山市'], ['4-5', '和歌山港']] as const) {
           if (v.id === 'local' && stageId === '0-4') continue; // 普通に 0-4 は無い（通しが和歌山市まで）
           const q = structuredClone(route);
           const sq = createState(q, { stageId, service: v.id, mode: 'normal', vehicles: {} } as any);
           if (sq.sel.stageId !== stageId) continue; // 実ダイヤで、この時間帯にその区間を走る列車が無い（普通の和歌山港行など）
+          const dest = realTrainFor(q, v.id, sq.fromIndex, sq.endIndex)?.to ?? fallbackDest;
           const got = q.services!.find(x => x.id === v.id)!;
+          const city = q.stations.findIndex(station => station.name === '和歌山市');
+          const stop = q.stations[city].stopS;
+          assert.equal(terminalSpeedLimit(q, city, stop - 50), dest === '和歌山市' ? 15 : Infinity);
+          assert.equal(approachText(q, city, got).includes('終点'), dest === '和歌山市');
+          const drive = context(route, v.id);
+          const selected = { ...drive, route: q, state: sq };
+          sq.nextSignal = -1; sq.target = city; sq.train.s = stop - 50; sq.train.v = 65 / 3.6;
+          let brakes = 0;
+          createSignalSystem(selected, () => brakes++).update(1 / 30, true);
+          assert.equal(brakes, dest === '和歌山市' ? 1 : 0, `${tag}/${v.id}/${stageId}和歌山市のATS`);
           assert.equal(got.destination, dest, `${tag}/${v.id}/${stageId}の行先`);
           assert.ok(departText(q, 0, false, got).includes(`${dest === '和歌山市' ? 'ワカヤマシ' : 'ワカヤマコウ'}行きです`), `${tag}/${v.id}/${stageId}の放送`);
         }
@@ -826,7 +870,7 @@ if (routeOnly) process.exit(0);
 // 全時間帯・全種別で完走し、待避・行き違いと速度制限を守れるかを調べる。
 {
   let n = 0;
-  for (const route of [...airportCourses, ...airportInboundCourses, shiokaze, shiokazeUp, kishiwada, kishiwadaUp, izumisano, izumisanoUp, throughUp, through, namba, nambaUp, izumisanoMisaki, izumisanoMisakiUp, misakiWakayamako, misakiWakayamakoUp, mountain, mountainUp]) {
+  for (const route of [...expandedCourses, shiokaze, shiokazeUp, kishiwada, kishiwadaUp, izumisano, izumisanoUp, throughUp, through, namba, nambaUp, izumisanoMisaki, izumisanoMisakiUp, misakiWakayamako, misakiWakayamakoUp, mountain, mountainUp]) {
     for (const tod of ['morning', 'noon', 'evening', 'night'] as const) {
       // その時間帯に実際に走る種別（実ダイヤ）
       for (const service of selectableServices(Object.assign(structuredClone(route), { timeOfDay: tod })).map(v => v.id)) {
@@ -835,7 +879,7 @@ if (routeOnly) process.exit(0);
         assert.equal(ctx.route.timeOfDay, tod);
         const observed = new Set<number>();
         const arrivals: string[] = [];
-        if (airportInboundCourses.includes(route)) ctx.events.on('arrive', ({ station }) => arrivals.push(station.name));
+        if (expandedCourses.includes(route)) ctx.events.on('arrive', ({ station }) => arrivals.push(station.name));
         if (route.id === 'izumisano-misaki' && service === 'express') {
           let arrival = NaN;
           ctx.events.on('arrive', ({ station }) => { if (station.name === '尾崎') arrival = ctx.state.t; });
@@ -857,7 +901,7 @@ if (routeOnly) process.exit(0);
         const tag = `${route.id}/${tod}/${service}`;
         if (ctx.state.penalties.atsBrake || ctx.state.state !== 'result') console.log(tag, (result.log ?? []).filter((l: string) => /ATS警報|非常|待|通過/.test(l)).slice(0, 14).join(' | '));
         assert.equal(ctx.state.state, 'result', `${tag}完走`);
-        if (airportInboundCourses.includes(route)) {
+        if (expandedCourses.includes(route)) {
           const expected = ctx.route.services!.find(v => v.id === service)!.stops.slice(1).map(i => ctx.route.stations[i].name);
           assert.deepEqual(arrivals, expected, tag);
           console.log(tag, Math.round(ctx.state.t), arrivals.join(' → '));

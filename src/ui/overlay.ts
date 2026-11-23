@@ -4,11 +4,12 @@ import type { GameContext } from '../core/context';
 import { $, fmtClock } from '../core/dom';
 import { addHistory, getBest, getHistory, resetRecords, saveSelection, selectionForLine, submitScore } from '../game/ranking';
 import { LINES, ROUTES, sectionOf } from '../route';
+import { courseMenu } from '../route/course-menu';
 import { lineFromHash, lineOfRoute } from './lines';
 import type { GameResult } from '../game/scoring';
 import { safetyDeductions } from '../game/scoring';
 import { MODE_LABEL, findStage, stagesOf, type GameMode } from '../game/state';
-import { serviceOf, selectableServices, unitsLabel } from '../route/service';
+import { serviceOf, unitsLabel } from '../route/service';
 import { playerVehicleOptions } from '../route/player-vehicles';
 import type { ServiceSpec, TrainKind } from '../route/types';
 import { createVehiclePreview } from './vehicle-preview';
@@ -134,7 +135,11 @@ export function attachOverlay(ctx: GameContext): void {
     ].filter(Boolean).join('、');
     const best = getBest(route.id, stage.id, st.sel.mode, st.sel.service);
     const svc = serviceOf(route, st.sel.service), section = sectionOf(route.id);
-    const svcs = selectableServices(route).map(v => `<button data-service="${v.id}" class="svc-${v.id} ${v.id === svc?.id ? 'on' : ''}">${v.name}<small>${svcDesc(route, v)}</small></button>`).join('');
+    const menu = courseMenu(line, route.timeOfDay ?? ctx.envState.timeOfDay);
+    const service = st.sel.service;
+    const sections = line.sections?.filter(s => menu.directions(service, s.dirs).length);
+    const directions = menu.directions(service, section?.dirs);
+    const svcs = menu.services.map(v => `<button data-service="${v.id}" aria-pressed="${v.id === service}" class="svc-${v.id} ${v.id === service ? 'on' : ''}">${v.name}</button>`).join('');
     const wait = svc?.waits?.filter(w => w.station > stage.from && w.station < stage.to)
       .map(w => { const p = serviceOf(route, w.passedBy); return `<b>${route.stations[w.station].name}で${p?.name ?? ''}の${p?.stops.includes(w.station) ? '待ち合わせ' : '通過待ち'}</b>（出発信号が進行になってから発車）`; }).join('、') ?? '';
     const stages = stagesOf(route).map(s => `<button data-stage="${s.id}" class="${s.id === stage.id ? 'on' : ''}">${s.id === 'all' ? '全線通し' : s.label}${s.id === 'all' ? `<small>${route.stations[s.from].name} → ${route.stations[s.to].name}</small>` : ''}</button>`).join('');
@@ -151,9 +156,10 @@ export function attachOverlay(ctx: GameContext): void {
     <div class="route"><span>${first.name}</span><span class="bar"></span><span>${last.name}</span></div>
     <div class="tabs" role="tablist">${TABS.map(([k, n]) => `<button type="button" role="tab" data-tab="${k}">${n}</button>`).join('')}</div>
     <div class="tabPane" data-pane="stage">
-      ${line.sections ? `<div class="selLbl">区間</div><div class="sel" id="selSection">${line.sections.map(x => `<button data-section="${x.id}" class="${x.id === section?.id ? 'on' : ''}">${x.name}<small>${x.desc}</small></button>`).join('')}</div>` : ''}
-      ${section?.dirs.length === 1 ? '' : `<div class="selLbl">方向</div><div class="sel" id="selDir">${(section?.dirs ?? line.dirs).map(d => `<button data-dir="${d.id}" class="${d.id === route.id ? 'on' : ''}">${d.label}<small>${d.desc}</small></button>`).join('')}</div>`}
       ${svcs ? `<div class="selLbl">種別（Tab）</div><div class="sel" id="selService">${svcs}</div>` : ''}
+      ${sections ? `<div class="selLbl">区間</div><div class="sel" id="selSection">${sections.map(x => `<button data-section="${x.id}" class="${x.id === section?.id ? 'on' : ''}">${x.name}<small>${x.desc}</small></button>`).join('')}</div>` : ''}
+      <div class="selLbl">方向</div><div class="sel" id="selDir">${directions.map(d => `<button data-dir="${d.id}" class="${d.id === route.id ? 'on' : ''}">${d.label}<small>${d.desc}</small></button>`).join('')}</div>
+      ${svc ? `<p class="sub">${svc.name}　${svcDesc(route, svc)}</p>` : ''}
       <div class="selLbl">ステージ（← →）</div><div class="sel" id="selStage">${stages}</div>
       <div class="selLbl">モード（↑ ↓）</div><div class="sel" id="selMode">${modes}</div>
       <p class="brief">${first.name}を定刻に発車し、${last.name}の<b>停止位置ピッタリ</b>に<b>定刻どおり</b>止めよう。${notes ? notes + '。' : ''}${wait ? wait + '。' : ''}信号（YG 65 / Y 45 / R 停止）に従うこと。</p>
@@ -189,15 +195,15 @@ export function attachOverlay(ctx: GameContext): void {
       ctx.actions.selectStage(to - cur);
     });
     card.querySelectorAll<HTMLButtonElement>('[data-service]').forEach(b => b.onclick = () => {
-      const list = selectableServices(route), cur = list.findIndex(v => v.id === st.sel.service), to = list.findIndex(v => v.id === b.dataset.service);
-      ctx.actions.selectService(to - cur);
+      const cur = menu.services.findIndex(v => v.id === service), to = menu.services.findIndex(v => v.id === b.dataset.service);
+      if (to !== cur) ctx.actions.selectService(to - cur);
     });
     // 区間の切替: 同じ名前の方向（上り/下り）があればそれ、無ければ区間の既定の方向で再読込
     card.querySelectorAll<HTMLButtonElement>('[data-section]').forEach(b => b.onclick = () => {
-      const to = line.sections?.find(x => x.id === b.dataset.section);
+      const to = sections?.find(x => x.id === b.dataset.section);
       if (!to || to.id === section?.id) return;
-      const cur = (section?.dirs ?? line.dirs).find(d => d.id === route.id);
-      const dir = to.dirs.find(d => d.label === cur?.label) ?? to.dirs[0];
+      const dir = menu.preferred(service, route.id, menu.directions(service, to.dirs));
+      if (!dir) return;
       saveSelection({ ...st.sel, stageId: '', routeId: dir.id });
       card.innerHTML = `<p class="brief" style="text-align:center">${to.name}を読み込み中…</p>`;
       location.reload();

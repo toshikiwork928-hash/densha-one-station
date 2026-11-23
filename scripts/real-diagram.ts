@@ -10,11 +10,12 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { START_CLOCK } from '../src/core/config';
 import { ROUTES } from '../src/route';
+import { overtakeZone } from '../src/game/overtake';
 import type { ServiceId, TimeOfDay } from '../src/route/types';
 
 const CACHE = 'node_modules/.cache/unyohub', OUT = 'src/data/real-diagram.json';
 const TODS: TimeOfDay[] = ['morning', 'noon', 'evening', 'night'];
-const SOUTH_COURSES = ['namba', 'namba-up', 'shiokaze', 'shiokaze-up', 'kishiwada', 'kishiwada-up', 'nankai-through', 'nankai-through-up', 'izumisano', 'izumisano-up', 'izumisano-misaki', 'izumisano-misaki-up', 'misaki-wakayamako', 'misaki-wakayamako-up'];
+const SOUTH_COURSES = ['namba', 'namba-up', 'shiokaze', 'shiokaze-up', 'kishiwada', 'kishiwada-up', 'nankai-through', 'nankai-through-up', 'izumisano', 'izumisano-up', 'izumisano-misaki', 'izumisano-misaki-up', 'misaki-wakayamako', 'misaki-wakayamako-up', 'namba-kishiwada-up', 'kishiwada-namba', 'sakai-izumisano-up', 'izumisano-sakai'];
 
 const tt = JSON.parse(readFileSync(`${CACHE}/timetable.json`, 'utf8')), ri = JSON.parse(readFileSync(`${CACHE}/railroad_info.json`, 'utf8'));
 /** 本線の駅（なんば方から）と和歌山港 */
@@ -151,7 +152,7 @@ for (const id of SOUTH_COURSES) {
       const isEnd = (dir === 'down' ? Math.max(...tr.at.keys()) : Math.min(...tr.at.keys())) === li[z];
       let arr = arrAt(tr, li[z])! - start - (isEnd || tr.at.get(li[z])?.arr != null ? 0 : 30);
       if (svc === 'local') {
-        waits = overtakes(tr, route.stations.map(s => !!s.loop), li, stops, have);
+        waits = overtakes(tr, route.stations.map((_, k) => !!overtakeZone(route, k)), li, stops, have);
         if (!isEnd && waits.some(([n]) => n === names[z])) arr = -1;
       }
       list.push({ svc, no: tr.no, to: tr.dest === '難波' ? 'なんば' : tr.dest, origin: tr.origin === '難波' ? 'なんば' : tr.origin, from: names[a], end: names[z], start, dep, ...(Object.keys(arrival).length ? { arrAt: arrival } : {}), arr });

@@ -35,7 +35,7 @@ export function bridgeReplacesHighway(bridge: Bridge, s: number, lat: number, wi
 }
 
 export function airportLinkRoads(route: Route): RoadRow[] {
-  const base = route.id === 'airport-namba-up' ? airport : route;
+  const base = route.airportBridge?.islandAtStart ? airport : route;
   if (!base.airportBridge) return [];
   const frame = base === route ? null : sectionFrame(base, route);
   return bridgeApproaches(base.airportBridge).flatMap(points => points.slice(1).map((b, i) => {

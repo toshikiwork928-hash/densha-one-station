@@ -10,12 +10,15 @@ import { through, throughUp } from './routes/through';
 import { namba, nambaUp } from './routes/namba';
 import { misakiWakayamako, misakiWakayamakoUp } from './routes/misaki-wakayamako';
 import { airport, airportThrough } from './routes/airport';
-import { airportInbound } from './routes/airport-inbound';
+import { nambaKishiwada, kishiwadaNamba, sakaiIzumisano, izumisanoSakai } from './routes/mainline-long';
+import { airportInbound, airportUp, airportThroughUp, airportOutbound } from './routes/airport-inbound';
 
 export const ROUTES: Record<string, Route> = { [sakuragaoka.id]: sakuragaoka, [shiokaze.id]: shiokaze, [shiokazeUp.id]: shiokazeUp, [mountain.id]: mountain, [mountainUp.id]: mountainUp,
   [kishiwada.id]: kishiwada, [kishiwadaUp.id]: kishiwadaUp, [izumisano.id]: izumisano, [izumisanoUp.id]: izumisanoUp, [through.id]: through, [throughUp.id]: throughUp, [namba.id]: namba, [nambaUp.id]: nambaUp,
   [izumisanoMisaki.id]: izumisanoMisaki, [izumisanoMisakiUp.id]: izumisanoMisakiUp,
   [misakiWakayamako.id]: misakiWakayamako, [misakiWakayamakoUp.id]: misakiWakayamakoUp,
+  [nambaKishiwada.id]: nambaKishiwada, [kishiwadaNamba.id]: kishiwadaNamba, [sakaiIzumisano.id]: sakaiIzumisano, [izumisanoSakai.id]: izumisanoSakai,
+  [airportUp.id]: airportUp, [airportThroughUp.id]: airportThroughUp, [airportOutbound.id]: airportOutbound,
   [airport.id]: airport, [airportThrough.id]: airportThrough, [airportInbound.id]: airportInbound };
 /** 方向の切替（下り ↔ 上り）。タイトルの方向ボタン用 */
 export const ROUTE_DIRS: { id: string; label: string; desc: string }[] = [
@@ -35,6 +38,10 @@ const NANKAI_SECTIONS: SectionEntry[] = [
     id: 'sakai-namba', name: '堺〜難波', desc: '9駅・9.8km。大和川橋梁、住ノ江からの複々線と車庫、高野線と並ぶ4線、終点は頭端式の難波（種別ごとに番線が違う）',
     dirs: [{ id: namba.id, label: '上り', desc: '堺 → なんば' }, { id: nambaUp.id, label: '下り', desc: 'なんば → 堺' }],
   },
+  { id: 'namba-kishiwada', name: 'なんば〜岸和田', desc: '堺・泉大津経由の通し運転・26.0 km',
+    dirs: [{ id: nambaKishiwada.id, label: '下り', desc: 'なんば → 岸和田' }, { id: kishiwadaNamba.id, label: '上り', desc: '岸和田 → なんば' }] },
+  { id: 'sakai-izumisano', name: '堺〜泉佐野', desc: '泉大津・岸和田経由の通し運転・24.2 km',
+    dirs: [{ id: sakaiIzumisano.id, label: '下り', desc: '堺 → 泉佐野' }, { id: izumisanoSakai.id, label: '上り', desc: '泉佐野 → 堺' }] },
   { id: 'izumiotsu-sakai', name: '堺〜泉大津', desc: '10駅・10.6km。高架駅、路面電車跨線橋、鉄橋と支線', dirs: ROUTE_DIRS },
   {
     id: 'izumiotsu-kishiwada', name: '泉大津〜岸和田', desc: '5駅・5.6km。大津川を渡って地上へ、高架の屋内駅・岸和田。空港急行・特急ラピートβ・特急サザン',
@@ -64,14 +71,14 @@ const NANKAI_SECTIONS: SectionEntry[] = [
   },
 ];
 /** dirs の並び（既定の方向を保つための従来の順。メニューの並びは NANKAI_SECTIONS） */
-const LEGACY_ORDER = ['izumiotsu-sakai', 'izumiotsu-kishiwada', 'sakai-kishiwada', 'kishiwada-izumisano', 'sakai-namba', 'izumisano-misaki', 'misaki-wakayamako'];
+const LEGACY_ORDER = ['izumiotsu-sakai', 'izumiotsu-kishiwada', 'sakai-kishiwada', 'kishiwada-izumisano', 'sakai-namba', 'izumisano-misaki', 'misaki-wakayamako', 'namba-kishiwada', 'sakai-izumisano'];
 const AIRPORT_SECTIONS: SectionEntry[] = [
-  { id: airportInbound.id, name: '関西空港 → なんば', desc: '上り・空港急行／特急ラピートβ・42.8 km',
-    dirs: [{ id: airportInbound.id, label: '上り', desc: '関西空港 → なんば' }] },
-  { id: airportThrough.id, name: '岸和田 → 関西空港', desc: '本線から空港線へ通し運転・16.8 km',
-    dirs: [{ id: airportThrough.id, label: '下り', desc: '岸和田 → 関西空港' }] },
-  { id: airport.id, name: '泉佐野 → 関西空港', desc: 'りんくうタウン経由・8.8 km',
-    dirs: [{ id: airport.id, label: '下り', desc: '泉佐野 → 関西空港' }] },
+  { id: airportInbound.id, name: 'なんば〜関西空港', desc: '本線・空港線の通し運転・42.8 km',
+    dirs: [{ id: airportInbound.id, label: '上り', desc: '関西空港 → なんば' }, { id: airportOutbound.id, label: '下り', desc: 'なんば → 関西空港' }] },
+  { id: airportThrough.id, name: '岸和田〜関西空港', desc: '泉佐野経由の通し運転・16.8 km',
+    dirs: [{ id: airportThrough.id, label: '下り', desc: '岸和田 → 関西空港' }, { id: airportThroughUp.id, label: '上り', desc: '関西空港 → 岸和田' }] },
+  { id: airport.id, name: '泉佐野〜関西空港', desc: 'りんくうタウン経由・8.8 km',
+    dirs: [{ id: airport.id, label: '下り', desc: '泉佐野 → 関西空港' }, { id: airportUp.id, label: '上り', desc: '関西空港 → 泉佐野' }] },
 ];
 export const LINES: LineEntry[] = [
   {
@@ -80,7 +87,7 @@ export const LINES: LineEntry[] = [
     dirs: [...NANKAI_SECTIONS].sort((p, q) => LEGACY_ORDER.indexOf(p.id) - LEGACY_ORDER.indexOf(q.id)).flatMap(x => x.dirs), sections: NANKAI_SECTIONS,
   },
   {
-    id: 'airport', name: '南海空港線', desc: '関西空港からなんばへ向かう上りと、岸和田・泉佐野から関西空港へ向かう下り。', theme: 'coast',
+    id: 'airport', name: '南海空港線', desc: '泉佐野・岸和田・なんばと関西空港を結ぶ3区間を、上下両方向で運転できます。', theme: 'coast',
     dirs: AIRPORT_SECTIONS.flatMap(s => s.dirs), sections: AIRPORT_SECTIONS,
   },
   {

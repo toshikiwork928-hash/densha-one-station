@@ -1,9 +1,10 @@
 // 閉そく信号と ATS。先行列車（仮想）の在線から現示を決め、通過時に速度照査する
 import type { GameContext } from '../core/context';
 import type { SignalAspect } from '../core/events';
-import { islandZone, loopZone, sameClass, type LoopZone } from '../route/service';
+import { islandZone, sameClass, type LoopZone } from '../route/service';
+import { overtakeZone } from './overtake';
 import type { Meet } from './meet';
-import { terminalSpeedLimit } from './terminal-ats';
+import { terminalDistance as distanceToTerminal, terminalSpeedLimit } from './terminal-ats';
 import { ASPECT_LABEL, ASPECT_LIMIT, PRECEDING_LENGTH, aspectOf, buildPrecedingKeys, precedingHead, type PrecedingPlan } from './preceding';
 
 const ATS_ACK_TIME = 5; // 警報から確認までの猶予 [s]
@@ -130,8 +131,7 @@ export function createSignalSystem(ctx: GameContext, forceEB: () => void, meet?:
       refreshAspects();
       if (!moving) return;
       const terminalLimit = terminalSpeedLimit(route, st.target, s);
-      const terminalDistance = route.terminalApproach && st.target === route.stations.length - 1
-        ? route.stations[st.target].stopS - s : Infinity;
+      const terminalDistance = distanceToTerminal(route, st.target, s);
       if (terminalDistance <= 1500 && !st.flags.terminalNotice) {
         st.flags.terminalNotice = true;
         banner('終着進入予告：停止位置まで1000mで65km/h以下。その後もATS速度照査で段階的に減速', 6);
@@ -184,7 +184,7 @@ export function createSignalSystem(ctx: GameContext, forceEB: () => void, meet?:
         if (home >= 0) caps[home] = 'Y';
       });
       route.stations.forEach((sta, k) => {
-        const z = loopZone(sta);
+        const z = overtakeZone(route, k);
         if (!z) return;
         if (sta.enterLoop) {
           let home = -1;

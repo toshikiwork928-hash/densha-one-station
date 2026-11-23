@@ -238,8 +238,10 @@ export interface Route {
   fullCourseOnly?: boolean;
   /** 信号違反は採点し、ATS非常制動は終着進入の速度照査だけで扱う。 */
   terminalAtsOnly?: boolean;
-  /** コース終着駅への接近を連続速度照査（実路線ATSの仕様そのものではない）。南海本線は無効（false）。 */
+  /** コース終着駅への接近時にゲーム用の速度曲線を照査する。 */
   terminalApproach?: boolean;
+  /** コース途中でもこの駅行きの列車だけ終端ATSを適用する。 */
+  destinationApproach?: string;
   /** 描画専用の沿岸線ランドマーク。進行反転時は位置・左右・分岐向きを反転する。 */
   coastalLandmarks?: { kind: 'road-overpass' | 'tram-overpass' | 'steel-bridge' | 'branch' | 'twin-tower'; s: number; length?: number; label?: string; side?: 1 | -1; direction?: 1 | -1;
     /** 区間データの向きが反転済み（reverseRoute で作った側）。未指定なら route.id の '-up' で判定。通しコース（route/concat.ts）は区間ごとに持ち越す */

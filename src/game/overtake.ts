@@ -3,6 +3,7 @@
 // 優等列車は普通が駅に近づく間に後方から追い付く形で現れる（普通が停まる前に本線ホームを通り過ぎないよう間隔を保つ）
 import type { GameContext } from '../core/context';
 import { carLenOf, loopZone, serviceOf, stopOffset } from '../route/service';
+import { sakaiLayout } from '../route/sakai-layout';
 import type { Route, ServiceSpec } from '../route/types';
 
 /** 通過列車の速度 [km/h] */
@@ -43,9 +44,19 @@ export interface Passer {
   tClear: number;
 }
 
+const sakaiTurnouts = sakaiLayout(0).up3.map(([s]) => s);
+/** 堺の専用配線でも普通と優等が別々の番線に入る。進行方向に見た入口・出口は上下ともホーム端に対して対称。 */
+export function overtakeZone(route: Route, index: number) {
+  const sta = route.stations[index];
+  if (sta.name !== '堺' || sta.layout !== 'custom' || index === 0 || index === route.stations.length - 1) return loopZone(sta);
+  const pf = sta.platform.from;
+  // 専用配線の横位置は各種別の lane に含まれるので、待避線として加算する横変位は 0。
+  return { inFrom: pf + sakaiTurnouts[0], inTo: pf + sakaiTurnouts[1], outFrom: pf + sakaiTurnouts[2], outTo: pf + sakaiTurnouts[3], lat: 0, limit: 45 };
+}
+
 /** 優等列車の運動計画（普通 localCars 両が待避線に停車するとき）。時刻表の生成（scripts/timetable.ts）とゲームで共通 */
 export function planPasser(route: Route, index: number, passer: ServiceSpec, localCars: number): Passer | null {
-  const sta = route.stations[index], z = loopZone(sta);
+  const sta = route.stations[index], z = overtakeZone(route, index);
   if (!z) return null;
   const v = PASS_KMH / 3.6, len = passer.cars * carLenOf(passer.kind);
   if (!passer.stops.includes(index)) {
@@ -140,7 +151,7 @@ export function createOvertake(ctx: GameContext): Overtake {
       approach();
       const o = st.overtake;
       if (!o || o.phase === 'done') return;
-      const z = loopZone(route.stations[o.station])!;
+      const z = overtakeZone(route, o.station)!;
       // 普通が本線を出るまで（待避線へ入り切るまで）は後部との間隔を保つ
       let vHold = Infinity;
       const tail = st.train.s - route.trainLength;

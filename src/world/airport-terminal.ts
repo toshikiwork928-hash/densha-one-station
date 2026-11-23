@@ -13,7 +13,7 @@ import { airportLinkRoadLat, bridgeApproaches } from './airport-link-roads';
 import { buildRinkuCanopy } from './rinku-canopy';
 
 function airportInboundFrame(ctx: GameContext): GameContext | null {
-  if (ctx.route.id !== 'airport-namba-up') return ctx;
+  if (!ctx.route.airportBridge?.islandAtStart) return ctx;
   const frame = sectionFrame(airport, ctx.route);
   if (!frame) return null;
   const real = ctx.track, L = airport.extent.to;

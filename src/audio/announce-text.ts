@@ -10,7 +10,7 @@ export const spoken = (s: Station): string => toKatakana(s.kana ?? s.name);
 
 /** 路線の終点か（列車の本来の行先がコースの終点と違う＝なんば・和歌山市・羽倉崎など、のときは終点ではない） */
 export const isTerminus = (route: Route, index: number, svc?: ServiceSpec): boolean =>
-  index === route.stations.length - 1 && (!svc?.destination || svc.destination === route.stations[index].name);
+  svc?.destination ? svc.destination === route.stations[index]?.name : index === route.stations.length - 1;
 
 /** 読み上げ用の行先（列車の本来の行先、無ければコースの終点） */
 const spokenDest = (route: Route, svc?: ServiceSpec): string =>
