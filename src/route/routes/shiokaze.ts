@@ -199,7 +199,8 @@ export const shiokazeUp: Route = reverseRoute(shiokaze, {
     if (v.id === 'local') {
       // 下りはホームの泉大津側（s の増える向き）の分岐器で本線へ
       v.lane = [[-1000, d1], [m(SAKAI.pf - 20), d1], [m(SAKAI.pf - 130), d2], [m(SAKAI.pf - 150), d2], [m(SAKAI.pf - 260), 0]];
-      v.laneLimits = [SAKAI.localLimit(-400, m(SAKAI.pf - 130))];
+      // 発車側の制限はホームから始める。七道側の進入制限は接続元の区間が持つ。
+      v.laneLimits = [SAKAI.localLimit(shiokazeUp.stations[0].platform.from, m(SAKAI.pf - 130))];
       v.platformSides = { 0: 'R' }; v.trackNames = { 0: '1番線' };
     } else { v.platformSides = { 0: 'L' }; v.trackNames = { 0: '2番線' }; }
   }

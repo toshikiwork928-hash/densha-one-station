@@ -896,6 +896,16 @@ if (routeOnly) process.exit(0);
   }
   console.log('堺〜難波（5種別）チェック成功');
 }
+// 七道→堺の普通は、通し運転でも単独区間と同じ位置から1番線の分岐器制限を受ける。
+{
+  const local = context(nambaUp, 'local'), through = context(ROUTES['namba-kishiwada-up'], 'local');
+  const shichido = local.route.stations.find(st => st.name === '七道')!;
+  const sakai = local.route.stations.find(st => st.name === '堺')!;
+  for (let s = shichido.stopS; s <= sakai.stopS; s++) {
+    assert.equal(through.track.limitAt(s), local.track.limitAt(s), `七道→堺の通し運転の制限 s=${s}`);
+  }
+}
+
 // なんば → 堺（下り）: 発車番線・堺の入線番線（普通 1番線 45km/h、優等 2番線）、5種別の完走
 {
   const route = nambaUp, n = route.stations.length;
