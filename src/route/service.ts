@@ -2,6 +2,7 @@
 // route は各モジュールが参照を保持しているので、種別の切替は route の中身を書き換えて反映する（元データは初回に退避）
 import type { LatProfile, Route, ServiceId, ServiceSpec, SpeedLimit, Station, TimeOfDay, TrainKind } from './types';
 import { realDayOf, realServiceAvailable } from './real-diagram';
+import { front7169ForRoute } from './vehicle-direction';
 
 /** 時間帯と方向が同じ代表列車から、ラピートの名称と停車駅を取得する。 */
 function rapitPattern(route: Route, tod = route.timeOfDay): Pick<ServiceSpec, 'name' | 'stops'> | undefined {
@@ -222,6 +223,44 @@ export function loopZones(route: Route): (LoopZone & { index: number })[] {
   return out;
 }
 
+/** 同方向の2列車が使える線路の中心。通常の待避駅は本線と副線、複々線は急行線と緩行線を使う。 */
+export function stationPassingPaths(route: Route, index: number) {
+  const station = route.stations[index], base = route.tracks[0];
+  const main = (s: number) => base + islandOffset(route, base, s);
+  const zone = loopZone(station);
+  if (zone) {
+    const loop = (s: number) => main(s) + zone.lat * loopShape(zone, s);
+    return station.loopPriority ? { waiting: main, passing: loop } : { waiting: loop, passing: main };
+  }
+  const inbound = front7169ForRoute(route.id);
+  let trackId: string;
+  let mainIsOuter = false;
+  switch (station.name) {
+    case '堺': trackId = inbound ? 'sakai-3' : 'sakai-1'; break;
+    case '泉佐野':
+      mainIsOuter = route.lineId === 'airport';
+      trackId = inbound ? 'izumisano-t4' : 'izumisano-t1';
+      if (mainIsOuter && route.extraTracks?.some(t => t.id === 'main-down')) trackId = inbound ? 'main-up' : 'main-down';
+      break;
+    case 'みさき公園':
+      if (inbound) return undefined; // 5番線は多奈川線へ向かう。
+      trackId = 'misaki-t1'; break;
+    case '住ノ江': case '住吉大社': case '粉浜': case '岸里玉出':
+      trackId = inbound ? 'up-local' : 'down-local'; break;
+    default: return undefined;
+  }
+  const track = route.extraTracks?.find(t => t.id === trackId && t.from <= station.stopS && station.stopS <= t.to);
+  if (!track) return undefined;
+  const connections = trackId === 'up-local'
+    ? route.extraTracks!.filter(t => t.id === 'x-suminoe' || t.id === 'x-kishinosato') : [];
+  const branch = (s: number) => {
+    if (s >= track.from && s <= track.to) return profileLat(track.lat, s);
+    const turnout = connections.find(t => t.from <= s && s <= t.to);
+    return turnout ? profileLat(turnout.lat, s) : main(s);
+  };
+  return mainIsOuter ? { waiting: main, passing: branch } : { waiting: branch, passing: main };
+}
+
 /** 自列車の走行位置の横ずれ [m]（停車する 2面4線駅では待避線へ入る）。stations[].pass は種別適用後の値 */
 export function playerPathLat(route: Route, s: number): number {
   let lat = 0;
@@ -340,6 +379,7 @@ export function applyService(route: Route, id: ServiceId | undefined): ServiceSp
   route.activeServiceId = svc.id;
   route.lineLimit = svc.lineLimit ?? b.lineLimit; // 種別ごとの最高速度（曲線・分岐器の制限は共通）
   route.startS = b.startS + (stationStopS(route, 0, svc) - b.stations[0].stopS);
+  const encounters = realDayOf(route)?.trains.find(train => train.svc === svc.id)?.encounters;
   route.stations.forEach((sta, i) => {
     const base = b.stations[i], tt = svc.timetable[i];
     sta.pass = svc.stops.includes(i) ? undefined : true;
@@ -347,12 +387,19 @@ export function applyService(route: Route, id: ServiceId | undefined): ServiceSp
     sta.scheduledArrival = tt?.arr ?? base.scheduledArrival;
     sta.dwell = tt?.dep != null ? tt.dep - tt.arr : undefined;
     sta.stopMarkerCars = svc.cars;
-    sta.mainTrack = svc.trackNames?.[i] ?? base.mainTrack;
+    // 島式2面4線の待避駅では、外側が1・4番線、隣の本線が2・3番線。
+    const innerTrack = sta.loopTrack === '1番線' ? '2番線' : sta.loopTrack === '4番線' ? '3番線' : undefined;
+    sta.mainTrack = svc.trackNames?.[i] ?? base.mainTrack ?? innerTrack;
     // 普通（useLoop）は待避線へ。loopPriority の駅（堺の上り）は逆で、優等列車が外側の線、普通が本線側
     // 普通（useLoop）が待避線へ入るのは、この時間帯にその駅で待避・待ち合わせがあるときだけ（始発駅・終着駅は従来どおり待避線）。
     // 待避線の外側にだけホームがある駅（浜寺公園の堺方面。本線にホームが無い）は、待避が無くても待避線へ
     const waitsHere = i === 0 || i === route.stations.length - 1 || !!sta.loop?.outside || !!svc.waits?.some(w => w.station === i);
     sta.enterLoop = !!sta.loop && !sta.pass && (sta.loopPriority ? !svc.useLoop : !!svc.useLoop && waitsHere);
+    const encounter = encounters?.find(e => e.station === sta.name);
+    if (encounter && sta.loop && !sta.pass && !sta.loop.outside) {
+      const waiting = encounter.role === 'waiting';
+      sta.enterLoop = sta.loopPriority ? !waiting : waiting;
+    }
     // 2面4線: 待避線に入ると右側、本線は左側がホーム。島式1面2線: 自線の右側
     // 待避線のホームが外側にある駅（浜寺公園の堺方面）は、待避線に入ると待避線の外（左）がホーム
     sta.platform.side = sta.island ? 'R' : sta.loop ? (sta.enterLoop ? (sta.loop.outside ? (sta.loop.lat < 0 ? 'L' : 'R') : 'R') : 'L') : svc.platformSides?.[i] ?? base.platform.side;

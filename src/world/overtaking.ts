@@ -1,10 +1,11 @@
 import { front7169ForRoute } from '../route/vehicle-direction';
-// 待避の描画: 普通の待避中に本線を通過していく後続列車（st.overtake）と、
-// 急行・特急で通過する2面4線駅の待避線に止まっている先行の普通（st.precedingS が待避線にいる間）
+// 同方向の先行列車と後続列車を、それぞれの着発時刻と走行線に合わせて描く。
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import { customPlatformSide, destOf, islandOffset, loopShape, loopZone, profileLat, sameClass, serviceOf, stationIslandOffset, stationStopS } from '../route/service';
 import { overtakeZone } from '../game/overtake';
+import { realTrainFor } from '../route/real-diagram';
+import { encounterMotion, scheduledOvertakes, separatedBodies } from './scheduled-overtakes';
 import type { ServiceSpec, TrainKind } from '../route/types';
 import { placeCar } from './emu';
 import { bogieOffset, createTrainSet, type TrainCar } from './train-models';
@@ -19,7 +20,9 @@ export function createOvertaking(ctx: GameContext): void {
   const cache = new Map<string, SetView>();
   const destAll = route.stations[route.stations.length - 1]?.name ?? '';
   const view = (kind: TrainKind, units: number[], label: string, unitKinds?: TrainKind[], dest = destAll, tag = ''): SetView => {
-    const key = `${unitKinds?.join('+') ?? kind}:${units.join('+')}:${label}:${dest}${tag}`;
+    const base = `${unitKinds?.join('+') ?? kind}:${units.join('+')}:${label}:${dest}${tag}`;
+    let key = base;
+    for (let slot = 2; cache.get(key)?.group.visible; slot++) key = base + ':' + slot;
     let v = cache.get(key);
     if (!v) {
       const group = new THREE.Group(); group.name = 'overtake-' + key; group.visible = false; scene.add(group);
@@ -50,7 +53,32 @@ export function createOvertaking(ctx: GameContext): void {
   const flip = (x: 'L' | 'R'): 'L' | 'R' => x === 'L' ? 'R' : 'L';
   let hornDone = false, wasNear = false, lastH = 0, lastStation = -1;
 
-  events.on('reset', () => { hornDone = false; lastStation = -1; });
+  let plans: ReturnType<typeof scheduledOvertakes> | undefined;
+  // 同じ列車が隣り合う2駅で待避することもある。画面内の同一列番と分岐器の占有を共有する。
+  const occupied: { no?: string; head: number; length: number; lane: (s: number) => number }[] = [];
+  function reset() {
+    hornDone = false; lastStation = -1;
+    const train = realTrainFor(route, st.sel.service, st.fromIndex, st.endIndex);
+    const svc = route.services?.find(s => s.id === st.sel.service);
+    plans = train?.encounters && svc ? scheduledOvertakes(route, train, svc, st.fromIndex, st.endIndex) : undefined;
+  }
+  reset();
+  events.on('reset', reset);
+
+  function showEncounter(plan: ReturnType<typeof scheduledOvertakes>[number], head: number, doors: boolean) {
+    const { encounter, index, consist, lane } = plan;
+    if (occupied.some(t => t.no === encounter.no || !separatedBodies(head, plan.length, lane, t.head, t.length, t.lane))) return;
+    occupied.push({ no: encounter.no, head, length: plan.length, lane });
+    const sta = route.stations[index];
+    const lat = lane(plan.stop);
+    const side = customPlatformSide(sta, lat) ?? (sta.loop?.outside
+      ? (sta.loop.lat < 0 ? 'L' : 'R') : (lat < track.pathLat(plan.stop) ? 'R' : 'L'));
+    const v = view(consist.kind, consist.units!, consist.label!, consist.unitKinds, encounter.dest);
+    v.group.userData.trainNo = encounter.no;
+    v.group.visible = true;
+    for (const c of v.cars) c.setDoors(doors, side);
+    place(v, head, lane);
+  }
 
   // 優等列車で堺・泉大津を終着にするとき: 終着駅の普通の番線（待避線、堺は3番線・1番線）に普通が止まっている（時間帯によらず）
   const goal = route.stations.length - 1, goalSta = route.stations[goal];
@@ -82,24 +110,44 @@ export function createOvertaking(ctx: GameContext): void {
     const playing = st.state === 'run' || st.state === 'dwell' || st.state === 'result';
     if (!playing) { if (wasNear) { events.emit('overtakePass', { proximity: 0 }); wasNear = false; } return; }
     const ps = st.train.s, plen = route.trainLength;
+    occupied.length = 0;
+    occupied.push({ head: ps, length: plen, lane: track.pathLat });
 
     // 後続の通過列車（本線 = 横位置 0）
     const o = st.overtake;
-    if (o && o.phase === 'run') {
+    const actual = o && plans?.find(p => p.index === o.station && p.signalSequence === o.seq);
+    if (o && o.phase === 'run' && (!plans || actual)) {
       if (lastStation !== o.station) { lastStation = o.station; hornDone = false; }
-      const svc = serviceOf(route, o.passedBy)!;
-      const v = view(svc.kind, svc.units, svc.name, svc.unitKinds, destOf(route, svc));
-      v.group.visible = true;
       const connecting = o.stage === 'stopped' && o.localStopped;
-      const side = svc.platformSides?.[o.station] ?? mainSide(o.station);
-      for (const c of v.cars) c.setDoors(connecting, side); // 停車して接続中は本線ホーム側のドアを開ける
-      place(v, o.head, s => svc.lane ? profileLat(svc.lane, s) + stationIslandOffset(route, 0, s) : islandOffset(route, 0, s));
+      if (actual) showEncounter(actual, o.head, connecting);
+      else {
+        const svc = serviceOf(route, o.passedBy)!;
+        const v = view(svc.kind, svc.units, svc.name, svc.unitKinds, destOf(route, svc));
+        v.group.visible = true;
+        const side = svc.platformSides?.[o.station] ?? mainSide(o.station);
+        for (const c of v.cars) c.setDoors(connecting, side);
+        const lane = (s: number) => svc.lane ? profileLat(svc.lane, s) + stationIslandOffset(route, 0, s) : islandOffset(route, 0, s);
+        place(v, o.head, lane);
+        occupied.push({ head: o.head, length: o.len, lane });
+      }
       const gap = o.head < ps - plen ? ps - plen - o.head : o.head - o.len > ps ? o.head - o.len - ps : 0;
       if (!hornDone && o.head > ps - plen - 250) { hornDone = true; events.emit('oncomingHorn', { distance: Math.max(0, ps - plen - o.head) }); }
       const prox = Math.max(0, 1 - gap / NEAR);
       if (prox > 0 || wasNear) events.emit('overtakePass', { proximity: prox });
       wasNear = prox > 0;
     } else if (wasNear) { events.emit('overtakePass', { proximity: 0 }); wasNear = false; }
+
+    if (plans) {
+      const clock = route.startClock + st.t;
+      for (const plan of plans) {
+        if (plan.signalSequence >= 0 || Math.abs(plan.stop - ps) > 2200) continue;
+        const motion = encounterMotion(plan, clock);
+        if (!motion || Math.abs(motion.head - plan.stop) > 1100 || Math.abs(motion.head - ps) > 1600) continue;
+        if (motion.head < route.extent.from || motion.head - plan.length > route.extent.to) continue;
+        showEncounter(plan, motion.head, motion.doors);
+      }
+      return;
+    }
 
     // 待避線の先行普通（自列車が本線を通る駅のみ。自列車の近くにいるときだけ表示）
     const local = serviceOf(route, 'local');

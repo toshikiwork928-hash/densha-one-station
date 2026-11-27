@@ -10,6 +10,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { START_CLOCK } from '../src/core/config';
 import { publishedStop } from './namba-weekday-stops';
+import { neighborStopTimes } from './neighbor-stop-times';
 import { ROUTES } from '../src/route';
 import { overtakeZone } from '../src/game/overtake';
 import type { ServiceId, TimeOfDay } from '../src/route/types';
@@ -134,7 +135,72 @@ function pick(tod: TimeOfDay, dir: Dir, svc: ServiceId): Train | null {
   return best;
 }
 
-interface Entry { svc: ServiceId; no: string; name?: string; to: string; origin: string; from: string; end: string; start: number; dep: Record<string, number>; arrAt?: Record<string, number>; arr: number }
+interface Encounter {
+  station: string; role: 'passing' | 'waiting'; no: string; svc: ServiceId;
+  code: string; dest: string; arrival: number; departure: number;
+}
+
+// いずれも本線の同方向列車が別の線路で待ち合わせられる駅。
+const passingStations = ['住ノ江', '堺', '浜寺公園', '高石', '泉大津', '岸和田', '貝塚', '泉佐野', '羽倉崎', '尾崎', 'みさき公園'];
+
+function stationVisit(train: Train, station: string) {
+  if (station === train.origin || station === train.dest) return null;
+  const i = idx(station), at = stopAt(train, i);
+  // 一部のα（上り0730など）はHubに堺の通過時刻が停車記号で入っている。
+  const rapitPass = train.type.startsWith('ラピートα') && (station === '堺' || station === '岸和田');
+  if (!at?.stop || rapitPass) {
+    const time = timeAt(train, i);
+    return time == null ? null : { arrival: Math.round(time), departure: Math.round(time) };
+  }
+  const published = publishedStop(train.no, station, at.t, false);
+  if (published) return published;
+  const [gap, offset] = neighborStopTimes[train.no]?.[station] ?? [0, 0];
+  const minute = at.t + offset * 60;
+  return { arrival: minute - gap * 60 + (gap === 1 ? 35 : 0), departure: minute + (gap === 0 ? 25 : 0) };
+}
+
+/** 通過時刻を補間した駅では、その前後の共通の時刻記録でも列車の順序が逆転することを確かめる。 */
+function orderReverses(slow: Train, fast: Train, i: number) {
+  const forward = slow.dir === 'down' ? 1 : -1;
+  const firstDifference = (step: number) => {
+    for (let j = i + step; j >= 0 && j < LINE.length; j += step) {
+      const a = slow.at.get(j), b = fast.at.get(j);
+      if (a && b) return a.t - b.t;
+    }
+    return null;
+  };
+  const before = firstDifference(-forward), after = firstDifference(forward);
+  return before != null && before < 0 && after != null && after > 0;
+}
+
+function encountersFor(player: Train): Encounter[] {
+  const result: Encounter[] = [];
+  for (const station of passingStations) {
+    const own = stationVisit(player, station);
+    if (!own) continue;
+    for (const other of trains) {
+      if (other.dir !== player.dir || other.rank < 0 || other.rank === player.rank) continue;
+      // 泉佐野で本線と空港線へ分岐するだけの同時停車を追越扱いしない。
+      if (station === '泉佐野' && !!other.airportAt !== !!player.airportAt) continue;
+      const visit = stationVisit(other, station);
+      if (!visit) continue;
+      const waiting = player.rank < other.rank;
+      const slow = waiting ? own : visit, fast = waiting ? visit : own;
+      if (slow.departure - slow.arrival < 120 || slow.arrival > fast.arrival || fast.departure >= slow.departure) continue;
+      const fastTrain = waiting ? other : player, i = idx(station);
+      const sameArrivalMinute = Math.floor(slow.arrival / 60) === Math.floor(fast.arrival / 60);
+      if ((!fastTrain.at.has(i) || sameArrivalMinute) && !orderReverses(waiting ? player : other, fastTrain, i)) continue;
+      const svc = other.svc ?? 'express';
+      const code = svc === 'local' ? 'L' : svc === 'airport' ? 'A' : svc === 'southern' ? 'S'
+        : svc === 'limited' ? (other.type.startsWith('ラピートα') ? 'Ra' : 'Rb') : 'E' + other.type.replaceAll('-', '');
+      result.push({ station, role: waiting ? 'waiting' : 'passing', no: other.no, svc, code,
+        dest: other.dest === '難波' ? 'なんば' : other.dest, ...visit });
+    }
+  }
+  return result.sort((a, b) => a.arrival - b.arrival || a.no.localeCompare(b.no));
+}
+
+interface Entry { svc: ServiceId; no: string; name?: string; to: string; origin: string; from: string; end: string; start: number; dep: Record<string, number>; arrAt?: Record<string, number>; arr: number; encounters: Encounter[] }
 const out: { source: string; license: string; revision: string; picks: Record<string, Record<string, string>>; routes: Record<string, Partial<Record<TimeOfDay, { trains: Entry[]; waits: [string, ServiceId][] }>>> } = {
   source: '鉄道運用Hub 南海電鉄の平日時刻表（https://unyohub.2pd.jp/railroad_nankai/ 、2024-12-21 改正）を基に、代表列車の着発をYahoo!乗換案内の平日時刻表で照合。scripts/real-diagram.ts で作成',
   license: '鉄道運用Hubの元データはCC BY 4.0', revision: '2024-12-21', picks: {}, routes: {},
@@ -148,6 +214,8 @@ for (const tod of TODS) for (const dir of ['down', 'up'] as const) for (const sv
   (out.picks[`${tod}/${dir}`] ??= {})[svc] = tr ? `${tr.no} ${tr.type} ${tr.origin} ${fmt(originDep(tr))}発 ${tr.dest}行` : 'なし';
 }
 
+const encounters = new Map([...new Set(Object.values(picks))].filter((tr): tr is Train => !!tr)
+  .map(tr => [tr, encountersFor(tr)]));
 for (const id of [...SOUTH_COURSES, ...AIRPORT_COURSES]) {
   const route = ROUTES[id];
   if (!route) { console.warn(`ROUTES に ${id} が無い`); continue; }
@@ -189,7 +257,9 @@ for (const id of [...SOUTH_COURSES, ...AIRPORT_COURSES]) {
       const publishedEnd = corrected(z);
       if (publishedEnd) arr = publishedEnd.arrival - start;
       const variant = tr.type.startsWith('ラピートα') ? { name: '特急ラピートα' } : {};
-      list.push({ svc, no: tr.no, ...variant, to: tr.dest === '難波' ? 'なんば' : tr.dest, origin: tr.origin === '難波' ? 'なんば' : tr.origin, from: names[a], end: names[z], start, dep, ...(Object.keys(arrival).length ? { arrAt: arrival } : {}), arr });
+      const sectionNames = names.slice(a, z + 1);
+      const sectionEncounters = encounters.get(tr)!.filter(e => sectionNames.includes(e.station));
+      list.push({ svc, no: tr.no, ...variant, to: tr.dest === '難波' ? 'なんば' : tr.dest, origin: tr.origin === '難波' ? 'なんば' : tr.origin, from: names[a], end: names[z], start, dep, ...(Object.keys(arrival).length ? { arrAt: arrival } : {}), arr, encounters: sectionEncounters });
     }
     out.routes[id][tod] = { trains: list, waits };
   }

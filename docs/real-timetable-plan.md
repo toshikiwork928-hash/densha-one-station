@@ -23,6 +23,12 @@
 
 ### 1.1 出典
 
+同方向の待避は、2分以上停車する列車と、その間に同じ駅を先に出る列車を組にして扱う。通過時刻を補間した場合や着時刻が同じ分の場合は、前後の共通駅でも順序の逆転を確認する。泉佐野で夕方のラピート0217列車が普通7001列車を追い越す場面は、ゲームの配線では両方の関西空港行きが同じ線路に入るため、相手列車の描画を省く。
+平日夕方の下りでは、普通6513列車が泉大津に17:54から17:59まで停車し、空港急行2197列車が17:55に先発する。
+同じ空港急行は岸和田に18:02から18:05まで停車し、今度は18:03に先発するサザン43号を待つ。
+堺でサザン43号を待つ普通6601列車は17:48着のため、17:45の空港急行とは接続しない。
+[空港急行](https://transit.yahoo.co.jp/timetable/26100/3951/69015?kind=1&hh=17&mm=34)・[サザン43号](https://transit.yahoo.co.jp/timetable/26100/3951/68379?kind=1&hh=17&mm=40)・[泉大津で待避する普通](https://transit.yahoo.co.jp/timetable/26100/3951/68389?kind=1&hh=17&mm=13)・[堺で待避する普通](https://transit.yahoo.co.jp/timetable/26100/3951/68411?kind=1&hh=17&mm=32)
+
 - 鉄道運用Hub 南海電鉄 https://unyohub.2pd.jp/railroad_nankai/ の時刻表データ。平日、改正 2024-12-21。API は `timetable.php`（railroad_id=nankai、diagram_revision=2024-12-21、timetable_id=weekday）。運用表データは CC BY 4.0（Hub の表記）。
 - 取得は `scripts/oncoming-meets.ts` が以前に行い、`node_modules/.cache/unyohub/` に保存してある（取得日 2026-10-09）。今回はネットに取りに行かず、このキャッシュを読んだ。
 - 南海の公式時刻表は今回も取得していない。Hub と公式の照合は未実施。`docs/south-timetable-research.md` 1章でも公式は読めなかったと書かれている。

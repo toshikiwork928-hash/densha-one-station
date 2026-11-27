@@ -10,6 +10,19 @@ import { START_CLOCK } from '../core/config';
 import type { Route, ServiceId, TimeOfDay } from './types';
 import { applyMountainRealDiagram } from './mountain-real-diagram';
 
+export interface StationEncounter {
+  station: string;
+  /** 自列車が待避するか、先行列車を追い越すか。 */
+  role: 'waiting' | 'passing';
+  no: string;
+  svc: ServiceId;
+  code: string;
+  dest: string;
+  /** 相手列車のこの駅での着発（0時からの秒数）。 */
+  arrival: number;
+  departure: number;
+}
+
 export interface RealTrain {
   svc: ServiceId;
   /** 列車番号・始発駅・行先（実際の列車の） */
@@ -26,6 +39,7 @@ export interface RealTrain {
   arrAt?: Record<string, number>;
   /** 終着駅の到着（始発駅の発車からの秒）。-1 はゲームの最速で着く（待避で長く停まる駅） */
   arr: number;
+  encounters?: StationEncounter[];
 }
 type Day = { trains: RealTrain[]; waits: [string, ServiceId][] };
 const ROUTES = (data as unknown as { routes: Record<string, Partial<Record<TimeOfDay, Day>>> }).routes;

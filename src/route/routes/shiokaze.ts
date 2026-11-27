@@ -34,7 +34,7 @@ const stations: Station[] = names.map(([name, kana], i) => {
     ...([0, 3].includes(i) ? { loop: { ...LOOP } } : {}),
     ...(i === 9 ? { customPlatforms: SAKAI.platforms } : {}),
     // 堺（上り）は下り側の1・2番線と同じ並び: 普通は本線側の3番線、急行・特急は外側の4番線（左右対称の2面4線ではない）
-    ...(i === 0 ? { loopTrack: '1番線' } : {}),
+    ...(i === 0 ? { loopTrack: '4番線' } : {}),
     ...(i === 5 ? { loop: { ...PARK_LOOP } } : {}),
     // 湊は島式1面2線（高架）。線路は駅の前後でホームの両側へ開く。
     ...(i === 8 ? { island: { spread: 3.2, length: 100 } } : {}),
@@ -190,6 +190,7 @@ export const shiokazeUp: Route = reverseRoute(shiokaze, {
   id: 'shiokaze-up', name: '南海本線 堺 → 泉大津', timetable: TT_UP,
   oncomingStops: STOP_SCENES, signs: approachSigns,
 });
+shiokazeUp.stations[shiokazeUp.stations.length - 1].loopTrack = '1番線';
 
 // 堺（下りの始発）は通常の並び（普通 = 外側の1番線、優等 = 本線の2番線）
 // 堺（下りの始発）: 普通は外側の1番線（分岐器制限 45km/h）、優等は内側の2番線（本線）。横位置は上りの鏡像（2番線 = −9.4、1番線 = −18.8）

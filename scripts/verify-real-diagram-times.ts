@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { ROUTES } from '../src/route';
 import { applyRealDiagram, realDayOf, realTrainFor } from '../src/route/real-diagram';
 import { createState, departureTime } from '../src/game/state';
+import { playerPathLat } from '../src/route/service';
 
 const down = ROUTES['misaki-wakayamako'];
 assert(down, 'misaki-wakayamako route is missing');
@@ -81,5 +82,35 @@ for (const [id, alpha] of [['airport-namba', 'morning'], ['airport-namba-up', 'n
     assert.ok(route.services!.find(v => v.id === 'limited')!.name.includes(time === alpha ? 'α' : 'β'));
   }
 }
+
+// 同じ岸和田でも18:03のサザンと待ち合わせるのは夕方の下り空港急行だけ。
+const airportCourse = structuredClone(ROUTES['airport-namba']);
+let siding: number | undefined;
+for (const time of ['evening', 'morning', 'noon', 'night', 'evening'] as const) {
+  airportCourse.timeOfDay = time;
+  createState(airportCourse, { stageId: 'all', service: 'airport', vehicles: {}, mode: 'normal' });
+  const station = airportCourse.stations.find(s => s.name === '岸和田')!;
+  const train = realDayOf(airportCourse)!.trains.find(t => t.svc === 'airport')!;
+  const waiting = train.encounters?.find(e => e.station === '岸和田' && e.role === 'waiting' && e.no === '0603');
+  const track = station.enterLoop ? station.loopTrack : station.mainTrack;
+  const lat = playerPathLat(airportCourse, station.stopS);
+  if (time === 'evening') {
+    assert.ok(waiting);
+    assert.equal(Math.floor(waiting.departure / 60), 18 * 60 + 3);
+    assert.equal(track, '1番線');
+    assert.ok(train.encounters!.some(e => e.station === '泉大津' && e.role === 'passing' && e.no === '6513'));
+    assert.ok(!train.encounters!.some(e => e.station === '堺' && e.no === '6601'));
+    if (siding !== undefined) assert.equal(lat, siding);
+    siding = lat;
+  } else {
+    assert.equal(waiting, undefined);
+    assert.equal(track, '2番線');
+    assert.ok(Math.abs(lat - siding!) >= 3.4);
+  }
+}
+const southernCourse = ROUTES['namba-kishiwada-up'];
+const southern43 = realDayOf(southernCourse, 'evening')!.trains.find(t => t.no === '0603')!;
+assert.ok(southern43.encounters?.some(e => e.station === '岸和田' && e.role === 'passing' && e.no === '2197'));
+assert.ok(southern43.encounters?.some(e => e.station === '堺' && e.role === 'passing' && e.no === '6601'));
 
 console.log('real diagram connection times: OK');

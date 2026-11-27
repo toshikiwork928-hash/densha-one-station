@@ -287,14 +287,17 @@ for (const source of [shiokaze, shiokazeUp, kishiwada, kishiwadaUp, izumisano, i
   const compiled = await build({ stdin: { contents: source, resolveDir: process.cwd() + '/src/world', loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['three', 'three/*'], write: false, logLevel: 'silent' });
   const module = { exports: {} as { createOvertaking: (ctx: GameContext) => void } };
   new Function('require', 'module', 'exports', compiled.outputFiles[0].text)(createRequire(import.meta.url), module, module.exports);
-  for (const service of ['express', 'airport'] as const) {
-    const ctx = context(shiokazeUp, service, {}, 'evening'), coordinates: number[] = [], at = ctx.track.at.bind(ctx.track); // 日中の堺→泉大津の急行は実ダイヤに無い
+  {
+    const ctx = context(shiokazeUp, 'airport', {}, 'evening'), coordinates: number[] = [], at = ctx.track.at.bind(ctx.track);
     ctx.track.at = ((s: number, lat: number, y: number) => { coordinates.push(lat); return at(s, lat, y); }) as typeof ctx.track.at;
     ctx.state.state = 'run'; ctx.state.train.s = ctx.route.stations.at(-1)!.stopS - 200;
+    ctx.state.t = (17 * 60 + 55) * 60 + 12 - ctx.route.startClock;
     module.exports.createOvertaking(ctx); ctx.events.emit('frame', { dt: .1 });
-    assert.ok(coordinates.length >= 8, `${service}泉大津待機普通の台車を配置`);
-    assert.ok(coordinates.every(lat => Math.abs(lat + 9.2) < .001), `${service}泉大津待機普通は1番線に配置 ${coordinates}`);
-    assert.ok(ctx.scene.children.some(group => group.visible && group.name.endsWith(':goal')), '終着待機普通を表示');
+    const visibleLocal = () => ctx.scene.children.some(group => group.visible && group.userData.trainNo === '6513');
+    assert.ok(visibleLocal(), '泉大津17時55分の1番線に普通6513を表示');
+    assert.ok(coordinates.length >= 8 && coordinates.every(lat => Math.abs(lat + 9.2) < .001), '普通6513の全台車が1番線にある');
+    ctx.state.t += 15 * 60; ctx.events.emit('frame', { dt: .1 });
+    assert.ok(!visibleLocal(), '普通6513の出発後はホームを空ける');
   }
 }
 console.log('TOP種別・保存復元・入力選択・泉大津待機普通の配置を確認');
@@ -491,7 +494,7 @@ for (const route of [shiokaze, shiokazeUp]) {
     } else {
       const loop = service === 'local';
       assert.equal(!!sta.enterLoop, loop, `${route.id}/${service}終着の待避線入線`);
-      assert.equal(sta.enterLoop ? sta.loopTrack : sta.mainTrack ?? '', loop ? '1番線' : '', `${route.id}/${service}終着の番線名`);
+      assert.equal(sta.enterLoop ? sta.loopTrack : sta.mainTrack ?? '', loop ? '1番線' : '2番線', `${route.id}/${service}終着の番線名`);
       const z = loopZone(sta)!;
       assert.equal(ctx.track.limitAt(z.inFrom + 10), loop ? 45 : ctx.route.lineLimit, `${route.id}/${service}終着入線の制限`);
       assert.equal(ctx.track.limitAt(stop - 40) <= (loop ? 45 : 999), true);
