@@ -13,6 +13,7 @@ import { namba, nambaUp, NAMBA_TRACKS } from '../src/route/routes/namba';
 import { misakiWakayamako, misakiWakayamakoUp } from '../src/route/routes/misaki-wakayamako';
 import { approachText, departText } from '../src/audio/announce-text';
 import { applyService, destOf, sameClass, selectableServices } from '../src/route/service';
+import { limitChanges } from '../src/route/speed-limits';
 import { buildTrack } from '../src/route/track';
 import { loopZone, loopShape, maxStopLength, profileLat, trackLines } from '../src/route/service';
 import { coastalThirdTracks } from '../src/world/coastal-stations';
@@ -22,7 +23,7 @@ import { realTrainFor, realWaitsOf } from '../src/route/real-diagram';
 import { resetState, createState, departureTime, stagesOf, type VehicleSel } from '../src/game/state';
 import { createGame } from '../src/game/loop';
 import { EventBus } from '../src/core/events';
-import { createTrainEnv } from '../src/sim/train';
+import { createTrainEnv, stepTrain, TRAIN_PERF } from '../src/sim/train';
 import { createRng } from '../src/core/rng';
 import { attachAutodrive } from '../src/debug/autodrive';
 import { terminalSpeedLimit } from '../src/game/terminal-ats';
@@ -31,6 +32,30 @@ import type { GameContext } from '../src/core/context';
 import { createSignalSystem } from '../src/game/signals';
 
 (globalThis as any).window = {};
+
+// 重複制限の途中解除と、南部の下り勾配での予告距離を検査する。
+{
+  const route = structuredClone(misakiWakayamako);
+  route.lineLimit = 110;
+  route.limits = [{ from: 100, to: 500, kmh: 60 }, { from: 250, to: 650, kmh: 80 }, { from: 650, to: 700, kmh: 80 }];
+  assert.deepEqual(limitChanges(route).map(c => [c.s, c.kmh]), [[100, 60], [500, 80], [700, 110]]);
+  for (const source of [misakiWakayamako, misakiWakayamakoUp]) {
+    const r = structuredClone(source);
+    applyService(r, 'southern');
+    const track = buildTrack(r);
+    for (const c of limitChanges(r)) {
+      assert.equal(c.kmh, track.limitAt(c.s));
+      if (c.notice == null) continue;
+      // 予告から8秒間は惰行し、12000系の常用B6で制限速度に達する位置を測る。
+      const tr = { s: c.notice, v: r.lineLimit / 3.6, notch: 0, acc: 0 };
+      for (let t = 0; tr.s < c.s && tr.v * 3.6 > c.kmh; t += .05) {
+        tr.notch = t < 8 ? 0 : -6;
+        stepTrain(tr, { perf: TRAIN_PERF['southern-12000'], gradePermil: track.gradeAt(tr.s), adhesion: 1 }, .05);
+      }
+      assert.ok(tr.v * 3.6 <= c.kmh, `${r.id} ${c.s}m の ${c.kmh}km/h に間に合わない`);
+    }
+  }
+}
 
 // Play と同じ初期化で、途中駅開始を含む全ステージの発車時計・通過順序を調べる。
 {
@@ -46,11 +71,16 @@ import { createSignalSystem } from '../src/game/signals';
           let previous = -Infinity;
           for (let i = stage.from; i <= stage.to; i++) {
             const station = route.stations[i], tag = [route.id, timeOfDay, service, stage.id, station.name].join('/');
+            if (route.services?.find(v => v.id === service)?.cars === 4) {
+              assert.ok(Math.abs(station.stopS - route.trainLength / 2 - (station.platform.from + station.platform.to) / 2) < .01, tag + ' 4両の中央');
+            }
             const departure = departureTime(route, i);
             assert.ok(station.scheduledArrival > previous, tag + ' 時刻の順序');
             if (station.name === train.from || train.dep[station.name] != null) {
               assert.equal(route.startClock + departure, train.start + (train.dep[station.name] ?? 0), tag + ' 実発車時刻');
             }
+            const arrival = train.arrAt?.[station.name];
+            if (arrival != null) assert.equal(route.startClock + station.scheduledArrival, train.start + arrival, tag + ' 実到着時刻');
             if (station.name === train.end && train.arr >= 0) assert.equal(route.startClock + station.scheduledArrival, train.start + train.arr, tag);
             previous = station.pass ? station.scheduledArrival : departure;
           }
@@ -821,9 +851,9 @@ for (const source of [kishiwada, kishiwadaUp, izumisano, izumisanoUp, throughUp,
         // 優等列車は普通が止まってから着く（到着点 = 停止位置。通過列車は普通の停止位置を通過）
         const o = st.overtake;
         if (o && !o.cleared) {
-          const arrive = o.stopAt ?? ctx.route.stations[o.station].stopS;
+          const arrive = ctx.route.stations[o.station].platform.from;
           if (o.localStopped && stopT[o.station] == null) stopT[o.station] = st.t;
-          if (o.head >= arrive - .1 && arriveT[o.station] == null) arriveT[o.station] = st.t;
+          if (o.head >= arrive && arriveT[o.station] == null) arriveT[o.station] = st.t;
         }
         if (st.train.s > finalZone.inFrom + 20 && st.train.s < finalZone.outTo) zoneMax = Math.max(zoneMax, st.train.v * 3.6);
       }
@@ -844,7 +874,7 @@ for (const source of [kishiwada, kishiwadaUp, izumisano, izumisanoUp, throughUp,
     for (const k of Object.keys(stopT)) {
       const gap = arriveT[+k] - stopT[+k];
       console.log(`  待避 ${ctx.route.stations[+k].name}: 普通の停止から優等列車の到着まで ${gap.toFixed(1)}秒`);
-      assert.ok(gap >= 3, `${source.id}/${ctx.route.stations[+k].name} 優等列車は普通が止まってから着く`);
+      assert.ok(gap >= 15 - 1 / 30, `${source.id}/${ctx.route.stations[+k].name} 優等列車は普通が止まってから着く`);
     }
   }
 }

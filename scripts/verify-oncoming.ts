@@ -4,7 +4,7 @@ import { createMeet, planMeet } from '../src/game/meet';
 import { ROUTES } from '../src/route';
 import { hashSeed, scheduledConsist } from '../src/route/oncoming-stops';
 import { sakuragaoka } from '../src/route/routes/sakuragaoka';
-import { applyService, islandOffset, playerPathLat, WAKAYAMA_DEST } from '../src/route/service';
+import { applyService, islandOffset, playerPathLat, carLenOf, WAKAYAMA_DEST } from '../src/route/service';
 import type { CounterTrain } from '../src/world/oncoming-timetable';
 
 // oncoming-timetable は描画アダプタも同居しており、モジュール初期化時だけ発光用 canvas を作る。
@@ -121,6 +121,15 @@ function assertSafety(routeId: string, tod: Tod): void {
       verify(a.s > b.s, `${routeId}/${tod}/${plan.id}: s が降順でない`);
       verify(a.depart <= b.depart, `${routeId}/${tod}/${plan.id}: 時刻が逆行`);
     }
+    const formation = scheduledConsist(plan.code, hashSeed(plan.id), false);
+    for (const p of plan.points) if (p.stop && p.station != null) {
+      const sta = route.stations[p.station];
+      if (formation.cars !== 4 && sta.name !== '泉佐野') continue;
+      const tail = p.s + formation.cars * carLenOf(formation.kind);
+      const offset = sta.platformOpp ?? 0;
+      verify(Math.abs((p.s - sta.platform.from - offset) - (sta.platform.to + offset - tail)) < .01,
+        `${routeId}/${tod}/${plan.id}: ${sta.name}で編成の両端とホーム端までの距離が違う`);
+    }
     for (const p of plan.points) if (p.stop && p.station != null) {
       verify(route.stations[p.station] != null, `${routeId}/${tod}/${plan.id}: 停車駅 ${p.station} がない`);
     }
@@ -152,7 +161,7 @@ function assertSafety(routeId: string, tod: Tod): void {
         admitted.add(t.id);
       }
       const inSection = t.head > route.extent.from && t.head + t.length < route.extent.to;
-      const atPlatform = route.stations.some(s => t.head + t.length >= s.platform.from && t.head <= s.platform.to);
+      const atPlatform = route.stations.some(s => t.head + t.length >= s.platform.from + (s.platformOpp ?? 0) && t.head <= s.platform.to + (s.platformOpp ?? 0));
       if (!t.active || t.v >= .05 || !inSection || atPlatform) { stationarySince.delete(t.id); continue; }
       // 同じ進路の先行・合流列車が閉そくを占める間は信号待ちがあり得る。
       // 進路が空いた後の静止と、泉大津の待避線にいる普通を本線の障害とする不具合を検出する。
@@ -221,13 +230,36 @@ for (const routeId of routeIds) for (const tod of TODS) {
   assertSafety(routeId, tod);
 }
 
+// 夕方のなんば。サザンが5番線へ入る間、6番線から出る急行をホームに留める。
+{
+  const route = structuredClone(ROUTES.namba);
+  route.timeOfDay = 'evening';
+  applyService(route, 'southern');
+  const traffic = createCounterTraffic(route, 'evening', consist, 'southern');
+  const express = traffic.trains.find(t => t.code.startsWith('E') && t.plan.points[0].station === route.stations.length - 1)!;
+  const origin = express.plan.points[0], arrival = route.stations.at(-1)!.stopS;
+  let held = false, released = false;
+  for (let clock = origin.arrive - 1; clock <= origin.depart + 160; clock += .1) {
+    const head = Math.min(arrival, arrival - 650 + Math.max(0, clock - origin.depart + 20) * 8);
+    traffic.update(clock, head);
+    if (clock >= origin.depart + 2 && clock < origin.depart + 5) held ||= express.stopped && Math.abs(express.head - origin.s) < .1;
+    released ||= express.active && express.head < origin.s - 10;
+    for (const t of traffic.trains) if (t.active) {
+      const from = Math.max(head - route.trainLength, t.head), to = Math.min(head, t.head + t.length);
+      for (let s = from; s <= to; s += 1) verifyLazy(Math.abs(playerPathLat(route, s) - traffic.laneAt(t, s)) >= 3.4,
+        () => `なんばで入線中のサザンと発車列車 ${t.id} の進路が重なる s=${s}`);
+    }
+  }
+  verify(held && released, 'なんばの急行は進路開通後に発車する');
+}
+
 // 朝の堺〜岸和田: 堺での普通6602と区急3808は同時停車しても3/4番線に分かれる。
 const throughMorning = ROUTES['nankai-through-up'];
 const throughTraffic = createCounterTraffic(throughMorning, 'morning', consist);
 throughTraffic.update(START_CLOCK.morning + 40);
 const train6602 = throughTraffic.trains.find(t => t.id === '6602');
 const train3808 = throughTraffic.trains.find(t => t.id === '3808');
-verify(train6602?.active && train6602.stopped && train6602.station === 0 && Math.abs(train6602.head - 388) < .1,
+verify(train6602?.active && train6602.stopped && train6602.station === 0 && Math.abs(train6602.head - train6602.plan.points.find(p => p.station === 0)!.s) < .1,
   '朝 堺→岸和田: 6602 が堺3番線の停止位置にいない');
 verify(train3808?.active && train3808.stopped && train3808.station === 0 && Math.abs(train3808.head - 388) < .1,
   '朝 堺→岸和田: 3808 が堺4番線の停止位置にいない');

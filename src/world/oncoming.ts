@@ -11,7 +11,7 @@ import { front7169ForRoute } from '../route/vehicle-direction';
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import type { OncomingSpec, ServiceId, Station, TimeOfDay, TrainKind } from '../route/types';
-import { carLenOf, customPlatformSide, islandOffset, loopShape, loopZone, sameClass, seaSideOf, serviceOf, WAKAYAMA_DEST, type LoopZone } from '../route/service';
+import { carLenOf, centeredHead, customPlatformSide, islandOffset, loopShape, loopZone, sameClass, seaSideOf, serviceOf, WAKAYAMA_DEST, type LoopZone } from '../route/service';
 import { classOfSpec, hourlyOf, planOncoming, runClasses, runConsist, scheduledConsist, rushStopScenes, tokkyuOrder, type TrainClass } from '../route/oncoming-stops';
 import MEETS from '../data/oncoming-meets.json';
 import { counterTimetable, createTimetableOncoming } from './oncoming-timetable';
@@ -349,10 +349,15 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
     const stops = (id === 'local' || !svc ? route.stations.map((_, i) => i) : svc.stops)
       .filter(i => !alpha || ['なんば', '難波', '新今宮', '天下茶屋'].includes(route.stations[i].name));
     const len = o.spec.cars * (o.spec.carLen + o.spec.gap), dwell = id === 'local' ? HALT_DWELL_LOCAL : HALT_DWELL_FAST;
-    return stops.map((i): Halt => ({ station: i, headS: route.stations[i].platform.from + HALT_MARGIN, scene: false, dwell, done: false }))
+    return stops.map((i): Halt => {
+      const sta = route.stations[i], offset = sta.platformOpp ?? 0;
+      const headS = o.spec.cars === 4 || sta.name === '泉佐野'
+        ? centeredHead(sta.platform, -o.spec.cars * o.spec.carLen) + offset : sta.platform.from + offset + HALT_MARGIN;
+      return { station: i, headS, scene: false, dwell, done: false };
+    })
       .filter(h => {
         const sta = route.stations[h.station];
-        if (h.headS > o.spec.startS - 100 || h.headS + len > sta.platform.to + 1) return false; // 出現位置の先・ホームに収まる
+        if (h.headS > o.spec.startS - 100 || h.headS + len > sta.platform.to + (sta.platformOpp ?? 0) + 1) return false; // 出現位置の先・ホームに収まる
         return platformFor(sta, laneLat(o, h.headS + len / 2));
       })
       .sort((a, b) => b.headS - a.headS);
@@ -383,7 +388,10 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
           if (sc.stop!.loop) lat = sc.lat;
           spec = { ...base, lat, spawnAt: sc.spawnAt, startS: sc.startS, stop: { ...sc.stop! } };
         } else if (platformFor(sta, lat + islandOffset(route, lat, sta.platform.from + 40))) {
-          spec = { ...base, lat, spawnAt: sta.platform.from - 2600, startS: Math.min(sta.platform.to + 800, sMax), stop: { station: st, headS: sta.platform.from + 8 } };
+          const headS = base.cars === 4 || sta.name === '泉佐野'
+            ? centeredHead(sta.platform, -base.cars * base.carLen) + (sta.platformOpp ?? 0)
+            : sta.platform.from + HALT_MARGIN;
+          spec = { ...base, lat, spawnAt: sta.platform.from - 2600, startS: Math.min(sta.platform.to + 800, sMax), stop: { station: st, headS } };
         }
       }
       if (!spec) {

@@ -5,12 +5,12 @@ import * as THREE from 'three';
 import DATA from '../data/oncoming-timetable.json';
 import type { GameContext } from '../core/context';
 import type { LatProfile, OncomingSpec, Route, ServiceId, TimeOfDay } from '../route/types';
-import { customPlatformSide, islandOffset, loopShape, loopZone, profileLat, serviceOf, type LoopZone } from '../route/service';
+import { customPlatformSide, islandOffset, loopShape, loopZone, playerPathLat, profileLat, serviceOf, carLenOf, centeredHead, type LoopZone } from '../route/service';
 import { createTrainSet, type TrainCar } from './train-models';
 import { TERMINAL_CHECKPOINTS } from '../game/terminal-ats';
 import { placeCar } from './emu';
 import { coastalThirdTracks } from './coastal-stations';
-import { hashSeed } from '../route/oncoming-stops';
+import { hashSeed, scheduledConsist } from '../route/oncoming-stops';
 
 export interface TimedPoint { s: number; depart: number; stop: boolean; station: number | null }
 export interface TimedTrain { id: string; code: string; dest?: string; points: TimedPoint[] }
@@ -30,7 +30,7 @@ function minimumRun(distance: number, speed: number, a: boolean, b: boolean) {
 }
 
 /** 同区間・同種別の短い所要時間から通常走行を推定。余分な時間は到着後の待避に割り当てる。 */
-export function makeCounterPlans(route: Route, tod: TimeOfDay) {
+export function makeCounterPlans(route: Route, tod: TimeOfDay, skipSharedOrigin = false) {
   const samples = new Map<string, number>();
   for (const list of Object.values(tables[route.id] ?? {})) for (const tr of list) for (let i = 1; i < tr.points.length; i++) {
     const a = tr.points[i - 1], b = tr.points[i], duration = b.depart - a.depart;
@@ -40,14 +40,24 @@ export function makeCounterPlans(route: Route, tod: TimeOfDay) {
     }
   }
   return (counterTimetable(route.id, tod) ?? []).map(tr => {
-    const points: Point[] = tr.points.map(p => ({ ...p, arrive: p.depart - (p.stop ? DWELL : 0) }));
+    const spec = scheduledConsist(tr.code, hashSeed(tr.id), false);
+    const length = spec.cars * carLenOf(spec.kind);
+    // 自列車の到着番線と発車番線が同じときは、通しコース同様、対向列車を新今宮から運行する。
+    const source = skipSharedOrigin && tr.points[0].station === route.stations.length - 1 ? tr.points.slice(1) : tr.points;
+    const points: Point[] = source.map(p => {
+      const sta = p.station == null ? undefined : route.stations[p.station];
+      // 対向列車の最後尾は先頭より s が大きい。泉佐野では空港線から来る列車もホーム内に収める。
+      const center = p.stop && sta && (spec.cars === 4 || sta.name === '泉佐野');
+      const s = center ? centeredHead(sta.platform, -length) + (sta.platformOpp ?? 0) : p.s + (p.stop ? sta?.platformOpp ?? 0 : 0);
+      return { ...p, s, arrive: p.depart - (p.stop ? DWELL : 0) };
+    });
     const segments: Segment[] = [];
     for (let i = 1; i < points.length; i++) {
       const a = points[i - 1], b = points[i], distance = a.s - b.s;
       const minimal = minimumRun(distance, maximumSpeed(tr.code), a.stop, b.stop);
       // 分単位の原時刻が加減速・戸扱いに不足する場合は、早発せず後ろへずらす。
       b.depart = Math.max(b.depart, a.depart + minimal + (b.stop ? MIN_DWELL : 0));
-      const normal = (samples.get(keyOf(a, b, tr.code)) ?? b.depart - a.depart) - (b.stop ? DWELL : 0);
+      const normal = (samples.get(keyOf(source[i - 1], source[i], tr.code)) ?? b.depart - a.depart) - (b.stop ? DWELL : 0);
       const duration = Math.min(b.depart - a.depart - (b.stop ? MIN_DWELL : 0), Math.max(minimal, normal));
       b.arrive = b.stop ? a.depart + duration : b.depart;
       const travel = b.arrive - a.depart;
@@ -110,7 +120,11 @@ export function sameLaneAhead(laneAt: (o: CounterTrain, s: number) => number, a:
 export function createCounterTraffic(route: Route, tod: TimeOfDay, consist: (code: string, ordinal: number, playerTowardNamba: boolean) => Consist, player?: ServiceId) {
   const playerTowardNamba = route.lineId === 'airport' ? route.stations[0].name === '関西空港' : serviceOf(route, 'local')?.destination === 'なんば';
   const main = route.oncoming.find(o => !o.stop && !o.follow && o.lat !== route.oncomingLocal?.lat)?.lat ?? 4;
-  const plans = makeCounterPlans(route, tod);
+  const terminal = route.stations.at(-1)!;
+  const berth = (terminal.platform.from + terminal.platform.to) / 2;
+  const sharedBerth = !!player && terminal.name === 'なんば'
+    && Math.abs(playerPathLat(route, berth) - main - islandOffset(route, main, berth)) < 3.5;
+  const plans = makeCounterPlans(route, tod, sharedBerth);
   const isShiokaze = route.id === 'shiokaze';
   const trains: CounterTrain[] = plans.map(plan => {
     // 同じ列車番号には、選んだ区間や時間帯によらず同じ編成を割り当てる。
@@ -256,15 +270,30 @@ export function createCounterTraffic(route: Route, tod: TimeOfDay, consist: (cod
     }
     return floor;
   };
+  // なんばの渡り線では5番線へ入るサザンと6番線からの発車列車が平面交差する。
+  // 自列車が新今宮へ近づいたら進路を確保し、最後尾が交差箇所を抜けるまで発車を待つ。
+  const junctions = new Map<CounterTrain, { first: number; last: number }>();
+  if (player && terminal.name === 'なんば') {
+    for (const train of trains) {
+      const origin = train.plan.points[0];
+      if (origin.station !== route.stations.length - 1) continue;
+      const overlaps = (s: number) => Math.abs(playerPathLat(route, s) - laneAt(train, s)) < 3.5;
+      let first = Infinity, last = -Infinity;
+      for (let s = terminal.platform.from - 900; s <= terminal.platform.to; s++) {
+        if (overlaps(s)) { first = Math.min(s, first); last = s; }
+      }
+      if (Number.isFinite(first)) junctions.set(train, { first, last });
+    }
+  }
   let lastClock: number | undefined;
-  const update = (clock: number) => {
+  const update = (clock: number, playerHead?: number) => {
     if (clock === lastClock) return;
     if (lastClock != null && clock < lastClock) {
       for (const o of trains) Object.assign(o, { head: Infinity, v: 0, delay: 0, active: false, finished: false, stopped: false, station: null, arrivedClock: undefined });
       lastClock = undefined;
     }
     if (lastClock != null && clock - lastClock > .101) {
-      while (clock - lastClock > .101) update(lastClock + .1);
+      while (clock - lastClock > .101) update(lastClock + .1, playerHead);
     }
     const initial = lastClock == null || clock < lastClock;
     const dt = initial ? 0 : Math.max(0, clock - lastClock!); lastClock = clock;
@@ -272,6 +301,14 @@ export function createCounterTraffic(route: Route, tod: TimeOfDay, consist: (cod
     const position = (o: CounterTrain) => isShiokaze && o.active ? o.head : o.plan.at(clock - o.delay)?.head ?? Infinity;
     const ordered = trains.filter(o => !o.finished).sort((a, b) => position(a) - position(b));
     for (const o of ordered) {
+      const junction = junctions.get(o), origin = o.plan.points[0];
+      if (junction && playerHead != null && playerHead >= junction.first - 2400 && playerHead - route.trainLength <= junction.last + 8) {
+        // 別番線の発車待ちは維持し、既に発車した列車はそのまま進める。
+        const waiting = !o.active || o.head >= origin.s - .01;
+        if (waiting && (o.active || (o.plan.at(clock - o.delay)?.head ?? -Infinity) + o.length >= junction.first)) {
+          o.delay = Math.max(o.delay, clock - origin.depart);
+        }
+      }
       let m = o.plan.at(clock - o.delay);
       if (!m) {
         if (clock - o.delay > o.plan.points.at(-1)!.depart) { o.finished = true; o.active = false; }
@@ -340,7 +377,7 @@ export function createTimetableOncoming(ctx: GameContext, consist: (code: string
   const update = () => {
     if (!counterTimetable(ctx.route.id, ctx.envState.timeOfDay) || ctx.route.singleTrack) return false;
     traffic ??= createCounterTraffic(ctx.route, ctx.envState.timeOfDay, consist, ctx.state.sel.service);
-    traffic.update(ctx.route.startClock + ctx.state.t);
+    traffic.update(ctx.route.startClock + ctx.state.t, ctx.state.train.s);
     const ps = ctx.state.train.s;
     const visible = new Set(traffic.trains.filter(o => o.active && o.head <= ctx.route.extent.to && o.head + o.length >= ctx.route.extent.from && o.head > ps - 500 - ctx.route.trainLength && o.head < ps + 2400));
     for (const view of pool) if (view.train && !visible.has(view.train)) { view.group.visible = false; view.train = undefined; }

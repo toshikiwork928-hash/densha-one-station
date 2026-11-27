@@ -62,7 +62,7 @@ function longCourse(a: Route, b: Route, id: string): Route {
     local.runPassesByTime[time] = [...(first.runPassesByTime?.[time] ?? []),
       ...(second.runPassesByTime?.[time] ?? []).map(p => ({ ...p, from: join + p.from, to: join + p.to }))];
     const passers = waits.filter(w => w.station === join).map(w => route.services!.find(v => v.id === w.passedBy)!);
-    const dwell = passers.length ? waitDwell(route, join, passers, local.cars) : 25;
+    const dwell = passers.length ? waitDwell(route, join, passers) : 25;
     local.timetableByTime[time] = joinTimes(first.timetableByTime?.[time] ?? first.timetable,
       second.timetableByTime?.[time] ?? second.timetable, join, dwell);
   }

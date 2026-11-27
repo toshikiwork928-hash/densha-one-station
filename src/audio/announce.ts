@@ -32,8 +32,7 @@ export function createAnnouncer(): Announcer {
     if (!synth || volume <= 0) return;
     try {
       if (!voice) pickVoice();
-      // 表示は「ラピートβ」、読み上げは「ラピートベータ」
-      const u = new SpeechSynthesisUtterance(text.replace(/β/g, 'ベータ'));
+      const u = new SpeechSynthesisUtterance(text.replace(/α/g, 'アルファ').replace(/β/g, 'ベータ'));
       u.lang = 'ja-JP'; if (voice) u.voice = voice;
       u.rate = 1.0; u.pitch = 1.0; u.volume = Math.max(0, Math.min(1, volume));
       const done = () => { if (paused) return; const i = speaking.indexOf(text); if (i >= 0) speaking.splice(i, 1); };

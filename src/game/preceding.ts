@@ -1,7 +1,7 @@
 // 先行列車（見えない仮想列車）と閉そく信号の現示計算。純関数のみ（テスト・調整用に DOM 非依存）
 import type { SignalAspect } from '../core/events';
 import type { Route, ServiceId, ServiceSpec } from '../route/types';
-import { carLenOf, profileLat, sameClass } from '../route/service';
+import { carLenOf, profileLat, sameClass, stationStopS } from '../route/service';
 
 /** 先行列車の自列車に対する時隔 [s]（種別あり路線は HEADWAY_BY が優先） */
 const HEADWAY = 240;
@@ -9,8 +9,6 @@ const HEADWAY = 240;
 const LOCAL_STOP = 75;
 /** 先行（各駅停車）の停車駅での追加停車 [s] */
 const EXTRA_DWELL = 15;
-/** 先行列車の編成長 [m]（普通 4両） */
-const PREC_LEN = 80;
 /** 最後の信号の閉そく長 [m]（終端側の閉そくを有限にする） */
 const LAST_BLOCK = 500;
 /** 種別ごとの先行普通との時隔 [s] と停車駅ごとの追加停車 [s]（普通の後ろを走る急行・特急は途中で追いつく） */
@@ -42,12 +40,13 @@ export function buildPrecedingKeys(route: Route, service?: ServiceId): Preceding
     let extra = 0;
     route.stations.forEach((sta, i) => {
       if (!preceding.stops.includes(i)) return;
+      const stop = stationStopS(route, i, preceding);
       const tt = preceding.timetable[i] ?? { arr: sta.scheduledArrival };
-      if (i === 0) { keys.push({ t: -1e6, s: sta.stopS }, { t: -h, s: sta.stopS }); depT[i] = -h; return; }
+      if (i === 0) { keys.push({ t: -1e6, s: stop }, { t: -h, s: stop }); depT[i] = -h; return; }
       const arr = tt.arr - h + extra;
       if (local) extra += ex;
       const dep = (tt.dep ?? tt.arr + 20) - h + extra;
-      keys.push({ t: arr, s: sta.stopS }, { t: dep, s: sta.stopS });
+      keys.push({ t: arr, s: stop }, { t: dep, s: stop });
       arrT[i] = arr; depT[i] = dep;
     });
   } else {
@@ -88,7 +87,9 @@ export function buildPrecedingKeys(route: Route, service?: ServiceId): Preceding
   if (preceding?.useLoop && lastSta?.loop && !lastSta.loopPriority) keys.push({ t: 1e6, s: last.s });
   else if (apart) keys.push({ t: last.t + 1, s: last.s + 1e5 }, { t: 1e6, s: last.s + 1e5 });
   else keys.push({ t: last.t + 140, s: last.s + 2500 }, { t: 1e6, s: last.s + 2500 });
-  return { keys, depT, arrT, length: airport ? airport.cars * carLenOf(airport.kind) : PREC_LEN, usesLocalLoops: !airport };
+  // 閉そく占有長は固定値ではなく、実際に先行させる普通の編成長を使う。
+  const length = preceding ? preceding.cars * carLenOf(preceding.kind) : 4 * 20;
+  return { keys, depT, arrT, length, usesLocalLoops: !airport };
 }
 
 /** 時刻 t の先行列車先頭位置 */

@@ -1,13 +1,22 @@
 // 運行種別（普通・急行・特急）の適用と、2面4線駅の待避線の形状
 // route は各モジュールが参照を保持しているので、種別の切替は route の中身を書き換えて反映する（元データは初回に退避）
 import type { LatProfile, Route, ServiceId, ServiceSpec, SpeedLimit, Station, TimeOfDay, TrainKind } from './types';
-import { realServiceAvailable } from './real-diagram';
+import { realDayOf, realServiceAvailable } from './real-diagram';
+
+/** 時間帯と方向が同じ代表列車から、ラピートの名称と停車駅を取得する。 */
+function rapitPattern(route: Route, tod = route.timeOfDay): Pick<ServiceSpec, 'name' | 'stops'> | undefined {
+  const train = realDayOf(route, tod)?.trains.find(t => t.svc === 'limited');
+  if (!train) return undefined;
+  const names = new Set([train.from, ...Object.keys(train.dep), train.end]);
+  return { name: train.name ?? '特急ラピートβ', stops: route.stations.flatMap((s, i) => names.has(s.name) ? [i] : []) };
+}
 
 /** TOPで選べる種別。南海本線の特急は、コース両端も実際の停車駅に限る（ラピートβ: 難波・新今宮・天下茶屋・堺・岸和田・泉佐野。
  *  特急サザンはそれに加えて、みさき公園・和歌山大学前・和歌山市・和歌山港など、泉佐野より和歌山側の停車駅）。 */
 export function selectableServices(route: Route, timeOfDay = route.timeOfDay): ServiceSpec[] {
   // 実ダイヤのあるコースは、その時間帯に実際に走る種別だけ（日中の急行など、実際に無いものは選べない。route/real-diagram.ts）
-  const services = (route.services ?? []).filter(v => realServiceAvailable(route, v.id, timeOfDay));
+  const services = (route.services ?? []).filter(v => realServiceAvailable(route, v.id, timeOfDay))
+    .map(v => v.id === 'limited' && v.kind === 'limited' ? { ...v, ...rapitPattern(route, timeOfDay) } : v);
   if (route.lineId !== 'shiokaze') return services;
   const limitedStops = new Set(['なんば', '新今宮', '天下茶屋', '堺', '岸和田', '泉佐野']);
   const southernStops = new Set([...limitedStops, '尾崎', 'みさき公園', '和歌山大学前', '和歌山市', '和歌山港']);
@@ -235,8 +244,20 @@ export function stationLoopLat(route: Route, s: number): number {
   return lat;
 }
 
-interface Base { stations: Station[]; limits: SpeedLimit[]; trainLength: number; startS: number; lineLimit: number }
+interface Base { stations: Station[]; signs: Route['signs']; limits: SpeedLimit[]; trainLength: number; startS: number; lineLimit: number }
 const bases = new WeakMap<Route, Base>();
+
+/** 編成中央がホーム中央に来る先頭位置。対向列車は編成長を負で渡す。 */
+export const centeredHead = (platform: Pick<Station['platform'], 'from' | 'to'>, signedLength: number): number =>
+  (platform.from + platform.to + signedLength) / 2;
+
+/** 4両編成の中央をホーム中央に合わせ、他の編成は駅の基準停止位置から求める。 */
+export function stationStopS(route: Route, index: number, service: Pick<ServiceSpec, 'kind' | 'cars'>): number {
+  const sta = bases.get(route)?.stations[index] ?? route.stations[index];
+  const carLen = carLenOf(service.kind);
+  if (service.cars === 4) return centeredHead(sta.platform, service.cars * carLen);
+  return sta.stopS - stopOffset(service.cars, carLen, route.stopBaseCars);
+}
 
 export const serviceOf = (route: Route, id: ServiceId | undefined): ServiceSpec | undefined =>
   route.services?.find(s => s.id === id) ?? route.services?.[0];
@@ -299,6 +320,7 @@ export function applyTimeOfDay(route: Route, tod: TimeOfDay = route.timeOfDay ??
     v.waits = v.waitsByTime ? [...(v.waitsByTime[tod] ?? [])] : b.waits;
     v.runPasses = v.runPassesByTime?.[tod] ?? [];
     v.timetable = v.timetableByTime?.[tod] ?? b.timetable;
+    if (v.id === 'limited' && v.kind === 'limited') Object.assign(v, rapitPattern(route, tod));
   }
 }
 
@@ -309,19 +331,19 @@ export function applyService(route: Route, id: ServiceId | undefined): ServiceSp
   if (!svc) return undefined;
   let b = bases.get(route);
   if (!b) {
-    b = { stations: route.stations.map(s => ({ ...s, platform: { ...s.platform } })), limits: route.limits.map(L => ({ ...L })), trainLength: route.trainLength, startS: route.startS, lineLimit: route.lineLimit };
+    b = { signs: route.signs.slice(), stations: route.stations.map(s => ({ ...s, platform: { ...s.platform } })), limits: route.limits.map(L => ({ ...L })), trainLength: route.trainLength, startS: route.startS, lineLimit: route.lineLimit };
     bases.set(route, b);
   }
-  const carLen = carLenOf(svc.kind), len = svc.cars * carLen, off = stopOffset(svc.cars, carLen, route.stopBaseCars ?? BASE_CARS);
+  const len = svc.cars * carLenOf(svc.kind);
   route.trainLength = len;
   route.activeLane = svc.lane;
   route.activeServiceId = svc.id;
   route.lineLimit = svc.lineLimit ?? b.lineLimit; // 種別ごとの最高速度（曲線・分岐器の制限は共通）
-  route.startS = b.startS - off;
+  route.startS = b.startS + (stationStopS(route, 0, svc) - b.stations[0].stopS);
   route.stations.forEach((sta, i) => {
     const base = b.stations[i], tt = svc.timetable[i];
     sta.pass = svc.stops.includes(i) ? undefined : true;
-    sta.stopS = base.stopS - off;
+    sta.stopS = stationStopS(route, i, svc);
     sta.scheduledArrival = tt?.arr ?? base.scheduledArrival;
     sta.dwell = tt?.dep != null ? tt.dep - tt.arr : undefined;
     sta.stopMarkerCars = svc.cars;
@@ -334,6 +356,17 @@ export function applyService(route: Route, id: ServiceId | undefined): ServiceSp
     // 2面4線: 待避線に入ると右側、本線は左側がホーム。島式1面2線: 自線の右側
     // 待避線のホームが外側にある駅（浜寺公園の堺方面）は、待避線に入ると待避線の外（左）がホーム
     sta.platform.side = sta.island ? 'R' : sta.loop ? (sta.enterLoop ? (sta.loop.outside ? (sta.loop.lat < 0 ? 'L' : 'R') : 'R') : 'L') : svc.platformSides?.[i] ?? base.platform.side;
+  });
+  // 距離標は選択編成の停止位置から測り、4両用の停止目標はホーム中央から求める。
+  const baseStations = b.stations;
+  route.signs = b.signs.map(sign => {
+    if (sign.kind !== 'distance' && !(sign.kind === 'stopMarker' && sign.cars === 4)) return sign;
+    const index = sign.kind === 'distance'
+      ? baseStations.findIndex(sta => Math.abs(sta.stopS - sign.s - sign.meters) < .01)
+      : baseStations.findIndex(sta => sign.s >= sta.platform.from && sign.s <= sta.platform.to);
+    if (index < 0) return sign;
+    const s = sign.kind === 'distance' ? route.stations[index].stopS - sign.meters : stationStopS(route, index, { cars: 4, kind: svc.kind });
+    return { ...sign, s };
   });
   // 曲線制限の解除位置は編成長に合わせる（元データは base.trainLength 分を含む）
   const lim: SpeedLimit[] = b.limits.map(L => ({ ...L, to: L.to - b.trainLength + len }));
@@ -351,6 +384,6 @@ export function applyService(route: Route, id: ServiceId | undefined): ServiceSp
   });
   for (const L of svc.laneLimits ?? []) lim.push({ ...L, to: L.to + len });
   lim.sort((a, c) => a.from - c.from);
-  route.limits.splice(0, route.limits.length, ...lim);
+  route.limits = lim;
   return svc;
 }

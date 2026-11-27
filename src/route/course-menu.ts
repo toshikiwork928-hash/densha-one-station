@@ -3,7 +3,7 @@ import { selectableServices } from './service';
 import type { ServiceId, ServiceSpec, TimeOfDay } from './types';
 
 /** 同じ時間帯で全方向を調べ、種別ごとの運転候補を作る。 */
-export function courseMenu(line: LineEntry, timeOfDay: TimeOfDay) {
+export function courseMenu(line: LineEntry, timeOfDay: TimeOfDay, currentId?: string) {
   const services = new Map<ServiceId, ServiceSpec>();
   const routes = new Map<ServiceId, Set<string>>();
   for (const dir of line.dirs) {
@@ -24,6 +24,12 @@ export function courseMenu(line: LineEntry, timeOfDay: TimeOfDay) {
       ?? dirs.find(d => section?.dirs.some(other => other.id === d.id))
       ?? dirs.find(d => d.label === current?.label)
       ?? dirs[0];
+  }
+  // 同じ特急枠でも上下でα・βが異なる。ボタンには押したときに選ばれる方向の種別名を出す。
+  const limitedDir = currentId && preferred('limited', currentId);
+  if (limitedDir) {
+    const limited = selectableServices(ROUTES[limitedDir.id], timeOfDay).find(s => s.id === 'limited');
+    if (limited) services.set('limited', limited);
   }
   return { services: [...services.values()], directions, preferred };
 }

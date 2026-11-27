@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { crossingSpans, type RoadApproaches } from './crossing-roads';
 import type { GameContext } from '../core/context';
+import type { GameStateName } from '../game/state';
 import { GeoBatch, M, P, basePart, onLight } from './batch';
 import { glowTexture } from './emu';
 import { cullByDistance } from './cull';
@@ -21,6 +22,11 @@ interface CrossingRt {
 
 const YEL = 0xf2c200, BLK = 0x1a1a1a;
 const LENS = basePart(new THREE.CircleGeometry(.15, 16));
+
+/** 自列車が前方の踏切を作動させる接近判定。停車しても判定を維持する。 */
+export function crossingApproachActive(state: GameStateName, distance: number): boolean {
+  return (state === 'run' || state === 'dwell') && distance > 0 && distance < APPROACH;
+}
 
 /** 遮断機・警報機1基（ローカル: -x = 道路の外向き, -z = 遮断かんが伸びる向き, 原点 = 地面） */
 function buildMachine(withArm: boolean, armLen: number, lensA: THREE.Material, lensB: THREE.Material, glowA: THREE.Sprite[], glowB: THREE.Sprite[], glowMat: THREE.SpriteMaterial): { grp: THREE.Group; arm?: THREE.Object3D } {
@@ -146,12 +152,13 @@ export function buildCrossings(ctx: GameContext, oncoming: OncomingSystem, appro
   events.on('reset', () => { for (const r of rts) { if (r.active) events.emit('crossing', { id: r.id, s: r.s, active: false, distance: r.s - ctx.state.train.s }); r.active = false; r.arm = 0; } });
 
   events.on('frame', ({ dt, time }) => {
-    const { s, v } = ctx.state.train, running = ctx.state.state === 'run';
+    const { s } = ctx.state.train;
     const spans = oncoming.activeSpans();
     for (const r of rts) {
       const d = r.s - s, half = r.w / 2 + 2;
       const occupied = d <= half && s - route.trainLength <= r.s + half;
-      const approach = running && d > 0 && d < APPROACH && (v > .5 || (r.active && d < 150));
+      // 駅へ進入して停車しても、再発車まで鳴動を維持する。
+      const approach = crossingApproachActive(ctx.state.state, d);
       const onc = spans.some(o => (o.head > r.s - half && o.head - r.s < ONCOMING_APPROACH) || (o.head <= r.s + half && o.tail >= r.s - half));
       const act = occupied || approach || onc;
       if (act !== r.active) {

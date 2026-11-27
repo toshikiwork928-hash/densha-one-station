@@ -1,6 +1,8 @@
 // 夜間照明: 自列車の前照灯、駅ホーム照明（点光源少数 + 偽の光だまり）、沿線の街灯
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
+import { catenaryPoles } from '../world/catenary';
+import { trackLines } from '../route/service';
 import { getTerrain } from '../world/terrain';
 import { coastalThirdTracks } from '../world/coastal-stations';
 import { hagoromoSpec } from '../world/hagoromo-branch';
@@ -49,7 +51,7 @@ export function createNightLights(ctx: GameContext): NightLights {
   const pools: { s: number; lat: number; y: number; r: number; g?: number }[] = [];
   // 光源の芯（発光体）
   const bulbs: { s: number; lat: number; y: number; w: number; d: number; g?: number }[] = [];
-  const glows: { s: number; g: number }[] = [];
+  const glows: { s: number; lat: number; g: number }[] = [];
   // 点光源は2灯だけ用意し、列車に最も近い駅へ移動させる（光源数を固定してシェーダ再生成と負荷を抑える）
   const platLights = [0, 1].map(() => { const pl = new THREE.PointLight(PLAT_COLOR, 0, 30, 1.5); scene.add(pl); return pl; });
   const platSpots: { sc: number; pos: THREE.Vector3[] }[] = [];
@@ -93,16 +95,20 @@ export function createNightLights(ctx: GameContext): NightLights {
   // 沿線の街灯（左側の地上区間のみ。ホーム・トンネル・高架・橋梁・踏切・築堤は除く）。y は地面基準の絶対高さ
   const T = getTerrain(ctx);
   const posts: { s: number; lat: number; g: number }[] = [];
+  const rails = trackLines(route);
   const inPlatform = (s: number) => T.nearStation(s, 15); // 待避線駅は分岐器区間も除く
   for (let s = route.extent.from + 30; s < route.extent.to; s += 75) {
     if (inPlatform(s) || T.structureAt(s, 30) || T.nearCrossing(s, 8)) continue;
     if (route.theme === 'mountain' && !T.isCity(s)) continue; // 山岳線: 街灯は町の中だけ
-    const g = T.terrainY(s, -6.4);
+    const outer = Math.min(0, ...rails.filter(r => s >= r.from && s <= r.to).map(r => r.lat(s)));
+    const lat = outer - 8.6, g = T.terrainY(s, lat);
     if (Math.abs(T.trackY(s) - g) > 1.5) continue;
-    posts.push({ s, lat: -6.4, g });
-    bulbs.push({ s, lat: -5.6, y: 6.0, w: .5, d: .3, g });
-    pools.push({ s, lat: -4.6, y: .05, r: 13, g: T.terrainY(s, -4.6) });
-    glows.push({ s, g });
+    if (catenaryPoles(scene).some(p => Math.abs(p.s - s) < 1.5 && Math.abs(p.lat - lat) < 2)) continue;
+    // 架線柱と重ならないよう、複線の外側へ十分に離す。
+    posts.push({ s, lat, g });
+    bulbs.push({ s, lat: lat + .8, y: 6.0, w: .5, d: .3, g });
+    pools.push({ s, lat: lat + 1.8, y: .05, r: 13, g: T.terrainY(s, lat + 1.8) });
+    glows.push({ s, lat: lat + .8, g });
   }
 
   // 街灯の支柱
@@ -135,7 +141,7 @@ export function createNightLights(ctx: GameContext): NightLights {
   poolMesh.renderOrder = 2; poolMesh.userData.noShadow = true; poolMesh.visible = false; scene.add(poolMesh);
   // 街灯のにじみ（スプライト）
   const gpos = new Float32Array(glows.length * 3);
-  glows.forEach((p, i) => { place(p.s, -5.6, 5.9, p.g).toArray(gpos, i * 3); });
+  glows.forEach((p, i) => { place(p.s, p.lat, 5.9, p.g).toArray(gpos, i * 3); });
   const gg = new THREE.BufferGeometry(); gg.setAttribute('position', new THREE.BufferAttribute(gpos, 3));
   const glowMat = new THREE.PointsMaterial({ map: glow, size: 5, sizeAttenuation: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, color: 0x000000 });
   const glowPts = new THREE.Points(gg, glowMat); glowPts.visible = false; glowPts.userData.noShadow = true; scene.add(glowPts);

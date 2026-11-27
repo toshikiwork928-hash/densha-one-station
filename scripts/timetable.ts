@@ -31,7 +31,7 @@ function run(route: Route, id: ServiceId) {
   const plan0 = perf.bMax * .62; // 計画減速度（B5 相当）
   const tr: TrainState = { s: route.startS, v: 0, acc: 0, notch: 0 };
   // 始発駅で待つ（朝の堺1番線で急行を待ち合わせなど）: 待避の停車時間だけ遅れて発車
-  const w0 = waitsAt(route, svc, 0), dwell0 = w0.length ? waitDwell(route, 0, w0, svc.cars) : 0;
+  const w0 = waitsAt(route, svc, 0), dwell0 = w0.length ? waitDwell(route, 0, w0) : 0;
   const out: Record<number, { arr: number; dep?: number }> = { 0: { arr: 0, dep: dwell0 } };
   let t = dwell0;
   const stops = svc.stops.slice(1);
@@ -71,7 +71,7 @@ function run(route: Route, id: ServiceId) {
       const last = i === route.stations.length - 1;
       const ws = waitsAt(route, svc, i), w = ws.length > 0;
       const meet = route.meets?.some(m => m.station === i);
-      const dwell = meet ? meetDwell() : !w ? DWELL : waitDwell(route, i, ws, svc.cars);
+      const dwell = meet ? meetDwell() : !w ? DWELL : waitDwell(route, i, ws);
       out[i] = last ? { arr: t } : { arr: t, dep: t + dwell };
       if (!last) t += dwell;
     }

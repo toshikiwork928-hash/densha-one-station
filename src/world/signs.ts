@@ -7,6 +7,8 @@ import { cullByDistance } from './cull';
 import { trackLines } from '../route/service';
 import { loopTracks } from './track-mesh';
 import { coastalThirdTracks } from './coastal-stations';
+import { catenaryPoles } from './catenary';
+import { limitChanges } from '../route/speed-limits';
 
 export function addSign(ctx: GameContext, tex: THREE.Texture, s: number, lat: number, w: number, h: number, y: number, yaw = 0, parent: THREE.Object3D = ctx.scene): THREE.Group {
   const t = ctx.track.trackAt(s), grp = new THREE.Group();
@@ -27,6 +29,8 @@ interface Def { s: number; lat: number; w: number; h: number; y: number; tex: ()
 const NEAR_S = 14;
 /** 標識どうしの横方向の最小すき間 [m] */
 const GAP = .35;
+/** 標識板の内側端と線路中心の最小離隔 [m] */
+const TRACK_CLEARANCE = 2.35;
 
 /** lat0 = 標識を立てる線路の横位置（待避線では横にずれる）。配置は place() が重なりを避けて決める */
 function define(sg: Sign, lat0: number, parent: THREE.Object3D): Def {
@@ -56,6 +60,7 @@ function place(ctx: GameContext, defs: Def[], base: (d: Def) => number): void {
   const thirds = ctx.route.stations.flatMap(st => coastalThirdTracks(ctx.route, st));
   for (const d of [...defs].sort((a, b) => a.pri - b.pri || a.s - b.s)) {
     const dir = d.lat >= base(d) ? 1 : -1;
+    const nearbyPoles = catenaryPoles(ctx.scene).filter(p => Math.abs(p.s - d.s) < 1.2);
     let lat = d.lat;
     for (let k = 0; k < 32; k++) {
       // 板幅を含む離隔を全線で確認。分岐部で隣の待避線へ押し込まない。
@@ -64,9 +69,11 @@ function place(ctx: GameContext, defs: Def[], base: (d: Def) => number): void {
         ...loops.filter(l => d.s >= l.z.inFrom && d.s <= l.z.outTo).map(l => l.lat(d.s)),
         ...thirds.filter(l => d.s >= l.from && d.s <= l.to).map(l => l.lat(d.s)),
       ];
-      const rail = centers.find(c => Math.abs(c - lat) < 2.05 + d.w / 2 - 1e-7);
-      if (rail !== undefined) { lat = rail + dir * (2.05 + d.w / 2); continue; }
-      const hit = placed.find(p => Math.abs(p.s - d.s) < NEAR_S && Math.abs(p.lat - lat) < (p.w + d.w) / 2 + GAP);
+      const rail = centers.find(c => Math.abs(c - lat) < TRACK_CLEARANCE + d.w / 2 - 1e-7);
+      if (rail !== undefined) { lat = rail + dir * (TRACK_CLEARANCE + d.w / 2); continue; }
+      const pole = nearbyPoles.find(p => Math.abs(p.lat - lat) < .8 + d.w / 2 - 1e-7);
+      if (pole) { lat = pole.lat + dir * (.8 + d.w / 2); continue; }
+      const hit = placed.find(p => Math.abs(p.s - d.s) < NEAR_S && Math.abs(p.lat - lat) < (p.w + d.w) / 2 + GAP - 1e-7);
       if (!hit) break;
       lat = hit.lat + dir * ((hit.w + d.w) / 2 + GAP);
     }
@@ -102,22 +109,24 @@ export function buildSigns(ctx: GameContext): void {
     const defs: Def[] = [];
     // 距離標・停止位置目標: 自列車の走行線の左（2面4線駅は種別により待避線または本線）。待避線・島式1面2線駅ではホームが右なので、
     // 線路がホーム側へ寄り始めたら（走行線が -1m より左）右に立てる
+    const combinedStops = new Set(route.signs.filter(sg => sg.kind === 'stopMarker' && sg.cars === 6).map(sg => sg.s));
     for (const sg of route.signs) {
+      if (sg.kind === 'stopMarker' && sg.cars === 8 && combinedStops.has(sg.s)) continue;
       const lat = track.pathLat(sg.s), rightSta = route.stations.find(x => (x.enterLoop || x.island || (x.layout === 'custom' && x.platform.side === 'R')) && Math.abs(x.stopS - sg.s) < 520);
       defs.push(define(rightSta && (lat < -1 || rightSta.layout === 'custom') ? { ...sg, lat: 2.0 } : sg, lat, stopGroup));
     }
     // 速度制限・解除: 自列車の走行線の左。解除標は、より厳しい制限の中・終着駅より先なら立てない
     const last = route.stations[route.stations.length - 1].stopS;
     // 始発駅を出た所の線区最高速度（種別ごと）
-    defs.push(define({ kind: 'limit', s: route.startS + 60, kmh: route.lineLimit, size: .9 }, 0, group));
-    for (const L of route.limits) {
-      defs.push(define({ kind: 'limit', s: L.from, kmh: L.kmh }, track.pathLat(L.from), group));
-      // 予告標: 制限の 400m 手前（より厳しい制限の中や始発駅の手前には立てない）
-      const ns = L.from - 400;
-      const covered = route.limits.some(o => o !== L && o.kmh <= L.kmh && ns >= o.from && ns < o.to);
-      if (!covered && ns > route.startS + 80) defs.push(define({ kind: 'limitNotice', s: ns, kmh: L.kmh }, track.pathLat(ns), group));
-      const inner = route.limits.some(o => o !== L && o.kmh <= L.kmh && L.to > o.from && L.to < o.to);
-      if (!inner && L.to < last) defs.push(define({ kind: 'limitEnd', s: L.to }, track.pathLat(L.to), group));
+    const initial = route.startS + 60;
+    defs.push(define({ kind: 'limit', s: initial, kmh: track.limitAt(initial), size: .9 }, track.pathLat(initial), group));
+    for (const c of limitChanges(route)) {
+      if (c.s < route.startS || c.s >= last) continue;
+      const sign: Sign = c.kmh === route.lineLimit ? { kind: 'limitEnd', s: c.s } : { kind: 'limit', s: c.s, kmh: c.kmh };
+      defs.push(define(sign, track.pathLat(c.s), group));
+      if (c.notice != null && c.notice > route.startS) {
+        defs.push(define({ kind: 'limitNotice', s: c.notice, kmh: c.kmh }, track.pathLat(c.notice), group));
+      }
     }
     place(ctx, defs, d => track.pathLat(d.s));
   };

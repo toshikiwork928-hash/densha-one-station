@@ -13,6 +13,14 @@
 
 ## 1. 出典とデータ
 
+2026-11-27 に、平日の代表列車38本について、全停車駅の到着・発車を分単位で照合した。
+本線と空港線を直通する列車は、泉佐野で分割して遊ぶ場合も同じ列車番号と時計を使う。
+朝のなんば発はラピートα7号、夜の関西空港発はα26号が走る。両列車は堺と岸和田を通過し、他の時間帯のβは両駅に停車する。
+区間コースは、最初の駅でその列車の発車時刻を、最後の駅で到着時刻を使う。
+公開時刻から秒は特定できないため、ゲームでは着発が同じ分、または隣り合う分の通常停車を25秒とした。
+補正は `scripts/namba-weekday-stops.ts` と `scripts/airport-southern-stops.ts` にまとめた。
+各駅の平日時刻表から列車を選ぶと停車駅ごとの着発を確認できる。[なんば](https://transit.yahoo.co.jp/timetable/26100/3951?kind=1)・[和歌山市](https://transit.yahoo.co.jp/timetable/26841/3950?kind=1)・[和歌山港](https://transit.yahoo.co.jp/timetable/26840/3990?kind=1)・[関西空港](https://transit.yahoo.co.jp/timetable/25891/4000?kind=1)
+
 ### 1.1 出典
 
 - 鉄道運用Hub 南海電鉄 https://unyohub.2pd.jp/railroad_nankai/ の時刻表データ。平日、改正 2024-12-21。API は `timetable.php`（railroad_id=nankai、diagram_revision=2024-12-21、timetable_id=weekday）。運用表データは CC BY 4.0（Hub の表記）。

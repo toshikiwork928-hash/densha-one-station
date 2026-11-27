@@ -1,9 +1,9 @@
 // 実ダイヤの自列車（2026-11-05 のユーザー指定）。時間帯ごと・向きごと・種別ごとに実際の列車を1本だけ決め、どのコース（区間）もその列車の時刻で走る。
 // コースの分け方はゲームの容量のためで、なんば（和歌山市・和歌山港、空港系統は関西空港）から通しで走る1本を区間ごとに遊ぶ形（選び方は scripts/real-diagram.ts）
-//   - その時間帯に実際の列車が無い種別・区間は選べない（selectableServices・stagesOf）。例: 日中の急行、朝のなんば発・夜のなんば行のラピートβ
+//   - その時間帯に実際の列車が無い種別・区間は選べない（selectableServices・stagesOf）。朝のなんば発・夜のなんば行のラピートαは堺・岸和田を通過する
 //   - 開始時刻（route.startClock）は、その列車がコース（区間）の始発駅を出る実際の時刻。なんばから遠い区間ほど遅くなる。対向列車は startClock + t で動く
-//   - 途中駅の発車を実列車の時計に合わせ、通常駅の到着は標準停車時間から、待避駅の到着は駅間の走行時間から推定する。
-//   - 終着の到着: 列車の終点は実際の到着時刻、途中駅は発車の30秒前（待避で長く停まる駅はゲームの最速で着く）。Hub に途中駅の到着時刻が無いため
+//   - 代表列車は各駅の公開着発を使う。到着資料のない駅では、通常駅は停車時間、待避駅は走行時間から到着を推定する。
+//   - 途中駅で終わるコースも、その駅の到着時刻を使う。次のコースは同じ駅の発車時刻から始まる。
 // データは src/data/real-diagram.json（npm run real:diagram が鉄道運用Hub の時刻表から作る。CC BY 4.0、平日、2024-12-21 改正）
 import data from '../data/real-diagram.json';
 import { START_CLOCK } from '../core/config';
@@ -14,6 +14,8 @@ export interface RealTrain {
   svc: ServiceId;
   /** 列車番号・始発駅・行先（実際の列車の） */
   no: string; origin: string; to: string;
+  /** 種別枠の標準名と異なる列車名（例: 特急ラピートα）。 */
+  name?: string;
   /** 区間の始発駅・終着駅の名前 */
   from: string; end: string;
   /** 区間の始発駅の発車時刻 [s since 0:00] */
@@ -56,6 +58,8 @@ export function realTrainFor(route: Route, svc: ServiceId | undefined, from: num
 
 /** その時間帯に実際の列車がある種別か（実ダイヤの無いコースは常に true） */
 export function realServiceAvailable(route: Route, svc: ServiceId, tod: TimeOfDay = todOf(route)): boolean {
+  // 空港線の普通はコース固有の区間運転で、時間帯ごとの代表列車を使わない。
+  if (route.lineId === 'airport' && svc === 'local') return true;
   const day = realDayOf(route, tod);
   return !day || day.trains.some(e => e.svc === svc);
 }

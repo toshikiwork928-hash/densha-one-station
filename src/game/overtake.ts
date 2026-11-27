@@ -1,8 +1,8 @@
 // 待避: 普通が2面4線駅の待避線に停車中、後続の優等列車が本線を通過していく（その駅に停車する種別は本線ホームに停車して接続してから先に発車）。
-// 優等列車は普通の停車の約10秒後に着き（普通が完全に止まるまでは到着点の手前で待つ）、出口分岐器を抜けて見えなくなるまで出発信号は停止現示（game/signals.ts が st.overtake を見る）。
+// 優等列車は普通が停車してから15秒以上空けてホームに入り、出口分岐器を抜けて見えなくなるまで出発信号は停止現示（game/signals.ts が st.overtake を見る）。
 // 優等列車は普通が駅に近づく間に後方から追い付く形で現れる（普通が停まる前に本線ホームを通り過ぎないよう間隔を保つ）
 import type { GameContext } from '../core/context';
-import { carLenOf, loopZone, serviceOf, stopOffset } from '../route/service';
+import { carLenOf, loopZone, serviceOf, stationStopS } from '../route/service';
 import { sakaiLayout } from '../route/sakai-layout';
 import type { Route, ServiceSpec } from '../route/types';
 
@@ -12,8 +12,8 @@ const PASS_KMH = 80;
 const DECEL = .8, ACCEL = .75, PASSER_DWELL = 20;
 /** 出現位置（停止位置の何 m 後方か） */
 const SPAWN_BACK = 1000;
-/** 普通が止まってから優等列車が着くまで [s]（通過列車は停止位置を通過、停車列車は停止） */
-export const ARRIVE_GAP = 10;
+/** 普通が止まってから優等列車の先頭がホームに入るまでの最短時間 [s] */
+export const ARRIVE_GAP = 15;
 /** 出口分岐器を後部が抜けてから、列車が見えなくなる（描画を止める）までの距離 [m] */
 const CLEAR_DIST = 800;
 /** 見えなくなってから出発信号が進行になるまで [s] */
@@ -23,8 +23,6 @@ const FOLLOW_GAP = 100;
 const FOLLOW_DECEL = .9;
 /** 普通の停止見込み時間の誤差を見て、この秒数だけ早めに出現させる（間隔を保つので早めても追突しない） */
 const SPAWN_EARLY = 2;
-/** 普通が完全に止まるまで、優等列車は到着点（停止位置・通過は普通の停止位置）のこの秒数手前（巡航速度換算）で待つ。止まってから数秒後に着く */
-const HOLD_LEAD = 6;
 /** 待っていた優等列車が動き出すときの加速度 [m/s²]（巡航速度へ戻るまで） */
 const RESUME_ACCEL = 1.2;
 /** 同じ駅で続けて待つとき、前の列車が見えなくなってから次の列車が着くまで [s] */
@@ -54,8 +52,8 @@ export function overtakeZone(route: Route, index: number) {
   return { inFrom: pf + sakaiTurnouts[0], inTo: pf + sakaiTurnouts[1], outFrom: pf + sakaiTurnouts[2], outTo: pf + sakaiTurnouts[3], lat: 0, limit: 45 };
 }
 
-/** 優等列車の運動計画（普通 localCars 両が待避線に停車するとき）。時刻表の生成（scripts/timetable.ts）とゲームで共通 */
-export function planPasser(route: Route, index: number, passer: ServiceSpec, localCars: number): Passer | null {
+/** 優等列車の運動計画（普通が待避線に停車するとき）。時刻表の生成（scripts/timetable.ts）とゲームで共通 */
+export function planPasser(route: Route, index: number, passer: ServiceSpec): Passer | null {
   const sta = route.stations[index], z = overtakeZone(route, index);
   if (!z) return null;
   const v = PASS_KMH / 3.6, len = passer.cars * carLenOf(passer.kind);
@@ -64,7 +62,7 @@ export function planPasser(route: Route, index: number, passer: ServiceSpec, loc
     return { v, len, stopAt: null, back, tArrive: back / v, tClear: dist / v };
   }
   // 停車: 本線ホームの停止位置（6両基準）に止まり、停車後に加速して出口分岐器を抜ける
-  const stopAt = sta.stopS + stopOffset(localCars) - stopOffset(passer.cars);
+  const stopAt = stationStopS(route, index, passer);
   const dBrake = v * v / (2 * DECEL), back = Math.max(SPAWN_BACK * .6, dBrake + 50);
   const tArrive = (back - dBrake) / v + v / DECEL;
   const dOut = z.outTo + CLEAR_DIST + len - stopAt, dAcc = v * v / (2 * ACCEL);
@@ -73,11 +71,11 @@ export function planPasser(route: Route, index: number, passer: ServiceSpec, loc
 }
 
 /** 待避駅での普通の停車時間 [s]（停車 → 優等列車の到着 → 発車・通過 → 見えなくなる →（次の列車 …）→ 発車） */
-export function waitDwell(route: Route, index: number, passers: ServiceSpec | ServiceSpec[], localCars: number): number {
+export function waitDwell(route: Route, index: number, passers: ServiceSpec | ServiceSpec[]): number {
   const list = Array.isArray(passers) ? passers : [passers];
   let t = ARRIVE_GAP;
   list.forEach((ps, k) => {
-    const p = planPasser(route, index, ps, localCars);
+    const p = planPasser(route, index, ps);
     // 2本目以降は前の列車が見えなくなってから出現し、本線ホームへの進入・停車に余計にかかる分を見込む
     t += (k ? NEXT_ARRIVE + 25 : 0) + (p ? p.tClear - p.tArrive : 40);
   });
@@ -101,7 +99,7 @@ export function createOvertake(ctx: GameContext): Overtake {
     const svc = serviceOf(route, st.sel.service), passer = waitsAt(route, svc, index)[seq];
     if (!svc || !passer || !route.services) return;
     const sta = route.stations[index];
-    const p = planPasser(route, index, passer, svc.cars);
+    const p = planPasser(route, index, passer);
     if (!p) return;
     const v = p.v;
     let head: number, stage: 'cruise' | 'brake' = 'cruise', pv = v;
@@ -111,6 +109,13 @@ export function createOvertake(ctx: GameContext): Overtake {
       else if (arriveIn > tBrake) head = p.stopAt - dBrake - (arriveIn - tBrake) * v;
       else { stage = 'brake'; pv = DECEL * arriveIn; head = p.stopAt - pv * arriveIn / 2; }
     } else head = sta.stopS - v * Math.min(arriveIn, p.tArrive);
+    // 遅着時や待避駅からの開始時も、最高速度で15秒走る距離を入口の手前に残す。
+    const holdAt = sta.platform.from - v * ARRIVE_GAP;
+    if (seq === 0 && head > holdAt) {
+      head = holdAt;
+      pv = p.stopAt == null ? v : Math.min(v, Math.sqrt(2 * DECEL * (p.stopAt - head)));
+      stage = pv < v ? 'brake' : 'cruise';
+    }
     st.overtake = {
       station: index, passedBy: passer.id, seq, depSignal: sigs.findIndex(g => g.s > sta.stopS),
       phase: 'run', stopAt: p.stopAt, dwellLeft: PASSER_DWELL, stage,
@@ -124,7 +129,7 @@ export function createOvertake(ctx: GameContext): Overtake {
     const svc = serviceOf(route, st.sel.service), passer = waitsAt(route, svc, st.target)[0];
     if (!svc || !passer || !route.services) return;
     const sta = route.stations[st.target];
-    const p = planPasser(route, st.target, passer, svc.cars);
+    const p = planPasser(route, st.target, passer);
     if (!p) return;
     const rem = sta.stopS - st.train.s, v = Math.max(st.train.v, 1);
     if (rem > 2500) return;
@@ -158,10 +163,10 @@ export function createOvertake(ctx: GameContext): Overtake {
       if (!o.localStopped && st.train.s < z.inTo + route.trainLength && o.head < tail) {
         vHold = Math.sqrt(2 * FOLLOW_DECEL * Math.max(0, tail - o.head - FOLLOW_GAP));
       }
-      // 普通が完全に止まるまでは、到着点の HOLD_LEAD 秒手前より先へ進まない（ゆっくり止まっても先に着かない）
       if (!o.localStopped) {
-        const arrive = o.stopAt ?? route.stations[o.station].stopS;
-        vHold = Math.min(vHold, Math.sqrt(2 * FOLLOW_DECEL * Math.max(0, arrive - PASS_KMH / 3.6 * HOLD_LEAD - o.head)));
+        const holdAt = route.stations[o.station].platform.from - PASS_KMH / 3.6 * ARRIVE_GAP;
+        const remaining = Math.max(0, holdAt - o.head);
+        vHold = Math.min(vHold, Math.sqrt(2 * FOLLOW_DECEL * remaining), remaining / dt);
       }
       // 普通の最後尾が入口分岐器を抜けて待避線に入り切るまでは（手前で止まった場合も）、分岐器の手前で待つ
       if (tail < z.inTo + 2) vHold = Math.min(vHold, Math.sqrt(2 * FOLLOW_DECEL * Math.max(0, z.inFrom - 30 - o.head)));

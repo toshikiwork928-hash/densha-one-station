@@ -1,4 +1,5 @@
 // 駅に停車する対向列車の出現設定を、駅の位置から作る（下り・上りで共通）
+import { carLenOf, centeredHead } from './service';
 import type { OncomingSpec, OncomingStop, ServiceId, Station, TimeOfDay, TrainKind } from './types';
 
 /** 停車シーン1件: station = 停車する駅 index（その向きの route.stations）。種別に合う駅を指定する */
@@ -46,7 +47,8 @@ export function stopScenes(stations: Station[], scenes: StopScene[]): OncomingSp
       ...base,
       spawnAt: sta.platform.from - (sc.loop || sc.follow ? SPAWN_BEFORE_LOOP : SPAWN_BEFORE),
       startS: sta.platform.to + START_AHEAD + (sc.follow ? FOLLOW_BEHIND : 0),
-      stop: { station: sc.station, headS: sta.platform.from + HEAD_MARGIN, ...(sc.loop ? { loop: true } : {}), ...(sc.zone ? { zone: sc.zone } : {}) },
+      // 編成中央をホーム中央へ合わせる。対向列車は s が減る向きへ進むため、head は編成長の半分だけ手前へ置く。
+      stop: { station: sc.station, headS: sc.cars === 4 || sta.name === '泉佐野' ? centeredHead(sta.platform, -sc.cars * carLenOf(sc.kind)) : sta.platform.from + HEAD_MARGIN, ...(sc.loop ? { loop: true } : {}), ...(sc.zone ? { zone: sc.zone } : {}) },
     };
   });
 }
@@ -226,7 +228,7 @@ export function runClasses(items: OncomingPlanItem[], modes: OncomingMode[], sha
   return out;
 }
 
-type CounterConsist = Pick<OncomingSpec, 'kind' | 'cars' | 'units' | 'unitKinds' | 'label'> & { id: ServiceId };
+type CounterConsist = Pick<OncomingSpec, 'cars' | 'units' | 'unitKinds' | 'label'> & { id: ServiceId; kind: TrainKind };
 
 // 2026年11月22日の組成表を参考に、モデルのある系列で組める一般車を両数別に配分する。
 // 4両は8300系。6両は1000系を主体に、8両には7100系と9000系も入れる。

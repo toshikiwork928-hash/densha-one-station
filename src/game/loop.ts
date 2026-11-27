@@ -1,6 +1,6 @@
 // ゲーム進行: 状態遷移・走行ステップ・停止判定。演出（音・HUD）はイベント経由
 import {
-  ANNOUNCE_DIST, DOOR_CLOSE_TIME, ORIGIN_DWELL, START_CLOCK, JOINT_INTERVAL, LIMIT_NOTICE_DIST, NEAR_DIST, NOTCH_EB, NOTCH_MAX, NOTCH_MIN,
+  ANNOUNCE_DIST, DOOR_CLOSE_TIME, ORIGIN_DWELL, START_CLOCK, JOINT_INTERVAL, NEAR_DIST, NOTCH_EB, NOTCH_MAX, NOTCH_MIN,
   OVERRUN_FAIL, OVERSPEED_MARGIN, STOP_CONFIRM, STOP_ZONE,
 } from '../core/config';
 import type { GameActions, GameContext } from '../core/context';
@@ -16,6 +16,7 @@ import { judgeStop, scoreGame } from './scoring';
 import { createSignalSystem } from './signals';
 import { saveSelection } from './ranking';
 import { departureTime, isFinalStop, nextStopIndex, resetState, stagesOf, type GameMode, type GameStateName, type Selection } from './state';
+import { limitChanges } from '../route/speed-limits';
 
 const MIN_DWELL = 10; // 遅着時でも最低これだけ停車 [s]
 const MODES: GameMode[] = ['normal', 'recovery', 'timeOnly'];
@@ -213,6 +214,7 @@ export function createGame(ctx: GameContext, changeRoute?: (selection: Selection
   function step(dt: number) {
     const tr = st.train, n = tr.notch;
     ctx.trainEnv.gradePermil = track.gradeAt(tr.s);
+    const lastS = tr.s, f = st.flags;
     if (stepTrain(tr, ctx.trainEnv, dt)) {
       st.notchAtStop = n;
       events.emit('stop', { s: tr.s, notch: n });
@@ -242,18 +244,17 @@ export function createGame(ctx: GameContext, changeRoute?: (selection: Selection
     if (j !== st.lastJoint) { st.lastJoint = j; events.emit('jointPass', { v: tr.v, s: tr.s }); }
     events.emit('tick', { dt, train: tr });
 
-    // 制限予告・解除（既に通過済みの区間は出さない）
-    const f = st.flags;
-    for (const L of route.limits) {
-      if (L.to < tr.s - 1 && !f['end' + L.from]) { f['pre' + L.from] = f['end' + L.from] = true; continue; }
-      if (!f['pre' + L.from] && L.from - tr.s < LIMIT_NOTICE_DIST) {
-        f['pre' + L.from] = true; banner(`この先 ${L.label ?? '速度制限'} ${L.kmh}km/h`, 3);
-        events.emit('limitNotice', { kind: 'ahead', kmh: L.kmh, from: L.from, to: L.to });
+    const changes = limitChanges(route);
+    for (const c of changes) {
+      if (c.s > lastS && c.s <= tr.s && c.kmh > c.previous) {
+        const released = c.kmh === route.lineLimit && st.sigLimit >= c.kmh;
+        banner(released ? '制限解除' : `ここから ${Math.min(c.kmh, st.sigLimit)}km/h`, 2);
+        if (released) events.emit('limitNotice', { kind: 'end', kmh: c.previous, from: c.s, to: c.s });
       }
-      if (!f['end' + L.from] && tr.s >= L.to) {
-        f['end' + L.from] = true; banner('制限解除', 2);
-        events.emit('limitNotice', { kind: 'end', kmh: L.kmh, from: L.from, to: L.to });
-      }
+      if (c.notice == null || tr.s < c.notice || tr.s >= c.s || st.flags['pre' + c.s]) continue;
+      st.flags['pre' + c.s] = true;
+      banner(`この先 ${c.label ?? '速度制限'} ${c.kmh}km/h（あと ${Math.ceil(c.s - tr.s)}m）`, 3);
+      events.emit('limitNotice', { kind: 'ahead', kmh: c.kmh, from: c.s, to: c.s });
     }
 
     checkPassStations(dt);

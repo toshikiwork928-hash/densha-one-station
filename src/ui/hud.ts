@@ -8,6 +8,7 @@ import { destOf, serviceOf, unitsLabel } from '../route/service';
 import { drawMeter } from './meter';
 import { terminalDistance as distanceToTerminal, terminalSpeedLimit } from '../game/terminal-ats';
 import { timetablePace } from '../game/timetable-pace';
+import { limitChanges } from '../route/speed-limits';
 
 const fmtHM = (sec: number) => fmtClock(sec);
 
@@ -155,10 +156,17 @@ export function attachHud(ctx: GameContext): void {
     el.limitPanel.classList.toggle('over', vk > lim + OVERSPEED_MARGIN);
     // 制限の補助表示: 制限中は解除（後部通過）までの距離、制限外は次の制限までの距離
     let nxt = '&nbsp;';
-    const cur = route.limits.filter(L => s >= L.from && s < L.to && L.kmh <= route.lineLimit).sort((a, b) => a.kmh - b.kmh)[0];
-    const ahead = route.limits.find(L => L.from > s && L.from - s < 1200 && L.kmh < (cur?.kmh ?? route.lineLimit));
-    if (ahead && (!cur || ahead.from < cur.to)) nxt = `<b>この先 ${Math.round(ahead.kmh)}</b> あと ${Math.round(ahead.from - s)}m`;
-    else if (cur) nxt = `<b>${Math.round(cur.kmh)} 解除</b>まで ${Math.round(cur.to - s)}m`;
+    const changes = limitChanges(route);
+    const next = changes.find(c => c.s > s);
+    const ahead = changes.find(c => c.s > s && c.notice != null && s >= c.notice);
+    if (ahead) {
+      nxt = `<b>この先 ${ahead.kmh}</b> あと ${Math.ceil(ahead.s - s)}m`;
+      const lower = changes.find(c => c.s > ahead.s && c.kmh < ahead.kmh && c.notice != null && s >= c.notice);
+      if (lower) nxt += `<br><b>続いて ${lower.kmh}</b> あと ${Math.ceil(lower.s - s)}m`;
+    } else if (next && next.previous < route.lineLimit) {
+      const label = next.kmh === route.lineLimit ? '線路の制限終了' : `${next.kmh} km/h に変更`;
+      nxt = `<b>${label}</b>まで ${Math.ceil(next.s - s)}m`;
+    }
     const pace = timetablePace(ctx);
     if (pace != null) nxt = (nxt === '&nbsp;' ? '' : nxt + '<br>') + `定刻の目安 ${Math.round(pace)} km/h`;
     el.nextLimit.innerHTML = nxt;

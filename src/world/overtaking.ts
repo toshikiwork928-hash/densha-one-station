@@ -3,7 +3,7 @@ import { front7169ForRoute } from '../route/vehicle-direction';
 // 急行・特急で通過する2面4線駅の待避線に止まっている先行の普通（st.precedingS が待避線にいる間）
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
-import { BASE_CARS, carLenOf, customPlatformSide, destOf, islandOffset, loopShape, loopZone, profileLat, sameClass, serviceOf, stationIslandOffset, stopOffset } from '../route/service';
+import { customPlatformSide, destOf, islandOffset, loopShape, loopZone, profileLat, sameClass, serviceOf, stationIslandOffset, stationStopS } from '../route/service';
 import { overtakeZone } from '../game/overtake';
 import type { ServiceSpec, TrainKind } from '../route/types';
 import { placeCar } from './emu';
@@ -64,12 +64,12 @@ export function createOvertaking(ctx: GameContext): void {
     const goalSta = route.stations[index];
     const me = serviceOf(route, st.sel.service);
     if (!me || Math.abs(goalSta.stopS - ps) > 1600) return;
-    // 普通の停止位置（駅の停止位置は自列車の両数のもの）と走行線
-    const head = goalSta.stopS + stopOffset(me.cars, carLenOf(me.kind), route.stopBaseCars ?? BASE_CARS) - stopOffset(local.cars, carLenOf(local.kind), route.stopBaseCars ?? BASE_CARS);
+    // 普通の停止位置は、種別・編成長を含む共通計算を使う。
+    const head = stationStopS(route, index, local);
     const z = loopZone(goalSta);
     const latAt = local.lane ? (s: number) => profileLat(local.lane!, s) + stationIslandOffset(route, route.tracks[0], s) + (z ? z.lat * loopShape(z, s) : 0)
       : z ? (s: number) => z.lat * loopShape(z, s) : null;
-    if (!latAt) return;
+    if (!latAt || Math.abs(latAt(head) - track.pathLat(head)) < 3.4) return;
     const lat = latAt(head);
     const side = goalSta.layout === 'custom' ? customPlatformSide(goalSta, lat) ?? 'R' : goalSta.loop?.outside ? (goalSta.loop.lat < 0 ? 'L' : 'R') : 'R';
     const v = view(local.kind, local.units, local.name, local.unitKinds, destOf(route, local), tag);
@@ -112,6 +112,15 @@ export function createOvertaking(ctx: GameContext): void {
     // 先行の普通（1本）が先の待避駅で自列車に抜かれて後ろにいるとき、その先の待避駅で自列車を待つのは、もう1本前の普通（夕方の和歌山方面の
     // 浜寺公園と泉大津など）。その駅の待避線に止まっている普通を描く（自列車が出て見えなくなるまで止まったまま）
     for (const q of waitZones) if (h < ps - 50 && q.inFrom > h && ps < q.outTo + 300) showParkedLocal(local, ps, q.index, `:wait${q.index}`);
+    // 途中駅開始では先行列車の時計が既に先の駅を指す場合もある。
+    // 開始駅で実際に待避する普通を、その駅の分岐区間を離れるまで別番線に置く。
+    const origin = st.fromIndex;
+    const originWait = local.waits?.some(w => w.station === origin && sameClass(w.passedBy, st.sel.service));
+    const originZone = zones.find(q => q.index === origin);
+    const originEnd = originZone?.outTo ?? route.stations[origin].platform.to;
+    if (originWait && ps < originEnd + 300 && !(originZone && h > originZone.inFrom && h < originZone.outTo + 400)) {
+      showParkedLocal(local, ps, origin, `:wait${origin}`);
+    }
     const z = waitZones.find(q => h > q.inFrom && h < q.outTo + 400);
     if (!z || Math.abs(h - ps) > 1500) return;
     const v = view(local.kind, local.units, local.name, local.unitKinds, destOf(route, local));

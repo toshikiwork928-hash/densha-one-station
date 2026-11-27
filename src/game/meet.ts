@@ -2,7 +2,7 @@
 // 対向列車はこのモジュールが動かし（st.meet）、world/oncoming.ts が描く。対向列車は交換駅の先（自列車の進む側）の単線から来て、
 // 自列車の停車の約 ARRIVE_GAP 秒後に着く。交換駅以外では単線上で自列車と出会わない（交換駅より先から出現し、自列車が発車してから後方へ去る）
 import type { GameContext } from '../core/context';
-import { carLenOf, islandZone } from '../route/service';
+import { carLenOf, centeredHead, islandZone } from '../route/service';
 import type { MeetSpec, Route } from '../route/types';
 
 /** 自列車が止まってから対向列車が着くまで [s] */
@@ -35,7 +35,7 @@ export function planMeet(route: Route, m: MeetSpec) {
   const sta = route.stations[m.station];
   const v = m.kmh / 3.6, dB = v * v / (2 * DECEL), tBrake = v / DECEL;
   const len = m.cars * carLenOf(m.kind);
-  const headS = sta.platform.from + HEAD_MARGIN;
+  const headS = m.cars === 4 ? centeredHead(sta.platform, -len) : sta.platform.from + HEAD_MARGIN;
   /** 出現位置から停止までの時間 */
   const tArrive = (BACK - dB) / v + tBrake;
   return { v, dB, tBrake, len, headS, tArrive };

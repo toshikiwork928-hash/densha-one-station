@@ -14,6 +14,10 @@ import { coastalThirdTracks } from './coastal-stations';
 import { hagoromoDeckEdge } from './hagoromo-branch';
 import { kixCoveredBoxes } from './kix-covered';
 
+interface PolePosition { s: number; lat: number }
+const polesByScene = new WeakMap<THREE.Scene, PolePosition[]>();
+export const catenaryPoles = (scene: THREE.Scene): readonly PolePosition[] => polesByScene.get(scene) ?? [];
+
 const RAIL = .38;           // レール面（線路基準の高さ）
 const CW = RAIL + 5.34;     // トロリー線の高さ（パンタグラフ上昇時の舟の上面にほぼ接する）
 const SYS = 1.1;            // 吊架線〜トロリー線の間隔（明り区間）
@@ -202,6 +206,8 @@ export function buildCatenary(ctx: GameContext): void {
   const { route, track, scene } = ctx, T = getTerrain(ctx);
   const L0 = Math.min(...route.tracks), L1 = Math.max(...route.tracks), MID = (L0 + L1) / 2;
   const S0 = route.extent.from, S1 = route.extent.to;
+  const poles: PolePosition[] = [];
+  polesByScene.set(scene, poles);
   const loops = loopTracks(ctx);
   const thirds = route.stations.flatMap(st => coastalThirdTracks(route, st));
   // 待避線駅の区間（lat = 外側の線路の振れ）と、島式1面2線駅の S字区間（各線が spread だけ外へ開く）。柱・ビームは外側の線路の外に立てる
@@ -489,6 +495,7 @@ export function buildCatenary(ctx: GameContext): void {
       box(b, wl - .14, 3.7, 0, .12, .05, .05, COL.fit);
       continue;
     }
+    poles.push({ s: sp.s, lat: sp.pl }, { s: sp.s, lat: sp.pr });
     const style = styleOf(sp.kind);
     const yl = baseY(sp.s, sp.pl, deck), yr = baseY(sp.s, sp.pr, deck);
     const portal = sp.kind === 'loop' || sp.kind === 'station' || sp.kind === 'pipe' || sp.kind === 'viaduct' || sp.kind === 'bridge' || sp.kind === 'lattice';
@@ -584,6 +591,7 @@ export function buildCatenary(ctx: GameContext): void {
     const x = an.side < 0 ? left - edge : right + edge, d = -an.side;
     const b = chunks.at(s), F = frame(s); b.parent = F;
     const style = styleOf(kind === 'loop' || kind === 'station' ? 'hbeam' : kind), y0 = baseY(s, x, deck), top = sp.mw + .7;
+    poles.push({ s, lat: x });
     pole(b, style, x, y0, top, deck);
     // 滑車と重錘（柱の外側）
     const xw = x - d * .38;
@@ -615,6 +623,7 @@ export function buildCatenary(ctx: GameContext): void {
       const lat = l.lat(s), x = lat + po, F = frame(s), b = chunks.at(s); b.parent = F;
       const under = T.structureAt(s, 0), deck = under?.kind === 'viaduct' || under?.kind === 'bridge';
       const y0 = deck ? 0 : T.groundY(s) - T.trackY(s), top = CW + SYS + .9;
+      poles.push({ s, lat: x });
       pole(b, 'pipe', x, y0, top, deck);
       const g: WirePt[] = [{ lat, cy: CW, my: CW + SYS, c: lat }];
       bracket(b, x, g, COL.fit);

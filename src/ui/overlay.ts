@@ -135,7 +135,7 @@ export function attachOverlay(ctx: GameContext): void {
     ].filter(Boolean).join('、');
     const best = getBest(route.id, stage.id, st.sel.mode, st.sel.service);
     const svc = serviceOf(route, st.sel.service), section = sectionOf(route.id);
-    const menu = courseMenu(line, route.timeOfDay ?? ctx.envState.timeOfDay);
+    const menu = courseMenu(line, route.timeOfDay ?? ctx.envState.timeOfDay, route.id);
     const service = st.sel.service;
     const sections = line.sections?.filter(s => menu.directions(service, s.dirs).length);
     const directions = menu.directions(service, section?.dirs);

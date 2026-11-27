@@ -4,7 +4,7 @@ import { front7169ForRoute } from '../route/vehicle-direction';
 //   自列車が優等（同じ格）: from 駅に止まっている普通が自列車の手前で発車し、隣の緩行線で追い抜かれる（from = to なら to 駅に止まっている）
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
-import { classOf, destOf, islandOffset, profileLat, serviceOf } from '../route/service';
+import { classOf, destOf, islandOffset, profileLat, serviceOf, stationStopS } from '../route/service';
 import type { LatProfile, RunPass, ServiceSpec } from '../route/types';
 import { placeCar } from './emu';
 import { bogieOffset, createTrainSet, type TrainCar } from './train-models';
@@ -54,17 +54,20 @@ export function createRunPasses(ctx: GameContext): void {
         else if (p.from === p.to && ps > to.stopS - 450) { actors.push(make(p, passer, 'passer', ps - 650, 80 / 3.6, 'run')); done.add(key); }
       } else if (classOf(me.id) === classOf(p.passedBy)) {
         // 普通は from 駅（from = to なら to 駅）に止まっていて、自列車が近づくと（from = to なら止まったまま）
-        if (ps > from.stopS - 1400 && ps < from.stopS - 300) { actors.push(make(p, local, 'local', from.stopS, 0, 'wait')); done.add(key); }
+        const startsHere = p.from === st.fromIndex && st.state === 'dwell' && st.target === p.from;
+        if (startsHere || (ps > from.stopS - 1400 && ps < from.stopS - 300)) {
+          actors.push(make(p, local, 'local', stationStopS(route, p.from, local), 0, 'wait'));
+          done.add(key);
+        }
       }
     }
     // 動き
     for (const a of actors) {
       if (a.mode === 'passer') a.head += a.v * dt;
       else {
-        const to = route.stations[a.pass.to];
         if (a.stage === 'wait' && a.pass.from !== a.pass.to && ps > route.stations[a.pass.from].stopS - 380) a.stage = 'run';
         if (a.stage === 'run') {
-          const rem = to.stopS - a.head;
+          const rem = stationStopS(route, a.pass.to, a.svc) - a.head;
           a.v = rem <= a.v * a.v / (2 * DEC) ? Math.sqrt(2 * DEC * Math.max(0, rem)) : Math.min(LOCAL_KMH / 3.6, a.v + ACC * dt);
           a.head += a.v * dt;
           if (rem < .3) { a.stage = 'stop'; a.v = 0; }

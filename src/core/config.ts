@@ -13,7 +13,6 @@ export const OVERSPEED_MARGIN = 0.5; // 制限 + この値 [km/h] を超えた�
 export const JOINT_INTERVAL = 25; // レール継ぎ目間隔 [m]
 export const ANNOUNCE_DIST = 800; // 次駅案内の距離 [m]
 export const NEAR_DIST = 100; // 「停止位置まで100m」[m]
-export const LIMIT_NOTICE_DIST = 600; // 制限予告 [m]
 export const MAX_DT = 0.05;
 /** 戸閉め開始から閉まり切る（戸閉灯点灯）までの時間 [s]。audio/station.ts のチャイム 3回（約1.9秒）＋ 戸の摺動・当たり（約1.4秒）に合わせる */
 export const DOOR_CLOSE_TIME = 3.5;
