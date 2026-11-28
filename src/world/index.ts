@@ -29,6 +29,7 @@ import { buildNambaLandmarks } from './namba-landmarks';
 import { nambaFrame } from './namba-frame';
 import { buildSumiyoshiTaisha } from './sumiyoshi-taisha';
 import { createRunPasses } from './run-pass';
+import { createTrafficLivery } from './traffic-livery';
 import { buildWakayamashi } from './wakayamashi';
 import { buildWakayamashiTrains } from './wakayamashi-trains';
 import { buildWakayamadaigakumae } from './wakayamadaigakumae';
@@ -69,7 +70,8 @@ export function buildWorld(ctx: GameContext): World {
   const town = buildTown(ctx); // 独自乱数（ctx.rng 不使用）
   const water = waterMaskOf(osmFor(ctx.route));
   buildSignals(ctx); // [A] 閉そく信号機（rng 不使用）
-  const oncoming = createOncoming(ctx);
+  const trafficLivery = createTrafficLivery(ctx);
+  const oncoming = createOncoming(ctx, trafficLivery);
   buildCrossings(ctx, oncoming, town.approaches);
   buildCuttings(ctx);
   // 堺〜なんば専用（上り 'namba' と下り 'namba-up'。座標は上りのもの、world/namba-frame.ts）。ctx.rng を消費しない（他の路線の生成順に影響しない）
@@ -100,8 +102,8 @@ export function buildWorld(ctx: GameContext): World {
     buildHagurazakiDepotTrains(sctx); // 留置の電車（描画のみ）
   }
   const player = createPlayerTrain(ctx);
-  createOvertaking(ctx); // [G] 待避の通過列車・待避線の先行普通
-  createRunPasses(ctx); // 複々線の走行中の追い越し（時間帯のパターン）
+  createOvertaking(ctx, trafficLivery); // [G] 待避の通過列車・待避線の先行普通
+  createRunPasses(ctx, trafficLivery); // 複々線の走行中の追い越し（時間帯のパターン）
   createCab(ctx);
 
   return {

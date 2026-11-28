@@ -2,6 +2,8 @@
 import * as THREE from 'three';
 
 export interface EnvironmentHandles {
+  /** 雨天や手動操作中は、雨粒と連動するワイパーをガラス面に描く。 */
+  overlayWiperVisible?: boolean;
   /** 空の色（scene.background と共有） */
   sky: THREE.Color;
   fog: THREE.Fog;

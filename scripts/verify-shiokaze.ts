@@ -11,7 +11,7 @@ import { izumisanoMisaki, izumisanoMisakiUp } from '../src/route/routes/izumisan
 import { through, throughUp } from '../src/route/routes/through';
 import { namba, nambaUp, NAMBA_TRACKS } from '../src/route/routes/namba';
 import { misakiWakayamako, misakiWakayamakoUp } from '../src/route/routes/misaki-wakayamako';
-import { approachText, departText } from '../src/audio/announce-text';
+import { approachEnglish, approachText, departEnglish, departText } from '../src/audio/announce-text';
 import { applyService, destOf, sameClass, selectableServices } from '../src/route/service';
 import { limitChanges } from '../src/route/speed-limits';
 import { buildTrack } from '../src/route/track';
@@ -32,6 +32,24 @@ import type { GameContext } from '../src/core/context';
 import { createSignalSystem } from '../src/game/signals';
 
 (globalThis as any).window = {};
+
+// 途中駅から始めても急行系だけが携帯電話を案内し、次の発車で繰り返さない。
+for (const source of Object.values(ROUTES)) {
+  for (const service of source.services ?? []) {
+    const route = structuredClone(source), svc = applyService(route, service.id)!;
+    const express = svc.id === 'express' || svc.id === 'airport';
+    for (let i = 0; i < route.stations.length; i++) {
+      if (route.stations[i].pass) continue;
+      const ja = departText(route, i, false, svc, true), en = departEnglish(route, i, false, svc, true);
+      assert.equal(ja.includes('携帯電話'), express, ja);
+      assert.equal(/phone/i.test(en), express, en);
+      assert.ok(!/携帯電話/.test(departText(route, i, false, svc, false)));
+      assert.ok(!/phone/i.test(departEnglish(route, i, false, svc, false)));
+      const english = en + approachEnglish(route, i, svc);
+      assert.doesNotMatch(english, /[\p{Script=Han}\p{Script=Katakana}\p{Script=Hiragana}]/u);
+    }
+  }
+}
 
 // 重複制限の途中解除と、南部の下り勾配での予告距離を検査する。
 {
@@ -806,7 +824,7 @@ for (const [route, parts] of [[throughUp, [shiokazeUp, kishiwada]], [through, [k
       assert.equal(sv.name, names[v.id], `${route.id}/${v.id}の種別名`);
       assert.equal(destOf(r, sv), dest);
       const dep = departText(r, 0, false, sv);
-      const label = v.id === 'southern' ? '一部座席指定、特急サザン' : `${names[v.id]}、`;
+      const label = { southern: '一部座席指定、特急、サザン、', limited: '特急、ラピートβ、', local: '普通車、', airport: '空港急行、', express: '急行、' }[v.id];
       assert.ok(dep.includes(`この電車は、${label}${kana[dest]}行きです。`), dep);
       assert.ok(!approachText(r, r.stations.length - 1, sv).includes('終点'), `${route.id}/${v.id}の終着駅は終点ではない`);
     }
@@ -846,6 +864,12 @@ for (const source of [kishiwada, kishiwadaUp, izumisano, izumisanoUp, throughUp,
     const finalSta = ctx.route.stations.at(-1)!, finalZone = loopZone(finalSta) ?? { inFrom: finalSta.platform.from - 160, outTo: finalSta.platform.to + 130 };
     let zoneMax = 0;
     const observedWaits = new Set<number>(), stopT: Record<number, number> = {}, arriveT: Record<number, number> = {};
+    const platformCalls: number[] = [];
+    ctx.events.on('platformAnnouncement', ({ text }) => {
+      assert.equal(ctx.state.state, 'dwell');
+      assert.match(text, /先に発車|通過します/);
+      platformCalls.push(ctx.state.target);
+    });
     attachAutodrive(ctx, (sec, dt = 1 / 30, hook) => {
       for (let t = 0; t < sec; t += dt) {
         if (hook?.()) break; game.update(dt);
@@ -874,6 +898,9 @@ for (const source of [kishiwada, kishiwadaUp, izumisano, izumisanoUp, throughUp,
     if (service === 'local' && finalSta.loop && reachesLast) assert.ok(zoneMax <= 46, `${source.id}/${service}終着の待避線へ45km/hで入線`);
     const waits = [...new Set(ctx.route.services!.find(v => v.id === 'local')!.waits?.filter(w => w.station > 0 && w.station < ctx.state.endIndex).map(w => w.station) ?? [])];
     assert.deepEqual([...observedWaits], service === 'local' ? waits : [], `${source.id}/${service}普通の待避`);
+    const expectedCalls = ctx.service?.waits?.map(w => w.station)
+      .filter(i => i > 0 && i >= ctx.state.fromIndex && i < ctx.state.endIndex) ?? [];
+    assert.deepEqual(platformCalls, expectedCalls, `${source.id}/${service} 待避列車ごとに駅放送を1回流す`);
     for (const k of Object.keys(stopT)) {
       const gap = arriveT[+k] - stopT[+k];
       console.log(`  待避 ${ctx.route.stations[+k].name}: 普通の停止から優等列車の到着まで ${gap.toFixed(1)}秒`);

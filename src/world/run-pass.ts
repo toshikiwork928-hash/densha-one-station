@@ -8,13 +8,14 @@ import { classOf, destOf, islandOffset, profileLat, serviceOf, stationStopS } fr
 import type { LatProfile, RunPass, ServiceSpec } from '../route/types';
 import { placeCar } from './emu';
 import { bogieOffset, createTrainSet, type TrainCar } from './train-models';
+import type { TrafficLivery } from './traffic-livery';
 
 interface Actor { pass: RunPass; svc: ServiceSpec; group: THREE.Group; cars: TrainCar[]; len: number; head: number; v: number; mode: 'passer' | 'local'; stage: 'wait' | 'run' | 'stop' }
 
 /** 優等列車の速度 [km/h]（追い抜く側）・普通の巡航速度 */
 const PASS_KMH = 95, LOCAL_KMH = 75, ACC = .8, DEC = .8;
 
-export function createRunPasses(ctx: GameContext): void {
+export function createRunPasses(ctx: GameContext, trafficLivery: TrafficLivery): void {
   const { route, events, track, scene } = ctx, st = ctx.state;
   if (route.singleTrack || !route.services?.some(v => v.runPassesByTime)) return;
   const local = serviceOf(route, 'local')!;
@@ -23,7 +24,8 @@ export function createRunPasses(ctx: GameContext): void {
   const done = new Set<string>();
   const pa = new THREE.Vector3(), pb = new THREE.Vector3();
   const make = (pass: RunPass, svc: ServiceSpec, mode: Actor['mode'], head: number, v: number, stage: Actor['stage']): Actor => {
-    const cars = createTrainSet(svc.kind, svc.cars, ctx.renderer, { nambaFirst: front7169ForRoute(route.id), dest: destOf(route, svc), label: svc.name, units: svc.units, unitKinds: svc.unitKinds });
+    const { kind, unitKinds } = trafficLivery(svc.kind, svc.units, svc.unitKinds, `run-pass:${pass.from}:${pass.to}:${pass.passedBy}`);
+    const cars = createTrainSet(kind, svc.cars, ctx.renderer, { nambaFirst: front7169ForRoute(route.id), dest: destOf(route, svc), label: svc.name, units: svc.units, unitKinds });
     const group = new THREE.Group(); group.name = 'overtake-runpass';
     for (const c of cars) group.add(c.object);
     scene.add(group);

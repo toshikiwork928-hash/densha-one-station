@@ -17,7 +17,8 @@ import MEETS from '../data/oncoming-meets.json';
 import { counterTimetable, createTimetableOncoming } from './oncoming-timetable';
 import { onLight } from './batch';
 import { placeCar } from './emu';
-import { createTrainSet, setTrainNight, TRAIN_KINDS, type TrainCar } from './train-models';
+import { createTrainSet, defaultUnits, setTrainNight, TRAIN_KINDS, type TrainCar } from './train-models';
+import type { TrafficLivery } from './traffic-livery';
 
 /** 車両セット（種別・両数・表示ごとに1つ。使用中は他の編成へ貸さない） */
 interface SetView { key: string; group: THREE.Group; cars: TrainCar[]; length: number; inUse: boolean }
@@ -116,7 +117,7 @@ const FOLLOW_AFTER = 100;
 /** 優等列車が出口分岐器側を抜けたとみなす余裕 [m]（通過列車の後部が待避線区間の入口よりこれだけ先へ出たら、待避線の普通が発車してよい） */
 const CLEAR_MARGIN = 30;
 
-export function createOncoming(ctx: GameContext): OncomingSystem {
+export function createOncoming(ctx: GameContext, trafficLivery: TrafficLivery): OncomingSystem {
   const { scene, track, events, route } = ctx, st = ctx.state;
   const dest = route.stations[0]?.name ?? route.prevName ?? '';
   const sets = new Map<string, SetView[]>();
@@ -158,7 +159,10 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
   // 種別・両数ごとに1セットを先に作る（出現時の負荷を避ける）
   if (!counterTimetable(route.id, ctx.envState.timeOfDay)) for (const o of trains) if (!sets.has(keyOf(o))) build(o);
   const acquire = (o: OncomingTrain): SetView => {
-    const v = sets.get(keyOf(o))?.find(x => !x.inUse) ?? build(o);
+    const units = o.spec.units ?? defaultUnits(o.kind, o.spec.cars);
+    const assigned = trafficLivery(o.kind, units, o.spec.unitKinds, `counter:${o.idx}`);
+    const appearance = assigned.unitKinds === o.spec.unitKinds ? o : { kind: assigned.kind, spec: { ...o.spec, ...assigned, units } };
+    const v = sets.get(keyOf(appearance))?.find(x => !x.inUse) ?? build(appearance);
     v.inUse = true; v.group.visible = true;
     for (const c of v.cars) c.setDoors(false);
     return v;
@@ -411,7 +415,7 @@ export function createOncoming(ctx: GameContext): OncomingSystem {
     }
     return out.sort((a, b) => a.spec.spawnAt - b.spec.spawnAt).map((o, i) => Object.assign(o, { idx: i }));
   }
-  const timed = createTimetableOncoming(ctx, (code, k, towardNamba) => {
+  const timed = createTimetableOncoming(ctx, trafficLivery, (code, k, towardNamba) => {
     const { id, ...spec } = scheduledConsist(code, k, towardNamba);
     // 泉佐野以南のコースでは、和歌山方面の普通は実際のダイヤどおり和歌山市行き（既存コースの羽倉崎行きは変えない）
     const south = route.id.startsWith('izumisano-misaki') || route.id.startsWith('misaki-wakayamako') || route.id.startsWith('izumisano-wakayamako');

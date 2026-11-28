@@ -199,7 +199,7 @@ export function attachEnvSystem(ctx: GameContext): EnvSystem {
     trainVel.set(tp.rz, 0, -tp.rx).multiplyScalar(tr.v);
     const light = THREE.MathUtils.clamp((cur.sunInt * .45 + cur.hemiInt * .6) / 1.4, .12, 1) * (1 - .7 * tb);
     precip.update(dt, camera.position, trainVel, rainAmt * out, snowAmt * out, light, renderer.getPixelRatio());
-    shield.update(dt, rainAmt * out, snowAmt * out, tr.v, ctx.cameraMode === 'cab', light);
+    ctx.env.overlayWiperVisible = shield.update(dt, rainAmt * out, snowAmt * out, tr.v, ctx.cameraMode === 'cab', light);
 
     // 積雪面
     snowPlane.visible = cur.snow > .02 && ctx.route.theme !== 'mountain'; // 山岳線は地形の上向きの面を白く（world/mountain-terrain.ts）

@@ -37,7 +37,7 @@ export function createVehiclePreview(ctx: GameContext) {
   const zoomMin = () => full ? .05 : .35;
   const setZoom = (z: number) => { zoom = THREE.MathUtils.clamp(z, zoomMin(), 1.8); };
   const pan = (d: number) => { panZ = THREE.MathUtils.clamp(panZ + d, -size.z / 2, size.z / 2); };
-  let modelKey = '', dirty = true, width = 0, height = 0;
+  let formationKey = '', modelKey = '', dirty = true, width = 0, height = 0;
 
   // ジオメトリ・テクスチャは共有、材質は複製。ゲーム側の夜間照明には触らない。
   function model(kind: TrainKind, count: number, units: number[], label?: string, unitKinds?: TrainKind[], dest?: string) {
@@ -85,11 +85,7 @@ export function createVehiclePreview(ctx: GameContext) {
     const key = `${kindsKey(svc)}:${svc.units.join('+')}:${svc.name}:${full}`;
     if (key === modelKey) return;
     modelKey = key; root.clear(); for (const m of materials) m.dispose();
-    // サザンの単車表示は物理先頭ではなく座席指定車を表示する。
-    const previewKind = svc.id === 'southern'
-      ? (svc.unitKinds?.find(k => k === 'southern-10000' || k === 'southern-12000') ?? svc.kind)
-      : svc.kind;
-    const m = model(full ? svc.kind : previewKind, full ? svc.cars : 1, full ? svc.units : [1], svc.name, full ? svc.unitKinds : undefined, destOf(ctx.route, svc));
+    const m = model(svc.kind, full ? svc.cars : 1, full ? svc.units : [1], svc.name, full ? svc.unitKinds : undefined, destOf(ctx.route, svc));
     root.add(m.group); materials = m.owned;
     const box = new THREE.Box3().setFromObject(root); box.getCenter(center); box.getSize(size);
     zoom = 1; panZ = 0; dirty = true;
@@ -158,6 +154,12 @@ export function createVehiclePreview(ctx: GameContext) {
     faceIcon,
     mount(container: HTMLElement, service: ServiceSpec) {
       host = container; svc = service;
+      const key = `${kindsKey(svc)}:${svc.units.join('+')}`;
+      if (key !== formationKey && service.unitKinds?.some(k => k !== service.kind)) {
+        full = true;
+        yaw = 1.30;
+      }
+      formationKey = key;
       host.innerHTML = `<div class="preview-heading">外観プレビュー <span>昼・晴れ</span></div>
         <div class="preview-stage"></div>
         <div class="preview-controls" role="group" aria-label="外観プレビューの操作">

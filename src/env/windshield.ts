@@ -3,7 +3,7 @@ import './env.css';
 
 export interface Windshield {
   /** wet: 雨 0..1, flakes: 雪 0..1, speed: 列車速度 [m/s], visible: 運転台視点か */
-  update(dt: number, wet: number, flakes: number, speed: number, visible: boolean, light?: number): void;
+  update(dt: number, wet: number, flakes: number, speed: number, visible: boolean, light?: number): boolean;
   setMaxDrops(n: number): void;
   setScale(s: number): void;
   toggleWiper(): boolean;
@@ -83,7 +83,7 @@ export function createWindshield(): Windshield {
     update(dt, wet, flakes, speed, visible, light = 1) {
       cv.style.display = visible ? '' : 'none';
       cv.style.opacity = String(.4 + .6 * light);
-      if (!visible) return;
+      if (!visible) return false;
       // ワイパー角度（往復）。停止指示後は休止位置まで戻る
       const prev = angle;
       if (wiperOn || angle > REST + .01) {
@@ -122,6 +122,7 @@ export function createWindshield(): Windshield {
       drops = drops.filter(d => d.life > 0 && d.y > -.05 && d.x > -.05 && d.x < 1.05 && d.y < 1.05);
       const showWiper = wiperOn || angle > REST + .01 || amt > .01;
       if (drops.length || showWiper || dirty) { draw(showWiper); dirty = drops.length > 0 || showWiper; }
+      return showWiper;
     },
   };
 }

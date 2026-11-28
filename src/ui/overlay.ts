@@ -9,8 +9,8 @@ import { lineFromHash, lineOfRoute } from './lines';
 import type { GameResult } from '../game/scoring';
 import { safetyDeductions } from '../game/scoring';
 import { MODE_LABEL, findStage, stagesOf, type GameMode } from '../game/state';
-import { serviceOf, unitsLabel } from '../route/service';
-import { playerVehicleOptions } from '../route/player-vehicles';
+import { carsOf, serviceOf, unitsLabel } from '../route/service';
+import { playerFormationKinds, playerVehicleOptions, selectedFormation, selectedVehicleKind } from '../route/player-vehicles';
 import type { ServiceSpec, TrainKind } from '../route/types';
 import { createVehiclePreview } from './vehicle-preview';
 
@@ -27,12 +27,12 @@ const svcDesc = (route: GameContext['route'], v: ServiceSpec) => {
 /** 車種の説明（選択画面用） */
 const KIND_INFO: Record<TrainKind, { name: string; desc: string }> = {
   'commuter-new': { name: '8300系（新型通勤車）', desc: 'ステンレス・すそ絞り車体・VVVF。加速 3.0km/h/s' },
-  'commuter-old': { name: '7100系（旧型通勤車）', desc: '鋼製・直線車体・抵抗制御。加速 2.5km/h/s、高速域は弱め' },
-  'commuter-7100-restored': { name: '7100系7169編成（復元塗装）', desc: '上淡緑・下濃緑の4両固定。通常7100系と同じ抵抗制御' },
+  'commuter-old': { name: '7100系（新塗装）', desc: '青帯と橙帯の鋼製車。抵抗制御、加速 2.5km/h/s' },
+  'commuter-7100-restored': { name: '7100系7169編成（旧塗装）', desc: '淡緑と濃緑の4両は1本だけ。自車で使うと他の列車には登場しません。' },
   'commuter-2300': { name: '2300系（山岳線用）', desc: '18m 車体・2両ユニット・VVVF。急勾配・急曲線向け' },
   'southern-10000': { name: '10000系（サザン座席指定車）', desc: '鋼製・1扉・リクライニング席。7100系と併結の抵抗制御' },
   'southern-12000': { name: '12000系（サザンプレミアム座席指定車）', desc: '指定席4両＋自由席4両。VVVF・営業最高110km/h' },
-  'commuter-9000': { name: '9000系（更新VVVF車）', desc: '更新VVVF・急行／空港急行4+4固定' },
+  'commuter-9000': { name: '9000系（更新VVVF車）', desc: '単独6両、同形式の4＋4両、8300系を連結した8両を選べます。' },
   limited: { name: '50000系（特急車）', desc: '流線形の先頭・定出力域が広く高速が得意' },
   // 以下は運転できない車種（対向列車などのモブ）。表を埋めるための項目
   'commuter-1000': { name: '1000系', desc: '本線の通勤車（6両）' },
@@ -41,7 +41,10 @@ const KIND_INFO: Record<TrainKind, { name: string; desc: string }> = {
   'limited-30000': { name: '30000系（こうや）', desc: '高野線の特急車' },
 };
 
-const carsOfUnits = (u: number[]) => u.reduce((a, n) => a + n, 0);
+function unitLabel(kind: TrainKind, cars: number) {
+  const name = kind === 'commuter-7100-restored' ? '7100系旧塗装' : kind === 'commuter-old' ? '7100系新塗装' : KIND_INFO[kind].name.split('（')[0];
+  return `${name} ${cars}両`;
+}
 
 const MODE_DESC: Record<GameMode, string> = {
   normal: '目安速度を参考に手動で運転。停止位置・定時・安全で採点',
@@ -237,20 +240,26 @@ export function attachOverlay(ctx: GameContext): void {
   /** 車両タブ: 選択中の種別の車種・両数 */
   function vehiclePane(svc: ServiceSpec | undefined): string {
     if (!svc) return '<p class="sub">この路線は車両を選べません。</p>';
-    const saved = st.sel.vehicles[svc.id], opt = playerVehicleOptions(svc);
-    const seat = svc.id === 'southern' ? (saved?.kind === 'southern-12000' || saved?.kind === 'southern-10000' ? saved.kind : svc.unitKinds?.find(k => k === 'southern-12000' || k === 'southern-10000') ?? 'southern-10000') : undefined;
+    const kind = selectedVehicleKind(svc), opt = playerVehicleOptions(svc, kind, route), selected = selectedFormation(svc);
     const free = svc.id === 'southern' ? (svc.unitKinds?.find(k => k !== 'southern-10000' && k !== 'southern-12000') ?? 'commuter-old') : undefined;
     const kinds = opt.kinds, forms = opt.formations;
-    const kb = kinds.map(k => `<button data-kind="${k}" class="vehicle-choice ${k === (seat ?? svc.kind) ? 'on' : ''}" aria-pressed="${k === (seat ?? svc.kind)}"><img class="vehicle-face" data-face-kind="${k}" alt="${KIND_INFO[k].name}の正面" width="64" height="64"><span>${KIND_INFO[k].name}<small>${KIND_INFO[k].desc}</small></span></button>`).join('');
+    const kb = kinds.map(k => `<button data-kind="${k}" class="vehicle-choice ${k === kind ? 'on' : ''}" aria-pressed="${k === kind}"><img class="vehicle-face" data-face-kind="${k}" alt="" width="64" height="64"><span>${KIND_INFO[k].name}<small>${KIND_INFO[k].desc}</small></span></button>`).join('');
     const fb = svc.id === 'southern' ? `<div class="selLbl">自由席車（難波方）</div><div class="sel col">${opt.freeKinds!.map(k => `<button data-free-kind="${k}" class="vehicle-choice ${k === free ? 'on' : ''}" aria-pressed="${k === free}"><img class="vehicle-face" data-face-kind="${k}" alt="${KIND_INFO[k].name}の正面" width="64" height="64"><span>${KIND_INFO[k].name}</span></button>`).join('')}</div>` : '';
-    const formLabel = (u: number[]) => `${carsOfUnits(u)}両${u.length > 1 ? `<small>${unitsLabel(u)}（${u.length}編成を連結）</small>` : ''}`;
-    const cb = forms.map(u => `<button data-units="${u.join('+')}" class="${u.join('+') === svc.units.join('+') ? 'on' : ''}" ${forms.length < 2 ? 'disabled' : ''}>${formLabel(u)}</button>`).join('');
-    return `<div class="selLbl"><span class="svcBadge svc-${svc.id}">${svc.id === 'southern' && seat === 'southern-12000' ? 'サザンプレミアム' : svc.name}</span> の車両</div>
+    const cb = forms.map(u => {
+      const active = unitsLabel(u) === unitsLabel(selected);
+      const mixedChoices = kind === 'commuter-7100-restored' || kind === 'commuter-9000';
+      const detail = mixedChoices ? playerFormationKinds(kind, u).map((k, i) => unitLabel(k, u[i])).join(' ＋ ') : u.length > 1 ? unitsLabel(u) : '';
+      return `<button data-units="${u.join('+')}" class="${active ? 'on' : ''}" aria-pressed="${active}" ${forms.length < 2 ? 'disabled' : ''}>${carsOf(u)}両${detail ? `<small>${detail}</small>` : ''}</button>`;
+    }).join('');
+    const order = svc.unitKinds && svc.units.length > 1 ? svc.units.map((n, i) => unitLabel(svc.unitKinds![i], n)).join(' ＋ ') : '';
+    return `<div class="selLbl"><span class="svcBadge svc-${svc.id}">${svc.id === 'southern' && kind === 'southern-12000' ? 'サザンプレミアム' : svc.name}</span> の${svc.id === 'southern' ? '座席指定車（和歌山方）' : '車両'}</div>
       <div class="sel col" id="selKind">${kb}</div>
       ${fb}
-      <div class="vehicle-preview"></div>
       <div class="selLbl">編成${forms.length < 2 ? '（固定）' : ''}</div><div class="sel" id="selCars">${cb}</div>
-      <p class="sub">${svc.cars}両編成${svc.units.length > 1 ? `（${svc.unitKinds ? svc.units.map((n, i) => `${KIND_INFO[svc.unitKinds![i] ?? svc.kind].name.replace(/（.*/, '')}${n}両`).join(' + ') : svc.units.map(n => n + '両').join(' + ')}を連結）` : ''}。駅では「${svc.cars >= 8 ? '6・8' : svc.cars}両」の停止位置目標に先頭を合わせる。</p>`;
+      ${opt.platformLimit ? '<p class="sub">停車駅近くの踏切を塞がないよう、この区間では6両まで選べます。</p>' : ''}
+      ${order ? `<p class="sub">進行方向の先頭から　${order}</p>` : ''}
+      <div class="vehicle-preview"></div>
+      <p class="sub">駅では「${svc.cars >= 8 ? '6・8' : svc.cars}両」の停止位置目標に先頭を合わせます。</p>`;
   }
 
   /** 記録タブ: 自己ベスト（種別×区間）と最近のプレイ */

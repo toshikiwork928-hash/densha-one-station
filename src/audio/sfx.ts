@@ -14,7 +14,7 @@ import { createStation, type StationSfx } from './station';
 import { createAlarms, type Alarms } from './alarms';
 import { createAmbience, type Ambience } from './ambience';
 import { createAnnouncer } from './announce';
-import { approachText, departText } from './announce-text';
+import { approachEnglish, approachText, departEnglish, departText } from './announce-text';
 import { createSettings, renderSettingsUi, type SettingsStore } from './settings';
 
 interface Parts {
@@ -36,6 +36,7 @@ export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
   const announcer = createAnnouncer();
   let ac: AudioContext | null = null, p: Parts | null = null;
   let doorsOpen = false, fromDwell = false, dwellMelody = false, hornStop: (() => void) | null = null;
+  let departureChimeAt = -Infinity;
   let lastIdle: Vvvf | null = null;
   let vehicle = ctx.service?.kind ?? 'commuter-new';
   let saved = savedTuning(vehicle);
@@ -104,13 +105,13 @@ export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
   }
 
   /** 車内放送: チャイム → 音声 */
-  function announce(text: string, delay = 0) {
+  function announce(japanese: string, english: string, delay = 0) {
     if (p) {
       const t = p.core.now() + delay;
       p.core.tone(p.core.voice, 784, 1.1, .05, t, 'sine', .01);
       p.core.tone(p.core.voice, 1047, 1.4, .05, t + .32, 'sine', .01);
     }
-    announcer.say(text, delay + 1.1);
+    announcer.sayBilingual(japanese, english, delay + 1.1);
   }
 
   events.on('start', () => { ensure(); doorsOpen = false; });
@@ -133,14 +134,24 @@ export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
     if (p && !fromDwell) delay = p.station.melody() + .5;
     // 待避から発車するときは「お待たせしました」から（優等列車の通過・待ち合わせを待った駅）
     const ot = ctx.state.overtake;
-    const text = departText(ctx.route, e.index, !!ot && ot.station === e.index && ot.localStopped, ctx.service);
-    if (text) announce(text, delay);
+    const afterWait = !!ot && ot.station === e.index && ot.localStopped;
+    const first = e.index === ctx.state.fromIndex;
+    const text = departText(ctx.route, e.index, afterWait, ctx.service, first);
+    if (text) {
+      departureChimeAt = ctx.state.t + delay;
+      announce(text, departEnglish(ctx.route, e.index, afterWait, ctx.service, first), delay);
+    }
   });
   events.on('stationApproach', e => {
     if (e.stage !== 'announce') return;
-    announce(approachText(ctx.route, e.index, ctx.service));
+    // 駅間が800 m未満でも、接近放送が発車放送を追い越さないようにする。
+    const delay = Math.max(0, departureChimeAt + 1.5 - ctx.state.t);
+    announce(approachText(ctx.route, e.index, ctx.service), approachEnglish(ctx.route, e.index, ctx.service), delay);
   });
-  // 駅に着いたとき（ゴールを含む）は放送しない（ユーザー指示。待ち合わせ・待避は到着前の放送で案内する）
+  events.on('platformAnnouncement', e => {
+    announcer.cancel();
+    announcer.say(e.text);
+  });
   events.on('stateChange', e => {
     fromDwell = e.from === 'dwell' && e.to === 'run';
     if (e.to === 'dwell') dwellMelody = false;
@@ -149,6 +160,7 @@ export function attachSfx(events: EventBus, ctx: GameContext): Sfx {
   events.on('doorOpen', () => { doorsOpen = true; p?.station.door(true); });
   events.on('doorClose', () => {
     doorsOpen = false; p?.station.door(false);
+    announcer.cancel();
     announcer.say('ドアが閉まります。ご注意ください。', .2);
   });
   events.on('result', () => {

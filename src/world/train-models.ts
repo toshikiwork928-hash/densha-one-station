@@ -16,6 +16,7 @@ import { build12000Car, paint12000Face, paint12000Side } from './trains/c12000';
 import { paint7100Side } from './trains/c7100-side';
 import { paint7100Cab } from './trains/c7100-cab';
 import { CAR_LEN, carLenOf } from '../route/service';
+import { playerFormationKinds } from '../route/formation-kinds';
 export { front7169ForRoute } from '../route/vehicle-direction';
 
 /** 1両分の生成結果。原点 = 車体中心・レール面高さ、前 = -Z */
@@ -71,8 +72,8 @@ export const bogieOffset = (carLen: number): number => carLen / 2 - .25 - 2.6;
 /** 既定のユニット分け（通勤形は 4両 + 端数、2300系・2000系は 2両ずつ、特急形・1000系の6両は1ユニット） */
 export function defaultUnits(kind: TrainKind, n: number): number[] {
   const u = kind === 'commuter-2300' || kind === 'commuter-2000' ? 2 : 4;
-  if (kind === 'commuter-7100-restored') return [4];
-  if (kind === 'limited' || kind === 'limited-30000' || kind === 'southern-12000' || (kind === 'commuter-1000' && n === 6) || n <= u) return [Math.max(1, n)];
+  if (kind === 'commuter-7100-restored') return n === 8 ? [4, 4] : n === 6 ? [4, 2] : [4];
+  if (kind === 'limited' || kind === 'limited-30000' || kind === 'southern-12000' || ((kind === 'commuter-1000' || kind === 'commuter-9000') && n === 6) || n <= u) return [Math.max(1, n)];
   const out: number[] = []; let r = n;
   while (r > u) { out.push(u); r -= u; }
   out.push(r);
@@ -205,7 +206,7 @@ function kindKit(kind: TrainKind, renderer: THREE.WebGLRenderer): KindKit {
   } else if (kind === 'commuter-7100-restored') {
     const paint = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .5, metalness: .12, envMap: env, envMapIntensity: .6 });
     k = {
-      geo: cached((c, panZ) => buildCommuterCar('old', c, LB, false, panZ)),
+      geo: cached((c, panZ) => buildCommuterCar('old', c, LB, false, panZ, true)),
       side: { head: sheetMat(paint7100Side(LB, YTOP, true, false, true), env, false, .6), mid: sheetMat(paint7100Side(LB, YTOP, false, false, true), env, false, .6) },
       face: sheetMat(paint7100Cab(HW, YTOP, true, '7169'), env, false, .6),
       faceRear: sheetMat(paint7100Cab(HW, YTOP, true, '7170'), env, false, .6),
@@ -405,11 +406,15 @@ export const createTrainSet: CreateTrainSet = (kind, cars, renderer, opts = {}) 
     ? { led: ledMatPart('type', shown, dest), led2: ledMatPart('dest', shown, dest) }
     : k === 'southern-10000' ? { led: ledSouthernMat(label, dest), led2: undefined } : { led: ledMat(shown, dest, .47, k === 'commuter-old' || k === 'commuter-7100-restored'), led2: undefined };
   const nambaFirst = opts.nambaFirst ?? (opts.dest ? opts.dest === 'なんば' || opts.dest === '難波' : true);
-  const units = opts.units?.length ? opts.units : defaultUnits(kind, Math.max(1, cars));
+  const units = opts.units?.length ? opts.units.slice() : defaultUnits(kind, Math.max(1, cars));
+  const kinds = opts.unitKinds ?? playerFormationKinds(kind, units);
+  if (!opts.unitKinds && !nambaFirst && kinds.some(k => k !== kind)) {
+    units.reverse(); kinds.reverse();
+  }
   const out: TrainCar[] = [];
   units.forEach((m, u) => {
     // ユニットごとの車種（サザンは 10000系 + 7100系）。未指定は編成の kind
-    const uk = opts.unitKinds?.[u] ?? kind, kit = opts.dark ? darkKit(uk, renderer) : kindKit(uk, renderer), len = carLenOf(uk), { led, led2 } = leds(uk);
+    const uk = kinds[u] ?? kind, kit = opts.dark ? darkKit(uk, renderer) : kindKit(uk, renderer), len = carLenOf(uk), { led, led2 } = leds(uk);
     const first = u === 0, last = u === units.length - 1;
     for (let i = 0; i < m; i++) {
       const lastCar = i === m - 1;

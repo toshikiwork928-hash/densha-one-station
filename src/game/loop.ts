@@ -6,7 +6,8 @@ import {
 import type { GameActions, GameContext } from '../core/context';
 import type { CameraMode } from '../core/events';
 import { DEFAULT_PERF, TRAIN_PERF, stepTrain } from '../sim/train';
-import { selectableServices, serviceOf } from '../route/service';
+import { kindsKey, selectableServices, serviceOf } from '../route/service';
+import { playerVehicleOptions, selectedFormation, selectedVehicleKind } from '../route/player-vehicles';
 import { lineOf } from '../route';
 import { courseMenu } from '../route/course-menu';
 import { createOvertake, waitsAt } from './overtake';
@@ -39,7 +40,8 @@ export function createGame(ctx: GameContext, changeRoute?: (selection: Selection
   };
   const banner = (text: string, sec = 3) => events.emit('banner', { text, sec });
 
-  // カメラ: 0 = 運転台, 1 = 俯瞰追従, 2 = 前方斜め, 3 = 編成全景（camera.ts が 'outside' の連続で切替）
+  // カメラ: 0 = 運転台, 1 = 俯瞰追従, 2 = 前方斜め, 3 = 編成全景, 4 = ホーム定点
+  // （camera.ts が 'outside' の連続で切替）
   let camCycle = 0;
   function setCamera(mode: CameraMode) {
     if (mode !== 'outside') camCycle = 0;
@@ -60,7 +62,7 @@ export function createGame(ctx: GameContext, changeRoute?: (selection: Selection
     const perfKind = ctx.service?.id === 'southern' && ctx.service.unitKinds?.includes('southern-12000')
       ? 'southern-12000' : ctx.service?.kind;
     ctx.trainEnv.perf = perfKind ? TRAIN_PERF[perfKind] : DEFAULT_PERF;
-    const key = ctx.service ? `${ctx.service.id}:${ctx.service.kind}:${ctx.service.units.join('+')}` : '';
+    const key = ctx.service ? `${ctx.service.id}:${kindsKey(ctx.service)}:${ctx.service.units.join('+')}` : '';
     if (ctx.service && key !== appliedService) {
       appliedService = key;
       events.emit('serviceChange', { service: ctx.service });
@@ -335,10 +337,10 @@ export function createGame(ctx: GameContext, changeRoute?: (selection: Selection
     quitToTitle,
     cycleCamera: () => {
       if (replay.active || st.paused) return;
-      camCycle = (camCycle + 1) % 4;
+      camCycle = (camCycle + 1) % 5;
       const mode: CameraMode = camCycle === 0 ? 'cab' : 'outside';
       ctx.cameraMode = mode;
-      events.emit('cameraMode', { mode });
+      events.emit('cameraMode', { mode, outsideVariant: camCycle - 1 });
     },
     toTitle: () => {
       if (st.state !== 'result') return;
@@ -357,9 +359,12 @@ export function createGame(ctx: GameContext, changeRoute?: (selection: Selection
       if (st.state !== 'title') return;
       const svc = serviceOf(route, st.sel.service);
       if (!svc) return;
-      const prev = st.sel.vehicles[svc.id];
-      const seatKind = svc.id === 'southern' ? svc.unitKinds?.find(k => k === 'southern-10000' || k === 'southern-12000') : undefined;
-      st.sel.vehicles = { ...st.sel.vehicles, [svc.id]: { kind: v.kind ?? prev?.kind ?? seatKind ?? svc.kind, freeKind: v.freeKind ?? prev?.freeKind, units: v.units ?? prev?.units ?? svc.units } };
+      const kind = v.kind ?? selectedVehicleKind(svc);
+      const options = playerVehicleOptions(svc, kind, route);
+      const requested = v.units ?? selectedFormation(svc);
+      const units = options.formations.find(u => u.length === requested.length && u.every((n, i) => n === requested[i])) ?? options.formations[0];
+      const freeKind = options.freeKinds?.find(k => v.freeKind ? k === v.freeKind : svc.unitKinds?.includes(k)) ?? options.freeKinds?.[0];
+      st.sel.vehicles = { ...st.sel.vehicles, [svc.id]: { kind, freeKind, units } };
       saveSelection(st.sel);
       reset();
     },

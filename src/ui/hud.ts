@@ -36,6 +36,7 @@ export function attachHud(ctx: GameContext): void {
       <div id="atsLine" class="ats-ok">ATS 正常</div>
     </div>
     <div class="panel sp-door"><span id="doorLamp" class="doorLamp on">戸閉</span><span id="doorTxt" class="sub"></span></div>
+    <div class="panel sp-pass" id="passInfo" hidden></div>
     <div class="panel sp-tt"><div class="lbl">時刻表</div><table id="ttTable"></table></div>
     <div id="replayTag">REPLAY</div>`;
   $('hud').appendChild(side);
@@ -49,7 +50,7 @@ export function attachHud(ctx: GameContext): void {
   pcMq.addEventListener('change', placeLimit);
   const sx = {
     lamps: side.querySelector<HTMLElement>('.sigLamps')!, sigTxt: $('sigTxt'), sigDist: $('sigDist'), ats: $('atsLine'),
-    door: $('doorLamp'), doorTxt: $('doorTxt'), tt: $<HTMLTableElement>('ttTable'), replay: $('replayTag'), svc: $('svcPanel'),
+    door: $('doorLamp'), doorTxt: $('doorTxt'), tt: $<HTMLTableElement>('ttTable'), replay: $('replayTag'), svc: $('svcPanel'), pass: $('passInfo'),
   };
   // リプレイ中の操作ボタン（結果画面へ戻る・タイトルへ）。サイドパネルの外（body 直下）に置いて画面の手前に出す
   const replayBar = document.createElement('div'); replayBar.id = 'replayBar';
@@ -70,6 +71,15 @@ export function attachHud(ctx: GameContext): void {
   /** 次の停車駅より手前の通過駅（未通過） */
   const nextPass = () => route.stations.findIndex((x, i) => x.pass && i > st.fromIndex && i < targetIndex() && !st.flags['passed' + i]);
 
+  /** 次の通過駅を、PCの先読み表示とスマホの一行表示に共通化する。 */
+  function renderPassInfo(p: number) {
+    const visible = p >= 0 && st.state !== 'title' && st.state !== 'result';
+    sx.pass.hidden = !visible;
+    if (!visible) { sx.pass.textContent = ''; return; }
+    const pass = route.stations[p];
+    sx.pass.innerHTML = `<span class="lbl">次の通過</span> <b>${pass.name}</b> <span class="sub">${fmtClock(route.startClock + pass.scheduledArrival)}</span>`;
+  }
+
   function renderTarget() {
     const sta = route.stations[targetIndex()];
     const dep = dwelling();
@@ -79,24 +89,29 @@ export function attachHud(ctx: GameContext): void {
     const v = route.services ? serviceOf(route, st.sel.service) : undefined;
     el.nextSta.textContent = (v ? `${v.name} ` : '') + (st.state === 'dwell' ? `${sta.name} 停車中` : `次は ${sta.name}` + (p >= 0 ? `（${route.stations[p].name} 通過）` : ''));
     renderService();
+    renderPassInfo(p);
     renderTimetable();
   }
 
-  /** 時刻表の表示行数の上限（堺〜泉大津の10駅と同じ大きさ）。駅が多いコースは、次の停車駅の2駅前から表示し、過ぎた駅は上へ送って消す */
+  /** 時刻表には、次に通過または停車する駅を含む最大10行を表示する。 */
   const TT_ROWS = 10;
   function renderTimetable() {
     const rows: string[] = [];
-    const first = Math.max(st.fromIndex, Math.min(targetIndex() - 2, st.endIndex - TT_ROWS + 1)), last = Math.min(st.endIndex, first + TT_ROWS - 1);
+    const pass = nextPass();
+    // 長い区間では次の通過駅を先読みできる範囲を優先する。
+    const focus = pass >= 0 ? pass : targetIndex();
+    const first = Math.max(st.fromIndex, Math.min(focus - 2, st.endIndex - TT_ROWS + 1)), last = Math.min(st.endIndex, first + TT_ROWS - 1);
     for (let i = first; i <= last; i++) {
       const x = route.stations[i], c = route.startClock;
-      const arr = i === st.fromIndex ? '' : fmtHM(c + x.scheduledArrival).slice(0, -3) + `<small>${fmtHM(c + x.scheduledArrival).slice(-2)}</small>`;
+      const arrival = fmtClock(c + x.scheduledArrival);
+      const arr = i === st.fromIndex ? '' : i === pass ? arrival : arrival.slice(0, -3) + `<small>${arrival.slice(-2)}</small>`;
       const dep = x.pass ? 'レ' : i === st.endIndex ? '' : fmtHM(c + departureTime(route, i)).slice(0, -3) + `<small>${fmtHM(c + departureTime(route, i)).slice(-2)}</small>`;
       const done = st.stops.some(j => j.index === i) || st.passes.some(j => j.index === i) || i === st.fromIndex && st.state !== 'title';
-      const cls = i === targetIndex() ? 'next' : done ? 'done' : '';
+      const cls = i === focus ? 'next' : done ? 'done' : '';
       rows.push(`<tr class="${cls}${x.pass ? ' pass' : ''}"><td>${x.name}</td><td>${arr}</td><td>${dep}</td></tr>`);
     }
     sx.tt.innerHTML = rows.join('');
-    // 低い画面で時刻表がはみ出す場合は次の停車駅付近が見える位置へ寄せる
+    // 低い画面でも、次に時刻を確認する駅が見える位置までスクロールする。
     const box = sx.tt.parentElement!, nr = sx.tt.querySelector<HTMLElement>('tr.next');
     box.scrollTop = nr ? Math.max(0, nr.offsetTop - 48) : 0;
   }
@@ -168,7 +183,7 @@ export function attachHud(ctx: GameContext): void {
       nxt = `<b>${label}</b>まで ${Math.ceil(next.s - s)}m`;
     }
     const pace = timetablePace(ctx);
-    if (pace != null) nxt = (nxt === '&nbsp;' ? '' : nxt + '<br>') + `定刻の目安 ${Math.round(pace)} km/h`;
+    if (pace != null) nxt = (nxt === '&nbsp;' ? '' : nxt + '<br>') + `停車駅の目安 ${Math.round(pace)} km/h`;
     el.nextLimit.innerHTML = nxt;
     // 通過駅が手前にあればそこまでの距離を補助表示
     const p = nextPass();
@@ -177,7 +192,7 @@ export function attachHud(ctx: GameContext): void {
     el.dist.classList.toggle('near', d <= 100);
     el.distPanel.classList.toggle('near', d <= 100 && d >= 0);
     el.distPanel.classList.toggle('over', d < 0);
-    if (distLbl) distLbl.textContent = p >= 0 ? `停止位置まで（${route.stations[p].name}通過まで ${Math.max(0, Math.round(route.stations[p].stopS - s))}m）` : '停止位置まで';
+    if (distLbl) distLbl.textContent = p >= 0 ? `停止位置まで（${route.stations[p].name}通過まで ${Math.max(0, Math.round(route.stations[p].platform.to + route.trainLength - s))}m）` : '停止位置まで';
     drawMeter(mctx, vk, lim, route.lineLimit > 100 ? 140 : 120, route.lineLimit);
     updateSide();
   }

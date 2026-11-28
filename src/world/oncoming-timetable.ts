@@ -6,7 +6,8 @@ import DATA from '../data/oncoming-timetable.json';
 import type { GameContext } from '../core/context';
 import type { LatProfile, OncomingSpec, Route, ServiceId, TimeOfDay } from '../route/types';
 import { customPlatformSide, islandOffset, loopShape, loopZone, playerPathLat, profileLat, serviceOf, carLenOf, centeredHead, type LoopZone } from '../route/service';
-import { createTrainSet, type TrainCar } from './train-models';
+import { createTrainSet, defaultUnits, type TrainCar } from './train-models';
+import type { TrafficLivery } from './traffic-livery';
 import { TERMINAL_CHECKPOINTS } from '../game/terminal-ats';
 import { placeCar } from './emu';
 import { coastalThirdTracks } from './coastal-stations';
@@ -367,7 +368,7 @@ export function createCounterTraffic(route: Route, tod: TimeOfDay, consist: (cod
 }
 
 /** 車両モデルは種別・編成ごとに再利用し、描画範囲外でも運行時計を進める。 */
-export function createTimetableOncoming(ctx: GameContext, consist: (code: string, ordinal: number, playerTowardNamba: boolean) => Consist) {
+export function createTimetableOncoming(ctx: GameContext, trafficLivery: TrafficLivery, consist: (code: string, ordinal: number, playerTowardNamba: boolean) => Consist) {
   interface View { group: THREE.Group; cars: TrainCar[]; key: string; train?: CounterTrain }
   const pool: View[] = [];
   const horned = new Set<string>();
@@ -385,11 +386,13 @@ export function createTimetableOncoming(ctx: GameContext, consist: (code: string
     for (const o of visible) {
       let view = pool.find(v => v.train === o);
       if (!view) {
-        const key = JSON.stringify([o.spec.kind, o.spec.cars, o.spec.units, o.spec.unitKinds, o.spec.label, o.spec.dest]);
+        const units = o.spec.units ?? defaultUnits(o.spec.kind, o.spec.cars);
+        const { kind, unitKinds } = trafficLivery(o.spec.kind, units, o.spec.unitKinds, `counter:${o.id}`);
+        const key = JSON.stringify([kind, units, unitKinds, o.spec.label, o.spec.dest]);
         view = pool.find(v => !v.train && v.key === key);
         if (!view) {
           const group = new THREE.Group(); ctx.scene.add(group);
-          const cars = createTrainSet(o.spec.kind, o.spec.cars, ctx.renderer, { nambaFirst: !front7169ForRoute(ctx.route.id), units: o.spec.units, unitKinds: o.spec.unitKinds, label: o.spec.label, dest: o.spec.dest });
+          const cars = createTrainSet(kind, o.spec.cars, ctx.renderer, { nambaFirst: !front7169ForRoute(ctx.route.id), units, unitKinds, label: o.spec.label, dest: o.spec.dest });
           for (const c of cars) group.add(c.object);
           view = { group, cars, key }; pool.push(view);
         }

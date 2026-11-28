@@ -25,7 +25,7 @@ const hose = basePart(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
   new THREE.Vector3(.085, .72, .15),
 ]), 8, .025, 6, false));
 
-export function add7100Skirt(b: GeoBatch, z: number, color = 0x777d80) {
+export function add7100Skirt(b: GeoBatch, z: number, color: THREE.ColorRepresentation = 0x777d80) {
   const add = adder(b);
   b.add('paint', guard, M(0, 0, z - .03), color);
   add(0, .81, z + .25, 1.95, .27, .21, 0x303539);

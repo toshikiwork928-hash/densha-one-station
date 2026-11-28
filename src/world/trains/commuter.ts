@@ -4,9 +4,9 @@ import { windowSill } from './cab-glazing';
 //  old: 7100系。銀灰色の鋼製車体、屋根上の2灯前照灯、分散冷房、下枠交差形パンタグラフ
 //  6300系（ss = true）はステンレスの外板と菱形パンタグラフを使う。
 import * as THREE from 'three';
-import { BLUE_7100, FRONT_BLUE_7100, FRONT_ORANGE_7100, ORANGE_7100, paint7100Side } from './c7100-side';
+import { BLUE_7100, FRONT_BLUE_7100, FRONT_ORANGE_7100, ORANGE_7100, paint7100Side, RESTORED_LOWER } from './c7100-side';
 import { add7100Skirt, addWrapSkirt } from './c7100-skirt';
-import { SECTION_7100, paint7100Cab, add7100Gangway, add7100HeadlightShell, curve7100Shell, curve7100Z } from './c7100-cab';
+import { SECTION_7100, paint7100Cab, add7100CornerSteps, add7100Gangway, add7100HeadlightShell, curve7100Shell, curve7100Z } from './c7100-cab';
 import { GeoBatch, M, P } from '../batch';
 import {
   Y0, adder, addCrossArm, addEndWall, addSingleArm, addUnderfloor, capGeo, curvedCab, faceSheet, roundRings, shellGeo, sideSheet, sweepBand,
@@ -191,7 +191,7 @@ export function paintCommuterFace(v: CommuterVariant, ss = false): SheetMaps {
 }
 
 /** 1両分のジオメトリ */
-export function buildCommuterCar(v: CommuterVariant, kind: CarKind, Lb: number, ss: boolean, panZ: readonly number[]): CarParts {
+export function buildCommuterCar(v: CommuterVariant, kind: CarKind, Lb: number, ss: boolean, panZ: readonly number[], restored = false): CarParts {
   const cross7100 = v === 'old' && !ss;
   // 6300系も7100系と同じく、前面の肩を中央扉から後退させた曲面形状を持つ。
   // 外板の材質・屋上機器・スカートは ss 側の実車差分をそのまま残す。
@@ -254,14 +254,16 @@ export function buildCommuterCar(v: CommuterVariant, kind: CarKind, Lb: number, 
         const scale = .70;
         const mz = curve7100Z(sx * .98, 1.28, zf);
         add(sx * .98, 1.28, mz - .04, .3 * scale, .24 * scale, .06, 0x15171a);
-        add(sx * .98, 1.28, mz - .075, .33 * scale, .02 * scale, .02, 0x8f959b);
+        // 7170号の踏み台は標識灯の上に独立して張り出す。
+        add(sx * .98, 1.47, mz - .05, .24, .019, .13, restored ? 0x174833 : 0x8f959b);
         bt.add('l', P.box, M(sx * .98, 1.28, mz - .075, 0, .2 * scale, .16 * scale, .02), 0xffffff);
       }
       marks = { l: mkL.geometry('l')!, r: mkR.geometry('l')! };
       // 行先表示器（左窓の上）: 枠・庇・奥行きを付けて1面に種別 + 行先
       led = mergeLed([[0, 0, .59]], 0, .155).rotateY(-Math.atan(.30 * (.85 - .46)))
         .translate(.85, 3.15, curve7100Z(.85, 3.15, zf) - .015);
-      add7100Skirt(b, ss ? zf + .09 : zf);
+      add7100CornerSteps(b, zf, restored);
+      add7100Skirt(b, ss ? zf + .09 : zf, restored ? RESTORED_LOWER : undefined);
       for (const sx of [-1, 1]) {
         if (ss) add(sx * .93, 2.5, z - .03, .5, .025, .025, 0x111111, 0, 0, sx * .5);
         else {

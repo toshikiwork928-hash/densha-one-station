@@ -96,11 +96,11 @@ const SPEC: Record<NewLiveryModel, Spec> = {
     crewOff: .86, crewW: .60, fwin: [1.94, 3.58], face: '#e9ebec', num: '1510',
   },
   '2000': {
-    hw: 1.4, ytop: 3.8, half: [[1.34, Y0], [1.4, 1.48], ...ROOF(1.4, 3.8)], slant: { depth: .28, bow: .14, hw: 1.4, ytop: 3.8 }, r: .18,
+    hw: 1.4, ytop: 3.8, half: [[1.34, Y0], [1.4, 1.48], [1.4, (Y0 + 3.8) / 2], ...ROOF(1.4, 3.8)], slant: { depth: .055, bow: .14, hw: 1.4, ytop: 3.8 }, r: .18,
     doors: [-4.3, 4.3], doorW: 1.3, win: [2.0, 2.92], roofY: 3.4,
     base: ['#d8dce0', '#b5bbc2'], rough: .36, metal: .78, top: [[3.18, 3.34], [3.05, 3.14]],
     // 写真で確認した代表編成は2039編成（モハ2039）。
-    crewOff: .58, crewW: .6, fwin: [2.2, 3.52], face: '#cdd1d6', num: '2039',
+    crewOff: .58, crewW: .6, fwin: [1.97, 3.54], face: '#cdd1d6', num: '2039',
   },
 };
 
@@ -176,16 +176,14 @@ export function paintNewLiveryFace(m: NewLiveryModel, carNumber = SPEC[m].num): 
   s.rect(-.45, .45, 1.22, doorTop, '#a9aeb4', .45, .3, .04);
   s.rect(-.38, .38, 1.27, doorTop - .065, '#d0d4d9', .4, .2, .03);
   s.rect(-.31, .31, 1.31, doorTop - .11, m === '1000' ? '#c3c6c7' : '#afb6ba', .12, .25, .04);
-  if (m !== '1000') s.cabGlass(-.25, .25, 2.32, f1 - .16,
-    '#3d434a', .03, ['#24303a', '#0f1418']);
   s.rect(-.38, .38, ...frontBand, L.blue, .35, .1);
   s.rect(-.38, .38, ...frontLine, L.orange, .35, .1);
-  if (m === '1000') s.cabGlass(-.25, .25, 1.78, 3.15,
+  s.cabGlass(-.25, .25, m === '1000' ? 1.78 : 1.93, m === '1000' ? 3.15 : f1 - .16,
     '#3d434a', .03, ['#24303a', '#0f1418']);
   // 灯具の黒いケース（青帯の中、左右）
   const lc = (hw - .2 + .5) / 2; // 灯具の中心（貫通扉と車体の角の間）
   if (m === '1000') for (const sx of [-1, 1]) s.rect(sx * lc - .3, sx * lc + .3, 1.48, 1.70, '#0e1012', .2, .3, .04);
-  for (const side of [-1, 1]) windowSill(s, side * (m === '1000' ? .63 : .69), m === '1000' ? 1.835 : 2.07);
+  for (const side of [-1, 1]) windowSill(s, side * (m === '1000' ? .63 : .69), m === '1000' ? 1.835 : f0 - .10);
   if (m === '2000') {
     // 2039号の前照灯は青帯の下縁をまたぎ、幅広い銀色の灯箱に収まる。
     for (const side of [-1, 1]) {
@@ -194,7 +192,7 @@ export function paintNewLiveryFace(m: NewLiveryModel, carNumber = SPEC[m].num): 
       s.rect(x - .285, x + .285, 1.332, 1.537, '#686f72', .35, .55, .018);
     }
   }
-  s.text(carNumber, m === '1000' ? -.98 : -lc, m === '2000' ? 1.83 : 1.81, .11, '#f4f6fa', 700);
+  s.text(carNumber, m === '1000' ? -.98 : -lc, m === '2000' ? 1.76 : 1.81, .11, '#f4f6fa', 700);
   s.emit(-hw, hw, Y0, S.ytop + .1, '#000'); // 夜は運転台の窓を光らせない
   return s.textures();
 }
@@ -202,9 +200,7 @@ export function paintNewLiveryFace(m: NewLiveryModel, carNumber = SPEC[m].num): 
 /** 1両分のジオメトリ */
 export function buildNewLiveryCar(m: NewLiveryModel, kind: CarKind, Lb: number, panZ: readonly number[]): CarParts {
   const S = SPEC[m], hz = Lb / 2, head = kind === 'head', zf = -hz, sl = S.slant, roofTop = S.ytop;
-  const nose = m === '1000'
-    ? [...roundRings(zf, S.r, 1), { z: zf + sl.depth + sl.bow + .12, inset: 0 }]
-    : slantRings(zf, S.r, sl);
+  const nose = [...roundRings(zf, S.r, 1), { z: zf + sl.depth + sl.bow + .12, inset: 0 }];
   const rings: Ring[] = [...(head ? nose : [{ z: -hz, inset: 0 }]), { z: hz, inset: 0 }];
   const shell = shellGeo(S.half, rings, S.ytop, Lb);
   if (head) applySlant(shell, zf, sl);
@@ -239,7 +235,7 @@ export function buildNewLiveryCar(m: NewLiveryModel, kind: CarKind, Lb: number, 
     add7100Skirt(b, zf + .18, 0x8d949a);
     // ワイパー（傾いた窓の下端）
     for (const sx of [-1, 1]) add(sx * .84, S.fwin[0] + .17, zAt(sx * .84, S.fwin[0] + .17) - .035, .024, .54, .023, 0x292c2c,
-      Math.atan(slantSlope(sl, S.fwin[0] + .17)), m === '2000' ? sx * .4 : 0, m === '1000' ? sx * .40 : 0);
+      Math.atan(slantSlope(sl, S.fwin[0] + .17)), 0, sx * .40);
     // 屋根上の無線アンテナ
     add(0, roofTop + .04, zf + 1.3, .7, .05, .3, 0x6f747a);
   } else addEndWall(b, -hz, S.ytop - .19, S.hw, 0xb9bec4);

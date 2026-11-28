@@ -58,7 +58,7 @@ export interface EventMap {
   /** [A] タイトル画面描画後。他モジュールが設定UIを container へ追加できる */
   titleRender: { container: HTMLElement };
   /** [A] カメラモード変更 */
-  cameraMode: { mode: CameraMode };
+  cameraMode: { mode: CameraMode; outsideVariant?: number };
   /** [B] 時間帯・天候の変更（タイトルでの選択時・開始時） */
   envChange: EnvState;
   /** [C] 踏切の鳴動状態（distance = 自列車先頭から踏切まで[m]、負なら通過後） */
@@ -71,6 +71,8 @@ export interface EventMap {
   pause: { paused: boolean; reason: 'user' | 'hidden' };
   /** [G] 待避中に後続列車が本線を通過（0..1 の近さ。風切り音用。通過中は毎フレーム） */
   overtakePass: { proximity: number };
+  /** [G] 待避中に後続列車をホームで案内 */
+  platformAnnouncement: { text: string };
 }
 
 export type SignalAspect = 'R' | 'Y' | 'YG' | 'G';

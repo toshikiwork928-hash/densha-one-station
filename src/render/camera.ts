@@ -1,9 +1,12 @@
-// カメラ: 運転台視点（走行揺れ付き）/ 外部視点（俯瞰追従・前方斜め・編成全景）/ リプレイ（沿線カメラの切替演出）
+// カメラ: 運転台視点（走行揺れ付き）/ 外部視点（俯瞰追従・前方斜め・編成全景・ホーム定点）/ リプレイ（沿線カメラの切替演出）
 import * as THREE from 'three';
 import type { GameContext } from '../core/context';
 import { loopZone } from '../route/service';
+import type { Station } from '../route/types';
+import { architectureOf } from '../world/station-architecture';
 import { TUNNEL_CENTER, getTerrain } from '../world/terrain';
 import { isMountain } from '../world/mountain-terrain';
+import { cabEyeLift, cabSeatOffset, leadingCabKind } from '../world/cab-shell';
 
 export interface CabCamera {
   update(time: number): void;
@@ -25,20 +28,23 @@ export function createCabCamera(ctx: GameContext): CabCamera {
   const smPos = new THREE.Vector3(), smLook = new THREE.Vector3();
   const bogieA = new THREE.Vector3(), bogieB = new THREE.Vector3();
   const viewDir = new THREE.Vector3(), viewRight = new THREE.Vector3(), viewUp = new THREE.Vector3(), viewPoint = new THREE.Vector3();
-  const lat = -.45; // 運転席は左寄り
   const { events, route } = ctx;
   const T0 = getTerrain(ctx), MT = isMountain(T0) ? T0 : null;
-  let outsideVariant = 0, prevMode = ctx.cameraMode, snap = true;
+  let outsideVariant = 0, snap = true;
   let shot: Shot | null = null, shotN = 0;
+  let platformStation: Station | undefined;
+  let platformS = 0;
+  const platformEye = new THREE.Vector3();
   const viewLabel = document.createElement('div');
   viewLabel.className = 'camera-view-label'; viewLabel.hidden = true;
   viewLabel.setAttribute('role', 'status'); document.body.appendChild(viewLabel);
 
-  events.on('cameraMode', ({ mode }) => {
-    outsideVariant = mode === 'outside' && prevMode === 'outside' ? (outsideVariant + 1) % 3 : 0;
-    prevMode = mode; snap = true; shot = null; shotN = 0;
+  events.on('cameraMode', ({ mode, outsideVariant: variant }) => {
+    outsideVariant = mode === 'outside' ? variant ?? outsideVariant : 0;
+    snap = true; shot = null; shotN = 0;
+    platformStation = undefined;
     viewLabel.hidden = mode !== 'outside';
-    viewLabel.textContent = ['俯瞰追従', '前方斜め', '編成全景'][outsideVariant];
+    viewLabel.textContent = ['俯瞰追従', '前方斜め', '編成全景', 'ホーム定点'][outsideVariant];
     setFov(CAB_FOV);
     document.body.classList.toggle('cam-outside', mode !== 'cab');
     document.body.classList.toggle('cam-replay', mode === 'replay');
@@ -47,6 +53,27 @@ export function createCabCamera(ctx: GameContext): CabCamera {
   function setFov(f: number) {
     if (Math.abs(ctx.camera.fov - f) < .01) return;
     ctx.camera.fov = f; ctx.camera.updateProjectionMatrix();
+  }
+
+  function placePlatformCamera(sta: Station) {
+    const side = sta.platform.side === 'R' ? 1 : -1;
+    const lane = ctx.track.pathLat(sta.stopS);
+    const lateral = lane + side * 2.8;
+    const platform = sta.customPlatforms?.find(p => {
+      if (p.kind === 'side') return Math.abs(p.lat - lane) < .5 && p.side === sta.platform.side;
+      return Math.abs(p.lat - lateral) < p.width / 2;
+    });
+    const from = platform?.from ?? sta.platform.from, to = platform?.to ?? sta.platform.to;
+    const arch = architectureOf(sta.name);
+    const roofRatio = sta.indoor || arch?.kind === 'hall' ? 1 : arch?.roofRatio
+      ?? (platform?.kind === 'island' ? platform.roof ?? .7 : sta.island || sta.loop ? .7 : .62);
+    const center = (from + to) / 2, halfRoof = (to - from) * roofRatio / 2;
+    platformS = THREE.MathUtils.clamp(sta.stopS + 8, center - halfRoof + 2, center + halfRoof - 2);
+    // ホームの床と同じく、中央の線路に接する水平な直線上に置く。
+    const t = ctx.track.trackAt(center);
+    platformEye.copy(ctx.track.at(center, lateral, 2.68));
+    platformEye.x += (platformS - center) * t.rz;
+    platformEye.z -= (platformS - center) * t.rx;
   }
 
   // 曲線・勾配・縦長画面でも、編成の端が画面から切れない距離まで引く。
@@ -161,14 +188,16 @@ export function createCabCamera(ctx: GameContext): CabCamera {
       const L = route.trainLength;
       if (mode === 'cab') {
         const shake = Math.min(1, v / 22);
-        camPos.copy(at(s, lat, 3.0));
+        const kind = leadingCabKind(ctx), lift = cabEyeLift(kind);
+        const lat = -.45 + cabSeatOffset(kind);
+        camPos.copy(at(s + (kind === 'limited' ? 0 : .12), lat, 3.0 + lift));
         camPos.y += Math.sin(time * 11.3) * .006 * shake + Math.sin(time * 3.1) * .012 * shake;
         // 向きは車体（台車の並び = 先頭の 3m・17m 後ろの台車を結ぶ向き）を基準に、先の線路（60m 先）の方へ少しだけ振る。
         // 振り幅は LOOK_LEAD で頭打ち（急曲線 R100〜200 で 60m 先を直接見ると車体から 15〜20° ずれ、首振りが速く大きい。
         // 南海本線の R500 以上では 3〜4° 程度で従来とほぼ同じ）。上下は従来どおり 60m 先の線路。
         // 待避線の分岐器では注視点を先の線路に合わせず、現在の横ずれの傾きで延長する（車体の向きも台車の並びなので横ずれを含む）
         const pl = ctx.track.pathLat(s), slope = (ctx.track.pathLat(s - 3) - ctx.track.pathLat(s - 17)) / 14;
-        camLook.copy(ctx.track.at(s + 60, pl + slope * 60 + lat * .3, 2.4));
+        camLook.copy(ctx.track.at(s + 60, pl + slope * 60 + lat * .3, (kind === 'limited' ? 1.45 : 4.55) + lift));
         bogieA.copy(at(s - 3, 0, 0)); bogieB.copy(at(s - 17, 0, 0));
         const bodyYaw = Math.atan2(bogieA.x - bogieB.x, bogieA.z - bogieB.z);
         const dx = camLook.x - camPos.x, dz = camLook.z - camPos.z, dh = Math.hypot(dx, dz);
@@ -188,11 +217,29 @@ export function createCabCamera(ctx: GameContext): CabCamera {
           setFov(45);
           camPos.copy(at(s + 26, 7.5, 10));
           camLook.copy(at(s - 10, 0, 2.4));
-        } else { // 先頭斜め上から編成全体。車両数に合わせて引き、駅の屋根より高く撮る。
+        } else if (outsideVariant === 2) { // 先頭斜め上から編成全体。車両数に合わせて引き、駅の屋根より高く撮る。
           setFov(50);
           camPos.copy(at(s + 24 + L * .25, THREE.MathUtils.clamp(L * .22, 18, 32), Math.max(56, L * .85)));
           camLook.copy(at(s - L * .48, 0, 2));
           fitFormation(s, L);
+        } else {
+          const sta = route.stations.find(x => !x.pass && s >= x.platform.from - 160 && s <= x.stopS + L);
+          if (sta !== platformStation || snap) {
+            platformStation = sta;
+            if (sta) placePlatformCamera(sta);
+            snap = true;
+          }
+          if (sta) {
+            setFov(53);
+            camPos.copy(platformEye);
+            // 屋根が短く先頭がカメラを通り過ぎる駅では、手前を通る車両の側面を映す。
+            camLook.copy(at(Math.min(s - 1.5, platformS - 8), 0, 2.15));
+          } else {
+            // 駅間では列車を追い、次の停車駅に近づいたらホームへ切り替える。
+            setFov(45);
+            camPos.copy(at(s + 26, 7.5, 10));
+            camLook.copy(at(s - 10, 0, 2.4));
+          }
         }
       } else updateReplay(s, v, time);
       // 追従系はなめらかに（切替直後は即時）

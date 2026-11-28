@@ -3,6 +3,7 @@
 // 優等列車は普通が駅に近づく間に後方から追い付く形で現れる（普通が停まる前に本線ホームを通り過ぎないよう間隔を保つ）
 import type { GameContext } from '../core/context';
 import { carLenOf, loopZone, serviceOf, stationStopS } from '../route/service';
+import { platformAnnouncement } from '../audio/platform-text';
 import { sakaiLayout } from '../route/sakai-layout';
 import type { Route, ServiceSpec } from '../route/types';
 
@@ -143,10 +144,12 @@ export function createOvertake(ctx: GameContext): Overtake {
       const svc = serviceOf(route, st.sel.service), list = waitsAt(route, svc, index);
       if (!svc || !list.length || !route.services) return null;
       const sta = route.stations[index];
+      const newWait = !st.overtake || st.overtake.station !== index || !st.overtake.localStopped;
       if (!st.overtake || st.overtake.station !== index) spawn(index, ARRIVE_GAP);
       const o = st.overtake;
       if (!o) return null;
       o.localStopped = true;
+      if (newWait) events.emit('platformAnnouncement', { text: platformAnnouncement(route, list[0], list[0].stops.includes(index)) });
       const parts = list.map(ps => ps.stops.includes(index) ? `${ps.name}を待ち合わせ` : `${ps.name}の通過を待ち`);
       const text = `${sta.name}で後続の${parts.join('、')}ます。出発信号が進行になるまで待て`;
       if (!quiet) banner(text, 4);
@@ -189,6 +192,7 @@ export function createOvertake(ctx: GameContext): Overtake {
         const next = waitsAt(route, serviceOf(route, st.sel.service), o.station)[o.seq + 1];
         if (next) {
           // 続けて次の列車を待つ（出発信号は停止のまま）
+          events.emit('platformAnnouncement', { text: platformAnnouncement(route, next, next.stops.includes(o.station)) });
           banner(`${serviceOf(route, o.passedBy)!.name} ${o.stopAt != null ? '発車' : '通過'}。続いて${next.name}を待つ`, 3);
           spawn(o.station, NEXT_ARRIVE, o.seq + 1);
           return;

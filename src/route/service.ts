@@ -17,7 +17,7 @@ function rapitPattern(route: Route, tod = route.timeOfDay): Pick<ServiceSpec, 'n
 export function selectableServices(route: Route, timeOfDay = route.timeOfDay): ServiceSpec[] {
   // 実ダイヤのあるコースは、その時間帯に実際に走る種別だけ（日中の急行など、実際に無いものは選べない。route/real-diagram.ts）
   const services = (route.services ?? []).filter(v => realServiceAvailable(route, v.id, timeOfDay))
-    .map(v => v.id === 'limited' && v.kind === 'limited' ? { ...v, ...rapitPattern(route, timeOfDay) } : v);
+    .map(v => v.id === 'limited' ? { ...v, ...rapitPattern(route, timeOfDay) } : v);
   if (route.lineId !== 'shiokaze') return services;
   const limitedStops = new Set(['なんば', '新今宮', '天下茶屋', '堺', '岸和田', '泉佐野']);
   const southernStops = new Set([...limitedStops, '尾崎', 'みさき公園', '和歌山大学前', '和歌山市', '和歌山港']);
@@ -29,11 +29,24 @@ export function selectableServices(route: Route, timeOfDay = route.timeOfDay): S
 export const CAR_LEN = 20;
 /** 車種ごとの1両の長さ [m] */
 export const carLenOf = (kind: TrainKind): number => kind === 'commuter-2300' || kind === 'commuter-2000' || kind === 'limited-30000' ? 18 : CAR_LEN;
+/** 8両の停止目標に合わせたとき、最後尾までの範囲に踏切道路がかからないかを調べる。 */
+export function fitsEightCars(route: Route, svc: ServiceSpec): boolean {
+  return svc.stops.every(index => {
+    const head = stationStopS(route, index, { kind: 'commuter-old', cars: 8 });
+    return !route.crossings?.some(c => {
+      const half = (c.roadWidth ?? 6) / 2;
+      return c.s + half >= head - 8 * CAR_LEN && c.s - half <= head;
+    });
+  });
+}
 /** 駅 index に停まる種別の、いちばん長い編成の長さ [m]（選べる編成を含む）。種別の無い路線・停まる種別が無い駅は 8両（踏切・停車位置の判定の既定） */
 export function maxStopLength(route: Route, index: number): number {
   const list = (route.services ?? []).filter(v => v.stops.includes(index));
   if (!list.length) return 8 * CAR_LEN;
-  return Math.max(...list.map(v => Math.max(v.cars, ...(v.formationOptions ?? []).map(f => f.reduce((a, n) => a + n, 0)), (v.units ?? []).reduce((a, n) => a + n, 0)) * carLenOf(v.kind)));
+  return Math.max(...list.map(v => {
+    const restoredMax = v.kind === 'commuter-2300' ? 0 : fitsEightCars(route, v) ? 8 : 6;
+    return Math.max(restoredMax, v.cars, ...(v.formationOptions ?? []).map(carsOf), carsOf(v.units)) * carLenOf(v.kind);
+  }));
 }
 /** 停止位置目標 stopS の基準両数（短い編成は手前に止める） */
 export const BASE_CARS = 6;
@@ -333,12 +346,20 @@ export const carsOf = (units: readonly number[]): number => units.reduce((a, n) 
 export const unitsLabel = (units: readonly number[]): string => units.length > 1 ? `${units.join('+')}` : String(units[0]);
 const sameUnits = (a: readonly number[], b: readonly number[]) => a.length === b.length && a.every((n, i) => n === b[i]);
 
-const defaults = new WeakMap<ServiceSpec, { kind: TrainKind; units: number[] }>();
+const defaults = new WeakMap<ServiceSpec, Pick<ServiceSpec, 'kind' | 'units' | 'unitKinds'>>();
+
+export function defaultVehicleOf(svc: ServiceSpec) {
+  let base = defaults.get(svc);
+  if (!base) {
+    base = { kind: svc.kind, units: [...svc.units], unitKinds: svc.unitKinds?.slice() };
+    defaults.set(svc, base);
+  }
+  return base;
+}
 /** 選択した車種・編成を route.services へ反映（選択肢にないものは既定値）。旧形式の保存（両数のみ）は同じ両数の最初の編成へ */
 export function applyVehicles(route: Route, sel: Partial<Record<ServiceId, { kind: TrainKind; units?: number[]; cars?: number }>>): void {
   for (const svc of route.services ?? []) {
-    let d = defaults.get(svc);
-    if (!d) { d = { kind: svc.kind, units: [...svc.units] }; defaults.set(svc, d); }
+    const d = defaultVehicleOf(svc);
     const v = sel[svc.id], opts = svc.formationOptions ?? [d.units];
     svc.kind = v && svc.kindOptions?.includes(v.kind) ? v.kind : d.kind;
     svc.units = [...(v && (opts.find(o => (v.units ? sameUnits(o, v.units) : carsOf(o) === v.cars)) ?? undefined) || d.units)];
@@ -359,7 +380,7 @@ export function applyTimeOfDay(route: Route, tod: TimeOfDay = route.timeOfDay ??
     v.waits = v.waitsByTime ? [...(v.waitsByTime[tod] ?? [])] : b.waits;
     v.runPasses = v.runPassesByTime?.[tod] ?? [];
     v.timetable = v.timetableByTime?.[tod] ?? b.timetable;
-    if (v.id === 'limited' && v.kind === 'limited') Object.assign(v, rapitPattern(route, tod));
+    if (v.id === 'limited') Object.assign(v, rapitPattern(route, tod));
   }
 }
 

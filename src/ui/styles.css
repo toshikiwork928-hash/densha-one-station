@@ -109,6 +109,9 @@ table.res td:last-child { text-align: right; font-family: ui-monospace, monospac
 #ttTable tr.next td { color: #fff; font-weight: 700; }
 #ttTable tr.done td { color: #56606e; }
 #ttTable tr.pass td:first-child::after { content: '(通過)'; font-size: 9px; margin-left: 2px; }
+#passInfo { display: none; width: max-content; max-width: calc(100vw - 32px); white-space: nowrap; }
+#passInfo .sub { display: inline; margin-left: 3px; }
+#passInfo b { color: #fff; }
 #replayTag { display: none; position: fixed; left: 50%; top: 64px; transform: translateX(-50%); font: 800 18px/1 system-ui, sans-serif; letter-spacing: .3em;
   color: #fff; background: rgba(200,30,30,.8); padding: 6px 14px; border-radius: 6px; }
 #replayTag.show { display: block; }
@@ -209,6 +212,7 @@ table.keys td:first-child { white-space: nowrap; width: 1%; padding-right: 12px;
 }
 @media (max-width: 640px) { #dash { padding-right: 88px; } }
 @media (max-width: 640px), (max-height: 500px) {
+  #passInfo:not([hidden]) { display: block; }
   /* 狭い画面（縦持ち・横持ちのスマホ）ではバナーを上部パネルの間に挟まず、視界中央寄りに全幅で出す。
      左の情報パネル・計器より前面に出して全文を読めるようにする */
   #banner { position: fixed; left: 8px; right: 8px; top: 40%; padding: 6px 10px; font-size: 18px; z-index: 30; pointer-events: none; background: rgba(10, 14, 20, .68); border-radius: 8px; }

@@ -8,8 +8,9 @@ import { kishiwada, kishiwadaUp } from '../src/route/routes/kishiwada';
 import { through, throughUp } from '../src/route/routes/through';
 import { namba, nambaUp } from '../src/route/routes/namba';
 import { mountain, mountainUp } from '../src/route/routes/mountain';
+import { izumisanoMisaki, izumisanoMisakiUp } from '../src/route/routes/izumisano-misaki';
 import { applyVehicles, applyService, serviceOf } from '../src/route/service';
-import { playerVehicleOptions } from '../src/route/player-vehicles';
+import { applyPlayerVehicles, playerVehicleOptions } from '../src/route/player-vehicles';
 import { createState, resetState, type VehicleSel } from '../src/game/state';
 import { createGame } from '../src/game/loop';
 import { buildTrack } from '../src/route/track';
@@ -18,6 +19,7 @@ import { createTrainEnv, TRAIN_PERF } from '../src/sim/train';
 import { createRng } from '../src/core/rng';
 import { front7169ForRoute } from '../src/route/vehicle-direction';
 import { pantographPositions } from '../src/world/trains/pantograph-layout';
+import { createTrafficLivery } from '../src/world/traffic-livery';
 import type { Route, ServiceId, TrainKind } from '../src/route/types';
 import type { GameContext } from '../src/core/context';
 
@@ -104,8 +106,8 @@ for (const source of coastal) {
     } else {
       const old = context(source, id, { [id]: { kind: 'commuter-9000', units: [6] } });
       assert.equal(serviceOf(old.route, id)!.kind, 'commuter-9000');
-      assert.deepEqual(serviceOf(old.route, id)!.units, [4, 4]);
-      assert.equal(old.route.trainLength, 160);
+      assert.deepEqual(serviceOf(old.route, id)!.units, [6]);
+      assert.equal(old.route.trainLength, 120);
       const game = createGame(old);
       game.actions.selectVehicle({ kind: 'commuter-1000' });
       assert.deepEqual(old.service!.units, [6]);
@@ -150,7 +152,7 @@ for (const source of coastal) {
   if (!spec || context(source, spec.id).state.sel.service !== spec.id) continue;
   const options = playerVehicleOptions(spec);
   assert.ok(options.kinds.includes('commuter-7100-restored'), `${source.id}/${spec.id} 復元塗装を選択可能`);
-  const chosen = context(source, spec.id, { [spec.id]: { kind: 'commuter-7100-restored', units: [6] } });
+  const chosen = context(source, spec.id, { [spec.id]: { kind: 'commuter-7100-restored', units: [4] } });
   createGame(chosen); const chosenService = serviceOf(chosen.route, spec.id)!;
   assert.equal(chosenService.kind, 'commuter-7100-restored');
   assert.deepEqual(chosenService.units, [4], '復元塗装は4両固定');
@@ -165,5 +167,71 @@ for (const source of coastal) {
   resetState(restored.state, restored.route);
   assert.deepEqual(serviceOf(restored.route, spec.id)!.units, [4], '復元塗装のリセット後も4両固定');
   cases++;
+}
+const green = 'commuter-7100-restored', normal = 'commuter-old', modern = 'commuter-new', nine = 'commuter-9000';
+for (const source of [izumisanoMisaki, izumisanoMisakiUp]) {
+  const route = structuredClone(source);
+  applyPlayerVehicles(route, { local: { kind: green, units: [4, 4] }, express: { kind: green, units: [4, 4] } });
+  assert.equal(serviceOf(route, 'local')!.cars, 6, '停車中に踏切をふさぐ8両の保存値は6両に合わせる');
+  assert.equal(serviceOf(route, 'express')!.cars, 8, '該当駅を通過する急行では8両を使える');
+  cases++;
+}
+for (const source of coastal) {
+  for (const spec of source.services ?? []) {
+    const route = structuredClone(source);
+    const svc = serviceOf(route, spec.id)!;
+    if (spec.id === 'southern') {
+      applyPlayerVehicles(route, { southern: { kind: 'southern-10000', freeKind: green } });
+      assert.deepEqual(svc.unitKinds, spec.unitKinds!.map(k => k === normal ? green : k));
+      assert.deepEqual(svc.units, [4, 4]);
+      cases++;
+      continue;
+    }
+    assert.ok(playerVehicleOptions(svc).kinds.includes(green), source.id + '/' + spec.id);
+    for (const units of [[4], [4, 2], [4, 4]]) {
+      applyPlayerVehicles(route, { [spec.id]: { kind: green, units } });
+      applyService(route, spec.id);
+      const kinds = svc.unitKinds ?? svc.units.map(() => svc.kind);
+      assert.deepEqual(svc.units.filter((_, i) => kinds[i] === green), [4]);
+      const fromNambaEnd = front7169ForRoute(route.id);
+      const expectedKinds = units.length === 1 ? [green] : [green, normal];
+      assert.deepEqual(kinds, fromNambaEnd ? expectedKinds : expectedKinds.reverse());
+      assert.deepEqual(svc.units, fromNambaEnd ? units : [...units].reverse());
+      assert.equal(route.trainLength, 20 * units.reduce((a, b) => a + b));
+      cases++;
+    }
+    if (playerVehicleOptions(svc).kinds.includes(nine)) {
+      applyPlayerVehicles(route, { [spec.id]: { kind: nine, units: [4, 2, 2] } });
+      assert.deepEqual(svc.unitKinds, front7169ForRoute(route.id) ? [nine, modern, modern] : [modern, modern, nine]);
+      assert.deepEqual(svc.units.filter((_, i) => svc.unitKinds![i] === nine), [4]);
+      assert.deepEqual(svc.units.filter((_, i) => svc.unitKinds![i] === modern), [2, 2]);
+      applyPlayerVehicles(route, { [spec.id]: { kind: nine, units: [6] } });
+      assert.deepEqual(svc.units, [6]);
+      assert.ok(!svc.unitKinds?.includes(modern));
+      cases++;
+    }
+  }
+}
+{
+  const game = context(shiokaze, 'local');
+  createGame(game);
+  const livery = createTrafficLivery(game);
+  const southern = 'southern-10000';
+  const owner = livery(southern, [4, 4], [southern, normal], 'counter:1');
+  assert.deepEqual(owner.unitKinds, [southern, green]);
+  assert.deepEqual(livery(southern, [4, 4], [southern, normal], 'counter:1'), owner);
+  assert.equal(livery(normal, [4, 4], undefined, 'encounter:2').kind, normal);
+  assert.deepEqual(livery(green, [4, 2], [green, normal], 'run-pass:3').unitKinds, [normal, normal]);
+  game.events.emit('reset');
+  assert.deepEqual(livery(normal, [4, 4], undefined, 'encounter:2').unitKinds, [green, normal]);
+  for (const [kind, unitKinds] of [[green, undefined], [normal, [normal, green]], [southern, [southern, green]]] as const) {
+    game.service = { ...game.service!, kind, unitKinds: unitKinds ? [...unitKinds] : undefined };
+    game.events.emit('reset');
+    for (const id of ['counter:1', 'encounter:2', 'run-pass:3']) {
+      assert.equal(livery(normal, [4, 2], undefined, id).kind, normal);
+      assert.deepEqual(livery(southern, [4, 4], [southern, green], id).unitKinds, [southern, normal]);
+    }
+    cases++;
+  }
 }
 console.log(`追加車両・保存・方向別併結・既存運行 ${cases} ケース合格`);

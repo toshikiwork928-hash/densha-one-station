@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { basePart, GeoBatch, M } from '../batch';
+import { basePart, GeoBatch, M, P } from '../batch';
 import { faceSheet, Y0, type V2 } from './common';
 import { BLUE_7100, FRONT_BLUE_7100, FRONT_ORANGE_7100, ORANGE_7100, RESTORED_LOWER, RESTORED_UPPER, RESTORED_SPLIT } from './c7100-side';
 
@@ -99,6 +99,27 @@ const headlightShell = basePart(new THREE.ExtrudeGeometry(headlightShape, {
 
 export function add7100HeadlightShell(b: GeoBatch, z: number) {
   b.add('paint', headlightShell, M(0, 3.62, z - .075), 0xb8b9b6);
+}
+
+// 7170号の正面向かって右に並ぶ金具。薄い踏み板を下から三角のリブで支える。
+const braceProfile = new THREE.Shape();
+braceProfile.moveTo(0, -.115);
+braceProfile.lineTo(.086, 0);
+braceProfile.lineTo(0, 0);
+braceProfile.closePath();
+const stepBrace = basePart(new THREE.ExtrudeGeometry(braceProfile, { depth: .016, bevelEnabled: false })
+  .translate(0, 0, -.008).rotateY(Math.PI / 2));
+
+export function add7100CornerSteps(b: GeoBatch, zf: number, restored: boolean) {
+  const yaw = .52, x = -1.33;
+  const z = curve7100Z(x, 2, zf) + .010;
+  for (const y of [1.32, 1.81, 2.30, 2.79, 3.28]) {
+    const color = restored ? (y < RESTORED_SPLIT ? RESTORED_LOWER : RESTORED_UPPER) : '#a1a6a5';
+    b.add('paint', P.box, M(x, y - .066, z, yaw, .066, .14, .030), color);
+    b.add('paint', stepBrace, M(x, y - .010, z, yaw), color);
+    b.add('paint', P.box, M(x - .047 * Math.sin(yaw), y, z - .047 * Math.cos(yaw),
+      yaw, .115, .018, .11), color);
+  }
 }
 
 export function add7100Gangway(b: GeoBatch, z: number, frameColor = 0xbabcb9) {

@@ -1,7 +1,7 @@
 import { paintDoor, sideSheet, sweepBand, Y0 } from './common';
 
 // モハ2039の海側写真で、車体両端を0と1にそろえて扉とサッシの位置を読んだ。
-export const FRONT_2039_BLUE: [number, number] = [1.48, 2.04];
+export const FRONT_2039_BLUE: [number, number] = [1.48, 1.91];
 export const FRONT_2039_ORANGE: [number, number] = [1.345, 1.425];
 
 export function paint2039Side(length: number, head: boolean, open: boolean) {
